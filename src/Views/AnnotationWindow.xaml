@@ -1,0 +1,14 @@
+<Window x:Class="LAAnnotation.Views.AnnotationWindow" x:ClassModifier="internal" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="LA批注" Width="520" Height="440" MinWidth="460" MinHeight="380" ResizeMode="CanResizeWithGrip">
+    <Window.Resources><ResourceDictionary Source="../Themes/LATheme.xaml"/></Window.Resources>
+    <Grid Margin="16">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="75"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="36"/><RowDefinition Height="36"/><RowDefinition Height="36"/><RowDefinition Height="36"/><RowDefinition Height="36"/><RowDefinition Height="46"/></Grid.RowDefinitions>
+        <TextBlock Grid.Row="0" Text="批注内容" Style="{StaticResource FieldLabel}"/><TextBox x:Name="ContentTextBox" Grid.Row="0" Grid.Column="1" AcceptsReturn="True" AcceptsTab="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
+        <TextBlock Grid.Row="1" Text="专业" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="DisciplineComboBox" Grid.Row="1" Grid.Column="1" IsEditable="True"/>
+        <TextBlock Grid.Row="2" Text="批注人" Style="{StaticResource FieldLabel}"/><TextBox x:Name="AuthorTextBox" Grid.Row="2" Grid.Column="1"/>
+        <TextBlock Grid.Row="3" Text="日期" Style="{StaticResource FieldLabel}"/><DatePicker x:Name="AnnotationDatePicker" Grid.Row="3" Grid.Column="1"/>
+        <TextBlock Grid.Row="4" Text="状态" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="StatusComboBox" Grid.Row="4" Grid.Column="1"/>
+        <TextBlock Grid.Row="5" Text="编号" Style="{StaticResource FieldLabel}"/><TextBox x:Name="NumberTextBox" Grid.Row="5" Grid.Column="1"/>
+        <StackPanel Grid.Row="6" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"><Button Content="取消" IsCancel="True" Style="{StaticResource SecondaryButton}" Click="Cancel_Click"/><Button x:Name="ConfirmButton" Content="创建批注" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Confirm_Click"/></StackPanel>
+    </Grid>
+</Window>

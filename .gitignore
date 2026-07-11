@@ -1,0 +1,11 @@
+# Local secrets and worker outputs
+.env
+.env.*
+.deepseek/output/
+*.deepseek.log
+
+# Build artifacts
+bin/
+obj/
+*.user
+*.suo
