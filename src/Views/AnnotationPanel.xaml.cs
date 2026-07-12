@@ -5,14 +5,12 @@ using System.Windows;
 using System.Windows.Controls;
 #if ZWCAD
 using ZwSoft.ZwCAD.ApplicationServices;
-using ZwSoft.ZwCAD.Colors;
 using ZwSoft.ZwCAD.DatabaseServices;
 using ZwSoft.ZwCAD.EditorInput;
 using ZwSoft.ZwCAD.Geometry;
 using CadApplication = ZwSoft.ZwCAD.ApplicationServices.Core.Application;
 #else
 using Autodesk.AutoCAD.ApplicationServices;
-using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
@@ -26,8 +24,10 @@ namespace LAAnnotation.Views
     {
         private static AnnotationPanel _instance;
         private AnnotationSettings _s;
+        private bool _isRunning;
         private readonly List<Point3d> _multiCloudFirsts = new List<Point3d>();
         private readonly List<Point3d> _multiCloudSeconds = new List<Point3d>();
+        private readonly List<ObjectId> _multiCloudIds = new List<ObjectId>();
 
         private AnnotationPanel()
         {
@@ -59,14 +59,17 @@ namespace LAAnnotation.Views
             ShapeCircleRadio.Checked += (_, __) => { ShapeCombo.Text = "椭圆"; SaveQuickSetting(); };
             ShapePlineRadio.Checked += (_, __) => SaveQuickSetting();
             ShapeCrossRadio.Checked += (_, __) => SaveQuickSetting();
+            SingleModeRadio.Checked += (_, __) => UpdateModeAvailability();
+            MultiModeRadio.Checked += (_, __) => UpdateModeAvailability();
             // 仅绘云线 / 连续批注 → 即时保存
             CloudOnlyCheck.Checked += (_, __) => SaveQuickSetting();
             CloudOnlyCheck.Unchecked += (_, __) => SaveQuickSetting();
             ContinuousCheck.Checked += (_, __) => SaveQuickSetting();
             ContinuousCheck.Unchecked += (_, __) => SaveQuickSetting();
-            // 窗口定位到屏幕左上角，加载完毕后自动开始批注
-            Loaded += (_, __) => { Left = SystemParameters.WorkArea.Left + 20; Top = SystemParameters.WorkArea.Top + 20; Dispatcher.BeginInvoke(new Action(() => StartAnnotation()), System.Windows.Threading.DispatcherPriority.Background); };
+            // 打开面板后先允许用户选择模式和参数，再由“开始批注”按钮进入 CAD 交互。
+            Loaded += (_, __) => { Left = SystemParameters.WorkArea.Left + 20; Top = SystemParameters.WorkArea.Top + 20; };
             Closing += (_, __) => _instance = null;
+            UpdateModeAvailability();
         }
 
         private void RefreshControls()
@@ -110,21 +113,24 @@ namespace LAAnnotation.Views
         /// <summary>启动批注流程：读取面板当前模式，进入 CAD 交互。</summary>
         private void StartAnnotation()
         {
-            var doc = CadApplication.DocumentManager.MdiActiveDocument;
-            if (doc == null) { Close(); return; }
-
-            var isSingle = SingleModeRadio.IsChecked == true;
-            var shape = ShapeRectRadio.IsChecked == true ? "矩形"
-                      : ShapePlineRadio.IsChecked == true ? "pline"
-                      : ShapeCircleRadio.IsChecked == true ? "圆形"
-                      : "十字点";
-
+            if (_isRunning) return;
+            _isRunning = true;
             try
             {
+                var doc = CadApplication.DocumentManager.MdiActiveDocument;
+                if (doc == null) { Close(); return; }
+
+                var isSingle = SingleModeRadio.IsChecked == true;
+                var shape = ShapeRectRadio.IsChecked == true ? "矩形"
+                          : ShapePlineRadio.IsChecked == true ? "pline"
+                          : ShapeCircleRadio.IsChecked == true ? "圆形"
+                          : "十字点";
+
                 if (isSingle) DoSingleAnnotation(doc, shape);
-                else DoMultiAnnotation(doc, shape);
+                else DoMultiAnnotation(doc);
             }
-            catch (Exception ex) { doc.Editor.WriteMessage("\n批注失败: " + ex.Message); }
+            catch (Exception ex) { var d = CadApplication.DocumentManager.MdiActiveDocument; d?.Editor.WriteMessage("\n批注失败: " + ex.Message); }
+            finally { _isRunning = false; }
         }
 
         private void Settings_Click(object sender, RoutedEventArgs e)
@@ -139,8 +145,8 @@ namespace LAAnnotation.Views
 
         private void DoSingleAnnotation(Document doc, string shape)
         {
-            var data = new AnnotationData { Author = _s.DefaultAuthor, Discipline = _s.DefaultDiscipline };
-            if (_s.AutoNumber) data.Number = "LA-" + _s.NextNumber.ToString("D3");
+            var data = new AnnotationData { Author = _s.DefaultAuthor, Discipline = _s.DefaultDiscipline, Role = _s.DefaultRole };
+            if (_s.AutoNumber) { _s.NextNumber = AnnotationService.GetNextNumber(doc); data.Number = "LA-" + _s.NextNumber.ToString("D3"); }
 
             switch (shape)
             {
@@ -164,8 +170,10 @@ namespace LAAnnotation.Views
 
         private void DoPlineCloud(Document doc, AnnotationData data)
         {
-            var points = CollectPlinePoints(doc);
-            if (points == null || points.Count < 2) return;
+            var points = CollectPlinePoints(doc, out var cancelled);
+            if (cancelled || points == null) return;
+            var polygonPoints=points.Select(p=>new Point2d(p.X,p.Y)).ToList();
+            if(!AnnotationService.ValidateCloudPolygon(polygonPoints,out var validationError)){doc.Editor.WriteMessage("\n"+validationError);return;}
             var xs = points.Select(p => p.X); var ys = points.Select(p => p.Y);
             var w = xs.Max() - xs.Min(); var h = ys.Max() - ys.Min();
             var diagonal = Math.Sqrt(w * w + h * h);
@@ -174,7 +182,7 @@ namespace LAAnnotation.Views
             // 仅绘云线模式：沿折线创建云线后即结束
             if (CloudOnlyCheck.IsChecked == true)
             {
-                CreatePlineCloudOnly(doc, effective, points);
+                AnnotationService.CreatePlineCloudOnly(doc,effective,points);
                 doc.Editor.WriteMessage("\nPL 云线已创建。");
                 CheckContinuous(doc);
                 return;
@@ -185,7 +193,7 @@ namespace LAAnnotation.Views
             if (effective.FontAutoFit) doc.Editor.WriteMessage($"\n云线范围: {w:0.#}×{h:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}");
             var form = new AnnotationWindow(data, false);
             if (CadDialog.ShowModal(form) != true) return;
-            AnnotationService.CreatePlineCloud(doc, data, _s, effective, points, textPt.Value);
+            AnnotationService.CreatePlineCloud(doc, data, effective, points, textPt.Value);
             FinalizeAnnotation(doc, data);
             CheckContinuous(doc);
         }
@@ -222,57 +230,78 @@ namespace LAAnnotation.Views
 
         // ═══════════════ 多对一批注 ═══════════════
 
-        private void DoMultiAnnotation(Document doc, string shape)
+        private void DoMultiAnnotation(Document doc)
         {
-            _multiCloudFirsts.Clear(); _multiCloudSeconds.Clear();
-            var data = new AnnotationData { Author = _s.DefaultAuthor, Discipline = _s.DefaultDiscipline };
-            if (_s.AutoNumber) data.Number = "LA-" + _s.NextNumber.ToString("D3");
+            _multiCloudFirsts.Clear(); _multiCloudSeconds.Clear(); _multiCloudIds.Clear();
+            var data = new AnnotationData { Author = _s.DefaultAuthor, Discipline = _s.DefaultDiscipline, Role = _s.DefaultRole };
+            if (_s.AutoNumber) { _s.NextNumber = AnnotationService.GetNextNumber(doc); data.Number = "LA-" + _s.NextNumber.ToString("D3"); }
 
-            // 预览阶段用视图高度近似
             var preview = AnnotationService.ResolveEffectiveSettings(doc, _s, data);
-            doc.Editor.WriteMessage("\n多对一批注：持续绘制云线区域，按空格/回车结束选点。");
-            while (true)
+            doc.Editor.WriteMessage("\n多对一批注：连续绘制云线；在下一个云线的第一个角点提示时按回车或空格进入文字。");
+            var completed = false;
+            try
             {
-                // 仅选云线区域（不要求文字位置），用户在第一点按回车即退出循环
-                if (!AnnotationService.PromptCloudOnly(doc, preview, out var first, out var second)) break;
-                _multiCloudFirsts.Add(first); _multiCloudSeconds.Add(second);
-                doc.Editor.WriteMessage($"\n已添加第 {_multiCloudFirsts.Count} 个云线区域（继续画下一个，或按空格/回车结束选点）。");
+                while (true)
+                {
+                    var promptResult=AnnotationService.PromptCloudOrFinish(doc,preview,out var first,out var second);
+                    if(promptResult==CloudPromptResult.Finished)break;
+                    if(promptResult==CloudPromptResult.Cancelled)return;
+                    _multiCloudFirsts.Add(first); _multiCloudSeconds.Add(second);
+                    var id = AnnotationService.CreateCloudOnly(doc, preview, first, second);
+                    _multiCloudIds.Add(id);
+                    doc.Editor.WriteMessage($"\n已添加第 {_multiCloudFirsts.Count} 个云线；继续指定下一条，或按回车/空格填写文字。");
+                }
+                if(_multiCloudFirsts.Count==0)return;
+
+                var allX = _multiCloudFirsts.SelectMany((f, i) => new[] { f.X, _multiCloudSeconds[i].X });
+                var allY = _multiCloudFirsts.SelectMany((f, i) => new[] { f.Y, _multiCloudSeconds[i].Y });
+                var w = allX.Max() - allX.Min(); var h = allY.Max() - allY.Min();
+                var diagonal = Math.Sqrt(w * w + h * h);
+
+                var textPt = doc.Editor.GetPoint("\n指定批注文字位置: ");
+                if (textPt.Status != PromptStatus.OK) return;
+                var effective = AnnotationService.ResolveEffectiveSettings(doc, _s, data, diagonal);
+                if (effective.FontAutoFit) doc.Editor.WriteMessage($"\n多区域范围: {w:0.#}×{h:0.#}  字高: {effective.TextHeight:0.###}");
+
+                var form = new AnnotationWindow(data, false);
+                if (CadDialog.ShowModal(form) != true) return;
+
+                AnnotationService.CreateMultiCloud(doc, data, effective, _multiCloudIds, _multiCloudFirsts, _multiCloudSeconds, textPt.Value);
+                completed = true;
+                FinalizeAnnotation(doc, data);
+                CheckContinuous(doc);
             }
-            if (_multiCloudFirsts.Count == 0) return;
-
-            // 用合并包围盒对角线重新计算
-            var allX = _multiCloudFirsts.SelectMany((f, i) => new[] { f.X, _multiCloudSeconds[i].X });
-            var allY = _multiCloudFirsts.SelectMany((f, i) => new[] { f.Y, _multiCloudSeconds[i].Y });
-            var w = allX.Max() - allX.Min(); var h = allY.Max() - allY.Min();
-            var diagonal = Math.Sqrt(w * w + h * h);
-
-            var textPt = doc.Editor.GetPoint("\n指定批注文字位置: ");
-            if (textPt.Status != PromptStatus.OK) return;
-            var effective = AnnotationService.ResolveEffectiveSettings(doc, _s, data, diagonal);
-            if (effective.FontAutoFit) doc.Editor.WriteMessage($"\n多区域范围: {w:0.#}×{h:0.#}  字高: {effective.TextHeight:0.###}");
-
-            var form = new AnnotationWindow(data, false);
-            if (CadDialog.ShowModal(form) != true) return;
-
-            AnnotationService.CreateMultiCloud(doc, data, effective, _multiCloudFirsts, _multiCloudSeconds, textPt.Value);
-            FinalizeAnnotation(doc, data);
-            CheckContinuous(doc);
+            finally
+            {
+                if (!completed) AnnotationService.EraseTemporaryEntities(doc, _multiCloudIds);
+                _multiCloudIds.Clear(); _multiCloudFirsts.Clear(); _multiCloudSeconds.Clear();
+            }
         }
 
         // ═══════════════ 工具方法 ═══════════════
 
-        private static List<Point3d> CollectPlinePoints(Document doc)
+        private static List<Point3d> CollectPlinePoints(Document doc,out bool cancelled)
         {
+            cancelled=false;
             var points = new List<Point3d>();
             var ed = doc.Editor;
             while (true)
             {
-                var prompt = points.Count == 0 ? "\n指定 PL 线起点: " : $"\n指定下一点（已输入 {points.Count} 点，回车结束）: ";
+                var prompt = points.Count == 0 ? "\n指定 PL 云线起点: " : $"\n指定下一点（已输入 {points.Count} 点，至少 3 点后回车结束）: ";
                 var opts = new PromptPointOptions(prompt) { AllowNone = true };
+                if(points.Count>0){opts.UseBasePoint=true;opts.BasePoint=points[points.Count-1];}
                 var result = ed.GetPoint(opts);
-                if (result.Status == PromptStatus.OK) { points.Add(result.Value); continue; }
-                if (points.Count >= 2) break;
-                return null;
+                if(result.Status==PromptStatus.OK)
+                {
+                    if(points.Count>0&&points[points.Count-1].DistanceTo(result.Value)<=1e-8){ed.WriteMessage("\n该点与上一点重复，请重新指定。");continue;}
+                    points.Add(result.Value);continue;
+                }
+                if(result.Status==PromptStatus.None)
+                {
+                    if(points.Count>=3)break;
+                    ed.WriteMessage("\nPL 云线至少需要三个不同的点。");continue;
+                }
+                cancelled=true;return null;
             }
             return points;
         }
@@ -281,24 +310,16 @@ namespace LAAnnotation.Views
         {
             if (_s.AutoNumber) { _s.NextNumber++; SettingsStore.Save(_s); }
             doc.Editor.WriteMessage("\nLA批注已创建: " + data.Number);
+            AnnotationListPanel.RefreshIfOpen();
         }
 
-        /// <summary>仅沿折线创建云线（无文字/引线/边框）。</summary>
-        private static void CreatePlineCloudOnly(Document doc, AnnotationSettings settings, List<Point3d> points)
+        private void UpdateModeAvailability()
         {
-            using (doc.LockDocument())
-            using (var tr = doc.Database.TransactionManager.StartTransaction())
-            {
-                var cloudPts = points.Select(p => new Point2d(p.X, p.Y)).ToList();
-                var cloud = AnnotationService.BuildScallopedVertices(cloudPts, settings.CloudStyle); // PL线云线始终闭合
-                cloud.Elevation = points[0].Z;
-                cloud.Layer = AnnotationService.EffectiveLayer(settings);
-                cloud.Color = Color.FromColorIndex(ColorMethod.ByAci, settings.CloudColor);
-                if (settings.LineWidth > 0) cloud.ConstantWidth = settings.LineWidth;
-                var space = (BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId, OpenMode.ForWrite);
-                space.AppendEntity(cloud); tr.AddNewlyCreatedDBObject(cloud, true);
-                tr.Commit();
-            }
+            var regionOnly = MultiModeRadio.IsChecked == true;
+            ShapePlineRadio.IsEnabled = !regionOnly;
+            ShapeCrossRadio.IsEnabled = !regionOnly;
+            if (regionOnly && (ShapePlineRadio.IsChecked == true || ShapeCrossRadio.IsChecked == true))
+                ShapeRectRadio.IsChecked = true;
         }
 
         private void CheckContinuous(Document doc)

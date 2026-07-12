@@ -34,6 +34,12 @@ namespace LAAnnotation.Views
             _instance.LoadAnnotations();
         }
 
+        /// <summary>若面板已打开则刷新数据。</summary>
+        public static void RefreshIfOpen()
+        {
+            if (_instance != null && _instance.IsLoaded) _instance.LoadAnnotations();
+        }
+
         private void LoadAnnotations()
         {
             var doc = CadApplication.DocumentManager.MdiActiveDocument;

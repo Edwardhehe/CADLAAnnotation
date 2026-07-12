@@ -28,15 +28,28 @@ namespace LAAnnotation
         public void Initialize()
         {
             CadApplication.BeginDoubleClick += OnBeginDoubleClick;
+            CadApplication.DocumentManager.DocumentActivated += OnDocumentActivated;
             var doc = CadApplication.DocumentManager.MdiActiveDocument;
             MenuInstaller.Ensure(out var menuMessage);
+            AnnotationService.SyncNextNumber(doc);
             doc?.Editor.WriteMessage("\nLA批注已加载。" + menuMessage + " 命令: LA_PZ_NOTE / LA_PZ_EDIT / LA_PZ_DELETE / LA_PZ_CLOUD / LA_PZ_LIST / LA_PZ_SETTINGS / LA_PZ_MENU");
         }
 
         public void Terminate()
         {
             CadApplication.BeginDoubleClick -= OnBeginDoubleClick;
+            CadApplication.DocumentManager.DocumentActivated -= OnDocumentActivated;
             if (_idleAttached) CadApplication.Idle -= OnIdle;
+        }
+
+        private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
+        {
+            try
+            {
+                AnnotationService.SyncNextNumber(e.Document);
+                LAAnnotation.Views.AnnotationListPanel.RefreshIfOpen();
+            }
+            catch (System.Exception ex) { PluginLog.Error("Document.Activated", ex); }
         }
 
         /// <summary>双击事件：检测选中实体是否为 LA 批注，若是则在 Idle 时触发编辑命令（避免事件上下文中直接执行命令）。</summary>

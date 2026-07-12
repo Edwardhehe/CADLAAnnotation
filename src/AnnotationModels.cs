@@ -10,6 +10,7 @@ namespace LAAnnotation
         public string Date { get; set; } = DateTime.Today.ToString("yyyy-MM-dd");
         public string Discipline { get; set; } = "建筑";
         public string Author { get; set; } = Environment.UserName;
+        public string Role { get; set; } = "批注人";
         public string Status { get; set; } = "待处理";
         public string Content { get; set; } = "";
         public double RenderTextHeight { get; set; }

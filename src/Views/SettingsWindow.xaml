@@ -153,24 +153,24 @@
                             <ComboBox x:Name="BoxColorCombo" Grid.Row="4" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
                             <TextBlock Grid.Row="5" Grid.Column="0" Text="回复颜色" Style="{StaticResource FieldLabel}"/>
                             <ComboBox x:Name="ReplyColorCombo" Grid.Row="5" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
-                            <TextBlock Grid.Row="6" Grid.Column="0" Text="截屏背景颜色" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="ScreenshotBackgroundColorCombo" Grid.Row="6" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="截屏背景（预留）" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="ScreenshotBackgroundColorCombo" Grid.Row="6" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}" IsEnabled="False" ToolTip="当前版本尚未提供截屏批注功能"/>
                             <TextBlock Grid.Row="7" Grid.Column="0" Text="通过颜色" Style="{StaticResource FieldLabel}"/>
                             <ComboBox x:Name="PassColorCombo" Grid.Row="7" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
                         </Grid>
-                        <CheckBox x:Name="ScreenshotBackgroundOnceReplyCheck" Content="截屏背景仅一次回复后生效" Margin="130,4,0,2"/>
+                        <CheckBox x:Name="ScreenshotBackgroundOnceReplyCheck" Content="截屏背景规则（预留）" Margin="130,4,0,2" IsEnabled="False" ToolTip="当前版本尚未提供截屏批注功能"/>
 
                         <Rectangle Style="{StaticResource SectionSeparator}"/>
 
                         <!-- 审批标记 -->
-                        <TextBlock Text="审批标记" Style="{StaticResource SectionHeader}"/>
+                        <TextBlock Text="审批标记（预留）" Style="{StaticResource SectionHeader}"/>
                         <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="对勾颜色" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="CheckColorCombo" Grid.Row="0" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                            <ComboBox x:Name="CheckColorCombo" Grid.Row="0" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}" IsEnabled="False" ToolTip="当前版本尚未生成审批标记实体"/>
                             <TextBlock Grid.Row="1" Grid.Column="0" Text="对勾高度" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="CheckHeightText" Grid.Row="1" Grid.Column="1"/>
+                            <TextBox x:Name="CheckHeightText" Grid.Row="1" Grid.Column="1" IsEnabled="False" ToolTip="当前版本尚未生成审批标记实体"/>
                         </Grid>
                     </StackPanel>
                 </ScrollViewer>
@@ -193,6 +193,8 @@
                             LA_PZ_NOTE    — 绘制批注（选点 → 填表 → 生成）<LineBreak/>
                             LA_PZ_EDIT    — 编辑批注（双击或命令）<LineBreak/>
                             LA_PZ_DELETE  — 删除批注（支持 UNDO）<LineBreak/>
+                            LA_PZ_CLOUD   — 仅绘制云线<LineBreak/>
+                            LA_PZ_LIST    — 打开批注列表并定位<LineBreak/>
                             LA_PZ_SETTINGS — 打开本设置窗口<LineBreak/>
                             LA_PZ_MENU    — 重新加载菜单
                         </TextBlock>

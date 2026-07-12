@@ -33,11 +33,14 @@ namespace LAAnnotation
         {
             var doc = CadApplication.DocumentManager.MdiActiveDocument; if (doc == null) return;
             var settings = SettingsStore.Load();
-            if (!AnnotationService.PromptCloudOnly(doc, settings, out var first, out var second)) return;
-            if (settings.FontAutoFit) { var s = AnnotationService.ResolveEffectiveSettings(doc, settings, new AnnotationData()); doc.Editor.WriteMessage($"\n云线半径: {s.CloudRadius:0.###}"); }
+            var preview = AnnotationService.ResolveEffectiveSettings(doc, settings, new AnnotationData());
+            if (!AnnotationService.PromptCloudOnly(doc, preview, out var first, out var second)) return;
             try
             {
-                var id = AnnotationService.CreateCloudOnly(doc, settings, first, second);
+                var width = Math.Abs(second.X - first.X); var height = Math.Abs(second.Y - first.Y);
+                var effective = AnnotationService.ResolveEffectiveSettings(doc, settings, new AnnotationData(), Math.Sqrt(width * width + height * height));
+                if (effective.FontAutoFit) doc.Editor.WriteMessage($"\n云线半径: {effective.CloudRadius:0.###}");
+                var id = AnnotationService.CreateCloudOnly(doc, effective, first, second);
                 doc.Editor.WriteMessage("\n云线已创建: " + id);
             }
             catch (System.Exception ex) { doc.Editor.WriteMessage("\n云线创建失败: " + ex.Message); }
@@ -71,6 +74,7 @@ namespace LAAnnotation
             {
                 if (!AnnotationService.Delete(doc, target)) { doc.Editor.WriteMessage("\n所选对象不是有效的 LA批注。"); return; }
                 doc.Editor.WriteMessage("\nLA批注已删除，可使用 UNDO 恢复。");
+                AnnotationListPanel.RefreshIfOpen();
             }
             catch (System.Exception ex) { doc.Editor.WriteMessage("\n删除失败: " + ex.Message); }
         }
@@ -123,6 +127,7 @@ namespace LAAnnotation
                 }
                 var form = new AnnotationWindow(data, true);if (CadDialog.ShowModal(form) != true) return false;
                 if (!AnnotationService.Update(doc, id, data)) { doc.Editor.WriteMessage("\n批注更新失败：对象关联已改变。"); return false; }
+                AnnotationListPanel.RefreshIfOpen();
                 doc.Editor.WriteMessage("\nLA批注已更新: " + data.Number); return true;
             }
             catch (System.Exception ex) { doc.Editor.WriteMessage("\n编辑失败: " + ex.Message); return false; }

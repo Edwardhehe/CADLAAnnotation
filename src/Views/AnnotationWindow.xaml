@@ -34,6 +34,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <!-- 批注内容（占据更多高度） -->
@@ -51,17 +52,21 @@
                 <TextBlock Grid.Row="2" Grid.Column="0" Text="批注人" Style="{StaticResource FieldLabel}"/>
                 <TextBox x:Name="AuthorTextBox" Grid.Row="2" Grid.Column="1"/>
 
+                <!-- 角色 -->
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="角色" Style="{StaticResource FieldLabel}"/>
+                <ComboBox x:Name="RoleComboBox" Grid.Row="3" Grid.Column="1" IsEditable="True"/>
+
                 <!-- 日期 -->
-                <TextBlock Grid.Row="3" Grid.Column="0" Text="日期" Style="{StaticResource FieldLabel}"/>
-                <DatePicker x:Name="AnnotationDatePicker" Grid.Row="3" Grid.Column="1"/>
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="日期" Style="{StaticResource FieldLabel}"/>
+                <DatePicker x:Name="AnnotationDatePicker" Grid.Row="4" Grid.Column="1"/>
 
                 <!-- 状态 -->
-                <TextBlock Grid.Row="4" Grid.Column="0" Text="状态" Style="{StaticResource FieldLabel}"/>
-                <ComboBox x:Name="StatusComboBox" Grid.Row="4" Grid.Column="1" IsEditable="True"/>
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="状态" Style="{StaticResource FieldLabel}"/>
+                <ComboBox x:Name="StatusComboBox" Grid.Row="5" Grid.Column="1" IsEditable="True"/>
 
                 <!-- 编号 -->
-                <TextBlock Grid.Row="5" Grid.Column="0" Text="编号" Style="{StaticResource FieldLabel}"/>
-                <TextBox x:Name="NumberTextBox" Grid.Row="5" Grid.Column="1"/>
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="编号" Style="{StaticResource FieldLabel}"/>
+                <TextBox x:Name="NumberTextBox" Grid.Row="6" Grid.Column="1"/>
             </Grid>
         </ScrollViewer>
     </DockPanel>

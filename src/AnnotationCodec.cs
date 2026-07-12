@@ -8,7 +8,7 @@ namespace LAAnnotation
     {
         public const string AppName = "LA_PZ_ANNOTATION";
 
-        public static string Encode(AnnotationData d) => string.Join("|", E(d.Id), E(d.Number), E(d.Date), E(d.Discipline), E(d.Author), E(d.Status), E(d.Content), N(d.RenderTextHeight), N(d.RenderHeaderHeight), N(d.RenderSecondLineHeight), N(d.RenderCloudRadius), N(d.RenderLineWidth));
+        public static string Encode(AnnotationData d) => string.Join("|", E(d.Id), E(d.Number), E(d.Date), E(d.Discipline), E(d.Author), E(d.Status), E(d.Content), N(d.RenderTextHeight), N(d.RenderHeaderHeight), N(d.RenderSecondLineHeight), N(d.RenderCloudRadius), N(d.RenderLineWidth), E(d.Role));
 
         public static string[] Split(string value, int size = 240)
         {
@@ -23,11 +23,12 @@ namespace LAAnnotation
             data = null;
             if (string.IsNullOrWhiteSpace(value)) return false;
             var p = value.Split('|');
-            if (p.Length != 7 && p.Length != 12) return false;
+            if (p.Length != 7 && p.Length != 12 && p.Length != 13) return false;
             try
             {
                 data = new AnnotationData { Id = D(p[0]), Number = D(p[1]), Date = D(p[2]), Discipline = D(p[3]), Author = D(p[4]), Status = D(p[5]), Content = D(p[6]) };
-                if(p.Length==12){data.RenderTextHeight=P(p[7]);data.RenderHeaderHeight=P(p[8]);data.RenderSecondLineHeight=P(p[9]);data.RenderCloudRadius=P(p[10]);data.RenderLineWidth=P(p[11]);}
+                if(p.Length>=12){data.RenderTextHeight=P(p[7]);data.RenderHeaderHeight=P(p[8]);data.RenderSecondLineHeight=P(p[9]);data.RenderCloudRadius=P(p[10]);data.RenderLineWidth=P(p[11]);}
+                if(p.Length==13)data.Role=D(p[12]);
                 return true;
             }
             catch { return false; }

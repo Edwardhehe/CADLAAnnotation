@@ -1,11 +1,16 @@
-# Local secrets and worker outputs
-.env
-.env.*
-.deepseek/output/
-*.deepseek.log
+# IDE & Editor
+.vs/
+*.suo
+*.user
+*.DotSettings.user
 
 # Build artifacts
 bin/
 obj/
-*.user
-*.suo
+
+# AI assistant internals
+.deepseek/
+.codex/
+.agents/
+DEEPSEEK_WORKERS.md
+tools/
