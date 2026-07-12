@@ -30,7 +30,7 @@ namespace LAAnnotation
             CadApplication.BeginDoubleClick += OnBeginDoubleClick;
             var doc = CadApplication.DocumentManager.MdiActiveDocument;
             MenuInstaller.Ensure(out var menuMessage);
-            doc?.Editor.WriteMessage("\nLA批注已加载。" + menuMessage + " 命令: LA_PZ_NOTE / LA_PZ_EDIT / LA_PZ_DELETE / LA_PZ_CLOUD / LA_PZ_SETTINGS / LA_PZ_MENU");
+            doc?.Editor.WriteMessage("\nLA批注已加载。" + menuMessage + " 命令: LA_PZ_NOTE / LA_PZ_EDIT / LA_PZ_DELETE / LA_PZ_CLOUD / LA_PZ_LIST / LA_PZ_SETTINGS / LA_PZ_MENU");
         }
 
         public void Terminate()

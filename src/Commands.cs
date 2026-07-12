@@ -96,6 +96,13 @@ namespace LAAnnotation
             CadDialog.ShowModal(new SettingsWindow(SettingsStore.Load(), styles));
         }
 
+        /// <summary>打开批注列表面板（左侧停靠）。</summary>
+        [CommandMethod("LA_PZ_LIST", CommandFlags.Modal)]
+        public void AnnotationList()
+        {
+            AnnotationListPanel.ShowOrActivate();
+        }
+
         [CommandMethod("LA_PZ_MENU", CommandFlags.Modal)]
         public void ReloadMenu()
         {

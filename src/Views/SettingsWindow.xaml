@@ -46,7 +46,7 @@
 
                         <!-- 文字自适应 -->
                         <TextBlock Text="文字自适应" Style="{StaticResource SectionHeader}"/>
-                        <CheckBox x:Name="FontAutoFitCheck" Content="字体自适应（根据视图高度自动调整）" Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="0,0,0,4"/>
+                        <CheckBox x:Name="FontAutoFitCheck" Content="字体自适应（字高按云线尺寸比例自动调整）" Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="0,0,0,4"/>
                         <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>

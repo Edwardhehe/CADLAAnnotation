@@ -55,6 +55,8 @@ namespace LAAnnotation
         public bool AutoCloseSnap { get; set; } = true;
         public bool ViewTopIsNorth { get; set; } = true;
         public bool DoubleClickEdit { get; set; } = true;
+        public bool ContinuousAnnotation { get; set; } = false;
+        public bool CloudOnly { get; set; } = false;
         public bool SameColors { get; set; } = true;
         public bool LayerAppendDate { get; set; } = true;
         public bool LayerAppendName { get; set; } = false;
