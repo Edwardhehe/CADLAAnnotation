@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 #if ZWCAD
 using ZwSoft.ZwCAD.DatabaseServices;
 using ZwSoft.ZwCAD.EditorInput;
@@ -37,8 +38,12 @@ namespace LAAnnotation
         {
             var min=RegionPreviewJig.ToMin(_first,_second);var max=RegionPreviewJig.ToMax(_first,_second);
             using(var cloud=AnnotationService.BuildCloud(min,max,_settings)){cloud.Elevation=_first.Z;draw.Geometry.Draw(cloud);}
-            var attach=AnnotationService.ClosestCorner(min,max,_current);using(var leader=new CadPolyline()){leader.AddVertexAt(0,attach,0,0,0);leader.AddVertexAt(1,new Point2d(_current.X,attach.Y),0,0,0);leader.AddVertexAt(2,new Point2d(_current.X,_current.Y),0,0,0);leader.Elevation=_current.Z;draw.Geometry.Draw(leader);}
+            // 斜向引出线：云线最近角 → 文字框最近角
+            var cloudCorner=AnnotationService.ClosestCorner(min,max,_current);
             var width=_settings.FixedWidth?_settings.FixedWidthValue:Math.Max(_settings.TextHeight*18,55);var height=_settings.TextHeight*5;
+            var boxCorners=new[]{new Point2d(_current.X,_current.Y),new Point2d(_current.X+width,_current.Y),new Point2d(_current.X+width,_current.Y+height),new Point2d(_current.X,_current.Y+height)};
+            var boxCorner=boxCorners.OrderBy(c=>c.GetDistanceTo(cloudCorner)).First();
+            using(var leader=new CadPolyline()){leader.AddVertexAt(0,cloudCorner,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=_current.Z;draw.Geometry.Draw(leader);}
             using(var box=AnnotationService.BuildBox(_current,width,height)){box.Elevation=_current.Z;draw.Geometry.Draw(box);}return true;
         }
     }

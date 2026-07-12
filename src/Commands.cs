@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using LAAnnotation.Views;
 #if ZWCAD
 using ZwSoft.ZwCAD.ApplicationServices;
@@ -19,27 +20,27 @@ namespace LAAnnotation
     /// <summary>CAD 命令集合：绘制/编辑/删除批注、设置、重载菜单。</summary>
     public sealed class Commands
     {
-        /// <summary>创建批注：选点 → 填表 → 创建实体组（云线+引线+文字+边框）。</summary>
+        /// <summary>打开浮动批注面板（面板内可选择类型/形式/设置，支持连续批注）。</summary>
         [CommandMethod("LA_PZ_NOTE", CommandFlags.Modal)]
         public void CreateAnnotation()
         {
+            AnnotationPanel.ShowOrActivate();
+        }
+
+        /// <summary>单绘云线：仅绘制云线范围框，不生成文字和引线。</summary>
+        [CommandMethod("LA_PZ_CLOUD", CommandFlags.Modal)]
+        public void CloudOnly()
+        {
             var doc = CadApplication.DocumentManager.MdiActiveDocument; if (doc == null) return;
             var settings = SettingsStore.Load();
-            var data = new AnnotationData { Author = settings.DefaultAuthor, Discipline = settings.DefaultDiscipline };
-            var effectiveSettings=AnnotationService.ResolveEffectiveSettings(doc,settings,data);
-            if(!AnnotationService.PromptGeometry(doc,effectiveSettings,out var first,out var second,out var textLocation))return;
-            if(settings.FontAutoFit)doc.Editor.WriteMessage($"\nLA批注自适应字高: {effectiveSettings.TextHeight:0.###}，云线半径: {effectiveSettings.CloudRadius:0.###}");
-            if (settings.AutoNumber) data.Number = "LA-" + settings.NextNumber.ToString("D3");
-            var form = new AnnotationWindow(data, false);if (CadDialog.ShowModal(form) != true) return;
+            if (!AnnotationService.PromptCloudOnly(doc, settings, out var first, out var second)) return;
+            if (settings.FontAutoFit) { var s = AnnotationService.ResolveEffectiveSettings(doc, settings, new AnnotationData()); doc.Editor.WriteMessage($"\n云线半径: {s.CloudRadius:0.###}"); }
             try
             {
-                if (AnnotationService.Create(doc, data, effectiveSettings, first, second, textLocation))
-                {
-                    if (settings.AutoNumber) { settings.NextNumber++; SettingsStore.Save(settings); }
-                    doc.Editor.WriteMessage("\nLA批注已创建: " + data.Number);
-                }
+                var id = AnnotationService.CreateCloudOnly(doc, settings, first, second);
+                doc.Editor.WriteMessage("\n云线已创建: " + id);
             }
-            catch (System.Exception ex) { doc.Editor.WriteMessage("\nLA批注创建失败: " + ex.Message); }
+            catch (System.Exception ex) { doc.Editor.WriteMessage("\n云线创建失败: " + ex.Message); }
         }
 
         /// <summary>编辑批注：优先使用已选实体，否则让用户点选。</summary>
@@ -74,10 +75,25 @@ namespace LAAnnotation
             catch (System.Exception ex) { doc.Editor.WriteMessage("\n删除失败: " + ex.Message); }
         }
 
+        /// <summary>打开设置窗口，同时从当前 DWG 获取可用文字样式列表供下拉选择。</summary>
         [CommandMethod("LA_PZ_SETTINGS", CommandFlags.Modal)]
         public void Settings()
         {
-            CadDialog.ShowModal(new SettingsWindow(SettingsStore.Load()));
+            var styles = new List<string>();
+            try
+            {
+                var doc = CadApplication.DocumentManager.MdiActiveDocument;
+                if (doc != null)
+                {
+                    using (var tr = doc.Database.TransactionManager.StartTransaction())
+                    {
+                        var table = (TextStyleTable)tr.GetObject(doc.Database.TextStyleTableId, OpenMode.ForRead);
+                        foreach (ObjectId id in table) { if (id.IsValid && !id.IsErased && tr.GetObject(id, OpenMode.ForRead) is TextStyleTableRecord r && !string.IsNullOrWhiteSpace(r.Name)) styles.Add(r.Name); }
+                    }
+                }
+            }
+            catch { /* 获取样式失败时使用默认列表 */ }
+            CadDialog.ShowModal(new SettingsWindow(SettingsStore.Load(), styles));
         }
 
         [CommandMethod("LA_PZ_MENU", CommandFlags.Modal)]

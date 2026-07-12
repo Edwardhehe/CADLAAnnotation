@@ -1,55 +1,210 @@
-<Window x:Class="LAAnnotation.Views.SettingsWindow" x:ClassModifier="internal" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="LA批注设置" Width="780" Height="560" MinWidth="700" MinHeight="480" ResizeMode="CanResizeWithGrip">
-    <Window.Resources><ResourceDictionary Source="../Themes/LATheme.xaml"/></Window.Resources>
+<Window x:Class="LAAnnotation.Views.SettingsWindow"
+        x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="LA批注设置" Width="640" Height="520"
+        MinWidth="560" MinHeight="440"
+        ResizeMode="CanResizeWithGrip">
+    <Window.Resources>
+        <ResourceDictionary Source="../Themes/LATheme.xaml"/>
+    </Window.Resources>
+
     <DockPanel>
-        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="10"><Button Content="取消" IsCancel="True" Style="{StaticResource SecondaryButton}" Click="Cancel_Click"/><Button Content="保存设置" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Save_Click"/></StackPanel>
-        <TabControl Margin="12,6,12,0">
-            <TabItem Header="外形与云线"><ScrollViewer VerticalScrollBarVisibility="Auto"><UniformGrid Columns="4" Margin="14">
-                <TextBlock Text="批注外形" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="ShapeCombo" IsEditable="True"/>
-                <TextBlock Text="云线样式" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="CloudStyleCombo" IsEditable="True"/>
-                <TextBlock Text="云线半径" Style="{StaticResource FieldLabel}"/><TextBox x:Name="CloudRadiusText"/>
-                <TextBlock Text="云线线宽" Style="{StaticResource FieldLabel}"/><TextBox x:Name="LineWidthText"/>
-                <TextBlock/><CheckBox x:Name="CloudAutoFitCheck" Content="云线自适应"/>
-                <TextBlock/><CheckBox x:Name="FontAutoFitCheck" Content="字体自适应" Checked="Dependency_Changed" Unchecked="Dependency_Changed"/>
-                <TextBlock Text="自适应字高占视图高度 %" Style="{StaticResource FieldLabel}"/><TextBox x:Name="AutoTextViewPercentText"/>
-                <TextBlock Text="比例 1:" Style="{StaticResource FieldLabel}"/><TextBox x:Name="ScaleRatioText"/>
-                <TextBlock/><CheckBox x:Name="AutoCloseOrthoCheck" Content="绘制时暂时关闭正交"/>
-                <TextBlock/><CheckBox x:Name="AutoCloseSnapCheck" Content="绘制时暂时关闭捕捉"/>
-                <TextBlock/><CheckBox x:Name="DoubleClickEditCheck" Content="双击编辑批注"/>
-                <TextBlock/><CheckBox x:Name="ViewTopIsNorthCheck" Content="视图上方为北"/>
-            </UniformGrid></ScrollViewer></TabItem>
-            <TabItem Header="批注文字"><ScrollViewer VerticalScrollBarVisibility="Auto"><UniformGrid Columns="4" Margin="14">
-                <TextBlock Text="首行字高" Style="{StaticResource FieldLabel}"/><TextBox x:Name="HeaderHeightText"/>
-                <TextBlock Text="次行字高" Style="{StaticResource FieldLabel}"/><TextBox x:Name="SecondLineHeightText"/>
-                <TextBlock Text="正文字高" Style="{StaticResource FieldLabel}"/><TextBox x:Name="TextHeightText"/>
-                <TextBlock Text="默认批注人" Style="{StaticResource FieldLabel}"/><TextBox x:Name="DefaultAuthorText"/>
-                <TextBlock Text="默认角色" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="DefaultRoleCombo" IsEditable="True"/>
-                <TextBlock Text="默认专业" Style="{StaticResource FieldLabel}"/><TextBox x:Name="DefaultDisciplineText"/>
-                <TextBlock/><CheckBox x:Name="FixedWidthCheck" Content="固定文字宽度" Checked="Dependency_Changed" Unchecked="Dependency_Changed"/>
-                <TextBlock Text="固定宽度值" Style="{StaticResource FieldLabel}"/><TextBox x:Name="FixedWidthValueText"/>
-                <TextBlock/><CheckBox x:Name="AutoNumberCheck" Content="自动编号"/>
-            </UniformGrid></ScrollViewer></TabItem>
-            <TabItem Header="图层与颜色"><ScrollViewer VerticalScrollBarVisibility="Auto"><UniformGrid Columns="4" Margin="14">
-                <TextBlock Text="图层基础名称" Style="{StaticResource FieldLabel}"/><TextBox x:Name="LayerNameText"/>
-                <TextBlock Text="文字样式" Style="{StaticResource FieldLabel}"/><TextBox x:Name="TextStyleNameText" ToolTip="留空使用当前文字样式；填写名称若在图中不存在则自动回退为 Standard。"/>
-                <TextBlock/><CheckBox x:Name="SameColorsCheck" Content="所有颜色一致" Checked="Dependency_Changed" Unchecked="Dependency_Changed"/>
-                <TextBlock Text="统一颜色索引" Style="{StaticResource FieldLabel}"/><TextBox x:Name="ColorIndexText"/>
-                <TextBlock Text="云线颜色索引" Style="{StaticResource FieldLabel}"/><TextBox x:Name="CloudColorText"/>
-                <TextBlock Text="引线颜色索引" Style="{StaticResource FieldLabel}"/><TextBox x:Name="LeaderColorText"/>
-                <TextBlock Text="文字颜色索引" Style="{StaticResource FieldLabel}"/><TextBox x:Name="TextColorText"/>
-                <TextBlock Text="边框颜色索引" Style="{StaticResource FieldLabel}"/><TextBox x:Name="BoxColorText"/>
-                <TextBlock Text="回复颜色索引" Style="{StaticResource FieldLabel}"/><TextBox x:Name="ReplyColorText"/>
-                <TextBlock/><CheckBox x:Name="ScreenshotBackgroundOnceReplyCheck" Content="截屏背景一次回复"/>
-                <TextBlock Text="截屏背景颜色" Style="{StaticResource FieldLabel}"/><TextBox x:Name="ScreenshotBackgroundColorText"/>
-                <TextBlock Text="通过颜色索引" Style="{StaticResource FieldLabel}"/><TextBox x:Name="PassColorText"/>
-                <TextBlock Text="对勾颜色索引" Style="{StaticResource FieldLabel}"/><TextBox x:Name="CheckColorText"/>
-                <TextBlock Text="对勾高度" Style="{StaticResource FieldLabel}"/><TextBox x:Name="CheckHeightText"/>
-                <TextBlock/><CheckBox x:Name="LayerAppendDateCheck" Content="图层名添加日期"/>
-                <TextBlock/><CheckBox x:Name="LayerAppendNameCheck" Content="图层名添加姓名"/>
-                <TextBlock/><CheckBox x:Name="DateBeforeNameCheck" Content="日期排列在姓名前"/>
-                <TextBlock Text="连接符" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="ConnectorCombo" IsEditable="True"/>
-                <TextBlock/><CheckBox x:Name="PlottableCheck" Content="批注图层参与打印"/>
-            </UniformGrid></ScrollViewer></TabItem>
-            <TabItem Header="说明"><TextBlock Margin="18" TextWrapping="Wrap" Foreground="DimGray" Text="设置保存在本机，批注数据保存在 DWG 内。启用字体自适应后，实际字高按当前视图高度计算；创建命令会在命令行显示本次采用的字高和云线半径。"/></TabItem>
+        <!-- 底部按钮栏 -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"
+                Padding="12,10">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="取消" IsCancel="True" Style="{StaticResource SecondaryButton}" Click="Cancel_Click"/>
+                <Button Content="保存设置" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Save_Click"/>
+            </StackPanel>
+        </Border>
+
+        <TabControl Margin="0,4,0,0">
+
+            <!-- ═══════════ 外形与云线 ═══════════ -->
+            <TabItem Header="外形与云线">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,8">
+                    <StackPanel>
+                        <!-- 云线外形 -->
+                        <TextBlock Text="云线外形" Style="{StaticResource SectionHeader}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="批注外形" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="ShapeCombo" Grid.Row="0" Grid.Column="1"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="云线样式" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="CloudStyleCombo" Grid.Row="1" Grid.Column="1"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="云线半径" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="CloudRadiusText" Grid.Row="2" Grid.Column="1"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="云线线宽" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="LineWidthText" Grid.Row="3" Grid.Column="1"/>
+                        </Grid>
+                        <CheckBox x:Name="CloudAutoFitCheck" Content="云线自适应" Margin="130,6,0,2"/>
+
+                        <Rectangle Style="{StaticResource SectionSeparator}"/>
+
+                        <!-- 文字自适应 -->
+                        <TextBlock Text="文字自适应" Style="{StaticResource SectionHeader}"/>
+                        <CheckBox x:Name="FontAutoFitCheck" Content="字体自适应（根据视图高度自动调整）" Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="0,0,0,4"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="字高占云线 %" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="AutoTextViewPercentText" Grid.Row="0" Grid.Column="1"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="全局比例 1:" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="ScaleRatioText" Grid.Row="1" Grid.Column="1"/>
+                        </Grid>
+
+                        <Rectangle Style="{StaticResource SectionSeparator}"/>
+
+                        <!-- 绘图辅助 -->
+                        <TextBlock Text="绘图辅助" Style="{StaticResource SectionHeader}"/>
+                        <StackPanel Margin="0,0,0,4">
+                            <CheckBox x:Name="AutoCloseOrthoCheck" Content="绘制时暂时关闭正交（ORTHO）"/>
+                            <CheckBox x:Name="AutoCloseSnapCheck" Content="绘制时暂时关闭对象捕捉（OSNAP）"/>
+                            <CheckBox x:Name="DoubleClickEditCheck" Content="双击已创建的批注进行编辑"/>
+                            <CheckBox x:Name="ViewTopIsNorthCheck" Content="视图上方为北（否则批注随视图扭转）"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══════════ 批注文字 ═══════════ -->
+            <TabItem Header="批注文字">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,8">
+                    <StackPanel>
+                        <TextBlock Text="文字尺寸" Style="{StaticResource SectionHeader}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="首行字高" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="HeaderHeightText" Grid.Row="0" Grid.Column="1"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="次行字高" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="SecondLineHeightText" Grid.Row="1" Grid.Column="1"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="正文字高" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="TextHeightText" Grid.Row="2" Grid.Column="1"/>
+                        </Grid>
+                        <CheckBox x:Name="FixedWidthCheck" Content="固定文字宽度" Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="130,6,0,2"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="固定宽度值" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="FixedWidthValueText" Grid.Column="1"/>
+                        </Grid>
+
+                        <Rectangle Style="{StaticResource SectionSeparator}"/>
+
+                        <TextBlock Text="批注信息" Style="{StaticResource SectionHeader}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="默认批注人" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="DefaultAuthorText" Grid.Row="0" Grid.Column="1"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="默认角色" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="DefaultRoleCombo" Grid.Row="1" Grid.Column="1" IsEditable="True"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="默认专业" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="DefaultDisciplineText" Grid.Row="2" Grid.Column="1"/>
+                        </Grid>
+                        <CheckBox x:Name="AutoNumberCheck" Content="自动编号" Margin="130,8,0,2"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══════════ 图层与颜色 ═══════════ -->
+            <TabItem Header="图层与颜色">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,8">
+                    <StackPanel>
+                        <!-- 图层设置 -->
+                        <TextBlock Text="图层设置" Style="{StaticResource SectionHeader}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="图层基础名称" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="LayerNameText" Grid.Row="0" Grid.Column="1"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="文字样式" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="TextStyleCombo" Grid.Row="1" Grid.Column="1" IsEditable="True" ToolTip="列出当前 DWG 中的可用文字样式"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="连接符" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="ConnectorCombo" Grid.Row="2" Grid.Column="1" IsEditable="True"/>
+                        </Grid>
+                        <StackPanel Margin="0,4,0,2">
+                            <CheckBox x:Name="LayerAppendDateCheck" Content="图层名添加日期"/>
+                            <CheckBox x:Name="LayerAppendNameCheck" Content="图层名添加批注人姓名"/>
+                            <CheckBox x:Name="DateBeforeNameCheck" Content="日期排列在姓名前"/>
+                            <CheckBox x:Name="PlottableCheck" Content="批注图层参与打印"/>
+                        </StackPanel>
+
+                        <Rectangle Style="{StaticResource SectionSeparator}"/>
+
+                        <!-- 颜色设置 -->
+                        <TextBlock Text="颜色设置" Style="{StaticResource SectionHeader}"/>
+                        <CheckBox x:Name="SameColorsCheck" Content="所有元素使用统一颜色" Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="0,0,0,6"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="统一颜色" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="ColorIndexCombo" Grid.Row="0" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="云线颜色" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="CloudColorCombo" Grid.Row="1" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="引线颜色" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="LeaderColorCombo" Grid.Row="2" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="文字颜色" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="TextColorCombo" Grid.Row="3" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="边框颜色" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="BoxColorCombo" Grid.Row="4" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="回复颜色" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="ReplyColorCombo" Grid.Row="5" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="截屏背景颜色" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="ScreenshotBackgroundColorCombo" Grid.Row="6" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                            <TextBlock Grid.Row="7" Grid.Column="0" Text="通过颜色" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="PassColorCombo" Grid.Row="7" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                        </Grid>
+                        <CheckBox x:Name="ScreenshotBackgroundOnceReplyCheck" Content="截屏背景仅一次回复后生效" Margin="130,4,0,2"/>
+
+                        <Rectangle Style="{StaticResource SectionSeparator}"/>
+
+                        <!-- 审批标记 -->
+                        <TextBlock Text="审批标记" Style="{StaticResource SectionHeader}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="对勾颜色" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="CheckColorCombo" Grid.Row="0" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="对勾高度" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="CheckHeightText" Grid.Row="1" Grid.Column="1"/>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══════════ 说明 ═══════════ -->
+            <TabItem Header="说明">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20,12">
+                    <StackPanel>
+                        <TextBlock Text="关于 LA 批注" Style="{StaticResource SectionHeader}"/>
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8">
+                            • 设置保存在本机（%AppData%\LAAnnotation\settings.xml）<LineBreak/>
+                            • 批注数据编码后存储在 DWG 图形内，随图纸传递<LineBreak/>
+                            • 启用字体自适应后，字高按云线对角线尺寸 × 百分比自动计算<LineBreak/>
+                            • 创建命令执行时，命令行会显示本次实际采用的字高和云线半径
+                        </TextBlock>
+
+                        <TextBlock Text="命令速查" Style="{StaticResource SectionHeader}"/>
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8">
+                            LA_PZ_NOTE    — 绘制批注（选点 → 填表 → 生成）<LineBreak/>
+                            LA_PZ_EDIT    — 编辑批注（双击或命令）<LineBreak/>
+                            LA_PZ_DELETE  — 删除批注（支持 UNDO）<LineBreak/>
+                            LA_PZ_SETTINGS — 打开本设置窗口<LineBreak/>
+                            LA_PZ_MENU    — 重新加载菜单
+                        </TextBlock>
+
+                        <TextBlock Text="颜色索引参考" Style="{StaticResource SectionHeader}"/>
+                        <TextBlock Style="{StaticResource Caption}">
+                            1:红  2:黄  3:绿  4:青  5:蓝  6:洋红  7:白  8-9:灰  10-249:色轮  250-255:灰度
+                        </TextBlock>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
         </TabControl>
     </DockPanel>
 </Window>

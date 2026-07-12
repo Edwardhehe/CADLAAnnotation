@@ -62,7 +62,7 @@ namespace LAAnnotation
         public string Connector { get; set; } = "-";
         public bool Plottable { get; set; } = false;
         public double CheckHeight { get; set; } = 8.0;
-        public double AutoTextViewPercent { get; set; } = 1.8;
+        public double AutoTextViewPercent { get; set; } = 4.0; // 字高 ≈ 云线对角线 × 此百分比
 
         public AnnotationSettings Clone() => (AnnotationSettings)MemberwiseClone();
     }

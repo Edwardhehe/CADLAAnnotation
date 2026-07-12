@@ -28,13 +28,16 @@ namespace LAAnnotation
         /// <summary>XRecord 数据键名，用于在编组扩展字典中存储批注数据。</summary>
         private const string DataKey = "LA_PZ_DATA";
 
-        /// <summary>根据当前视图和比例因子计算实际生效的字体、云线等参数。</summary>
-        public static AnnotationSettings ResolveEffectiveSettings(Document doc, AnnotationSettings source, AnnotationData data)
+        /// <summary>根据比例因子计算实际生效的字体、云线等参数。若提供云线范围且开启 FontAutoFit，则按云线对角线尺寸计算字高。</summary>
+        public static AnnotationSettings ResolveEffectiveSettings(Document doc, AnnotationSettings source, AnnotationData data, double cloudDiagonal = 0)
         {
             var s=source.Clone();var ratio=Math.Max(source.ScaleRatio,0.01);var baseText=Math.Max(source.TextHeight,0.1);var text=baseText*ratio;
             if(source.FontAutoFit)
             {
-                using(var view=doc.Editor.GetCurrentView()) text=Math.Max(text,view.Height*Math.Max(0.1,source.AutoTextViewPercent)/100.0);
+                // 优先用云线对角线尺寸，否则回退到视图高度
+                var refSize=cloudDiagonal>0?cloudDiagonal:0;
+                if(refSize<=0){using(var view=doc.Editor.GetCurrentView())refSize=view.Height;}
+                text=Math.Max(text,refSize*Math.Max(0.1,source.AutoTextViewPercent)/100.0);
             }
             var factor=text/baseText;s.TextHeight=text;s.HeaderHeight=Math.Max(0.1,source.HeaderHeight*factor);s.SecondLineHeight=Math.Max(0.1,source.SecondLineHeight*factor);
             s.FixedWidthValue=Math.Max(text*6,source.FixedWidthValue*factor);s.LineWidth=Math.Max(source.LineWidth*ratio,text*0.035);
@@ -61,7 +64,137 @@ namespace LAAnnotation
             }finally{if(ortho!=null)SetCadSystemVariable("ORTHOMODE",ortho);if(osmode!=null)SetCadSystemVariable("OSMODE",osmode);}
         }
 
-        /// <summary>创建批注实体组：云线 + L 形引线 + 多行文字 + 矩形边框，统一编组并写入 XRecord 数据。</summary>
+        /// <summary>交互式选点（仅云线）：第一角点 → 拖拽云线范围，不要求文字框位置。</summary>
+        public static bool PromptCloudOnly(Document doc, AnnotationSettings s, out Point3d firstPoint, out Point3d secondPoint)
+        {
+            firstPoint=Point3d.Origin;secondPoint=Point3d.Origin;var ed=doc.Editor;object ortho=null,osmode=null;
+            try{
+                if(s.AutoCloseOrtho){ortho=CadSystemVariable("ORTHOMODE");SetCadSystemVariable("ORTHOMODE",0);}if(s.AutoCloseSnap){osmode=CadSystemVariable("OSMODE");SetCadSystemVariable("OSMODE",0);}
+                var first=ed.GetPoint("\n指定云线范围第一个角点: ");if(first.Status!=PromptStatus.OK)return false;
+                var region=new RegionPreviewJig(first.Value,s);var regionResult=ed.Drag(region);if(regionResult.Status!=PromptStatus.OK)return false;
+                if(first.Value.DistanceTo(region.Current)<1e-6){ed.WriteMessage("\n云线范围太小，请重新指定两个不同的角点。");return false;}
+                firstPoint=first.Value;secondPoint=region.Current;return true;
+            }finally{if(ortho!=null)SetCadSystemVariable("ORTHOMODE",ortho);if(osmode!=null)SetCadSystemVariable("OSMODE",osmode);}
+        }
+
+        /// <summary>仅创建云线（不含文字、引线、边框），返回实体 ObjectId。</summary>
+        public static ObjectId CreateCloudOnly(Document doc, AnnotationSettings settings, Point3d firstPoint, Point3d secondPoint)
+        {
+            using(doc.LockDocument())using(var tr=doc.Database.TransactionManager.StartTransaction())
+            {
+                EnsureRegApp(doc.Database,tr);EnsureLayer(doc.Database,tr,settings);
+                var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
+                var min=new Point2d(Math.Min(firstPoint.X,secondPoint.X),Math.Min(firstPoint.Y,secondPoint.Y));
+                var max=new Point2d(Math.Max(firstPoint.X,secondPoint.X),Math.Max(firstPoint.Y,secondPoint.Y));
+                var cloud=BuildCloud(min,max,settings);cloud.Elevation=firstPoint.Z;
+                cloud.Layer=EffectiveLayer(settings);cloud.Color=Color.FromColorIndex(ColorMethod.ByAci,settings.CloudColor);
+                if(settings.LineWidth>0)cloud.ConstantWidth=settings.LineWidth;
+                var id=space.AppendEntity(cloud);tr.AddNewlyCreatedDBObject(cloud,true);
+                tr.Commit();return id;
+            }
+        }
+
+        /// <summary>创建十字点标记（两条交叉直线）。</summary>
+        public static void CreateCrossMark(Document doc, AnnotationSettings settings, Point3d pt)
+        {
+            using(doc.LockDocument())using(var tr=doc.Database.TransactionManager.StartTransaction())
+            {
+                EnsureLayer(doc.Database,tr,settings);
+                var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
+                var size=settings.TextHeight*3;
+                var h=new Polyline();h.AddVertexAt(0,new Point2d(pt.X-size,pt.Y),0,0,0);h.AddVertexAt(1,new Point2d(pt.X+size,pt.Y),0,0,0);h.Elevation=pt.Z;
+                h.Layer=EffectiveLayer(settings);h.Color=Color.FromColorIndex(ColorMethod.ByAci,settings.CloudColor);
+                space.AppendEntity(h);tr.AddNewlyCreatedDBObject(h,true);
+                var v=new Polyline();v.AddVertexAt(0,new Point2d(pt.X,pt.Y-size),0,0,0);v.AddVertexAt(1,new Point2d(pt.X,pt.Y+size),0,0,0);v.Elevation=pt.Z;
+                v.Layer=EffectiveLayer(settings);v.Color=Color.FromColorIndex(ColorMethod.ByAci,settings.CloudColor);
+                space.AppendEntity(v);tr.AddNewlyCreatedDBObject(v,true);
+                tr.Commit();
+            }
+        }
+
+        /// <summary>沿折线路径生成云线 + 文字框 + 引出线。</summary>
+        public static void CreatePlineCloud(Document doc, AnnotationData data, AnnotationSettings baseSettings, AnnotationSettings effective, List<Point3d> points, Point3d textLocation)
+        {
+            using(doc.LockDocument())using(var tr=doc.Database.TransactionManager.StartTransaction())
+            {
+                EnsureRegApp(doc.Database,tr);EnsureLayer(doc.Database,tr,baseSettings);
+                var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
+                var ids=new ObjectIdCollection();
+                // 云线沿折线路径
+                var cloudPts=points.Select(p=>new Point2d(p.X,p.Y)).ToList();
+                var cloud=BuildScallopedVertices(cloudPts,baseSettings.CloudStyle);cloud.Elevation=points[0].Z;
+                Add(space,tr,cloud,ids,baseSettings,data.Id,"cloud",baseSettings.CloudColor);
+                // 文字 + 边框
+                var margin=effective.TextHeight*0.5;
+                var innerTextLocation=new Point3d(textLocation.X+margin,textLocation.Y+margin,textLocation.Z);
+                var requestedWidth=baseSettings.FixedWidth?baseSettings.FixedWidthValue:Math.Max(55.0,effective.TextHeight*18.0);
+                var text=new MText{Location=innerTextLocation,TextHeight=effective.TextHeight,Width=requestedWidth,Contents=FormatText(data,effective),Attachment=AttachmentPoint.BottomLeft};
+                ApplyTextStyle(doc.Database,tr,text,baseSettings.TextStyleName);
+                Add(space,tr,text,ids,baseSettings,data.Id,"text",baseSettings.TextColor);
+                var width=Math.Max(text.ActualWidth,effective.TextHeight*4)+margin*2;var height=Math.Max(text.ActualHeight,effective.TextHeight*2)+margin*2;
+                var boxEntity=BuildBox(textLocation,width,height);boxEntity.Elevation=textLocation.Z;Add(space,tr,boxEntity,ids,baseSettings,data.Id,"box",baseSettings.SameColors?baseSettings.CloudColor:baseSettings.BoxColor);
+                // 引出线：最近折线点 → 最近框角
+                var nearestPt=cloudPts.OrderBy(p=>p.GetDistanceTo(new Point2d(textLocation.X,textLocation.Y))).First();
+                var boxCorners=new[]{new Point2d(textLocation.X,textLocation.Y),new Point2d(textLocation.X+width,textLocation.Y),new Point2d(textLocation.X+width,textLocation.Y+height),new Point2d(textLocation.X,textLocation.Y+height)};
+                var boxCorner=boxCorners.OrderBy(c=>c.GetDistanceTo(nearestPt)).First();
+                var leader=new Polyline();leader.AddVertexAt(0,nearestPt,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=textLocation.Z;
+                Add(space,tr,leader,ids,baseSettings,data.Id,"leader",baseSettings.LeaderColor);
+                // 编组
+                var groups=(DBDictionary)tr.GetObject(doc.Database.GroupDictionaryId,OpenMode.ForWrite);
+                var group=new Group("LA批注 "+data.Number,true);
+                groups.SetAt(GroupPrefix+data.Id,group);tr.AddNewlyCreatedDBObject(group,true);group.Append(ids);
+                WriteMaster(group,tr,data);
+                tr.Commit();
+            }
+        }
+
+        /// <summary>多对一批注：多个云线区域 → 多条引出线 → 一个共用文字框。</summary>
+        public static void CreateMultiCloud(Document doc, AnnotationData data, AnnotationSettings effective, List<Point3d> firstPoints, List<Point3d> secondPoints, Point3d textLocation)
+        {
+            using(doc.LockDocument())using(var tr=doc.Database.TransactionManager.StartTransaction())
+            {
+                var settings=SettingsStore.Load();
+                EnsureRegApp(doc.Database,tr);EnsureLayer(doc.Database,tr,settings);
+                var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
+                var ids=new ObjectIdCollection();
+                // 多个云线
+                for(var k=0;k<firstPoints.Count;k++)
+                {
+                    var min=new Point2d(Math.Min(firstPoints[k].X,secondPoints[k].X),Math.Min(firstPoints[k].Y,secondPoints[k].Y));
+                    var max=new Point2d(Math.Max(firstPoints[k].X,secondPoints[k].X),Math.Max(firstPoints[k].Y,secondPoints[k].Y));
+                    var cloud=BuildCloud(min,max,settings);cloud.Elevation=firstPoints[k].Z;
+                    Add(space,tr,cloud,ids,settings,data.Id,"cloud",settings.CloudColor);
+                }
+                // 文字 + 边框
+                var margin=effective.TextHeight*0.5;
+                var innerTextLocation=new Point3d(textLocation.X+margin,textLocation.Y+margin,textLocation.Z);
+                var requestedWidth=settings.FixedWidth?settings.FixedWidthValue:Math.Max(55.0,effective.TextHeight*18.0);
+                var text=new MText{Location=innerTextLocation,TextHeight=effective.TextHeight,Width=requestedWidth,Contents=FormatText(data,effective),Attachment=AttachmentPoint.BottomLeft};
+                ApplyTextStyle(doc.Database,tr,text,settings.TextStyleName);
+                Add(space,tr,text,ids,settings,data.Id,"text",settings.TextColor);
+                var width=Math.Max(text.ActualWidth,effective.TextHeight*4)+margin*2;var height=Math.Max(text.ActualHeight,effective.TextHeight*2)+margin*2;
+                var boxEntity=BuildBox(textLocation,width,height);boxEntity.Elevation=textLocation.Z;Add(space,tr,boxEntity,ids,settings,data.Id,"box",settings.SameColors?settings.CloudColor:settings.BoxColor);
+                // 每条引出线：云线角 → 最近框角
+                var boxCorners=new[]{new Point2d(textLocation.X,textLocation.Y),new Point2d(textLocation.X+width,textLocation.Y),new Point2d(textLocation.X+width,textLocation.Y+height),new Point2d(textLocation.X,textLocation.Y+height)};
+                for(var k=0;k<firstPoints.Count;k++)
+                {
+                    var min=new Point2d(Math.Min(firstPoints[k].X,secondPoints[k].X),Math.Min(firstPoints[k].Y,secondPoints[k].Y));
+                    var max=new Point2d(Math.Max(firstPoints[k].X,secondPoints[k].X),Math.Max(firstPoints[k].Y,secondPoints[k].Y));
+                    var cloudCorner=ClosestCorner(min,max,textLocation);
+                    var boxCorner=boxCorners.OrderBy(c=>c.GetDistanceTo(cloudCorner)).First();
+                    var leader=new Polyline();leader.AddVertexAt(0,cloudCorner,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=textLocation.Z;
+                    Add(space,tr,leader,ids,settings,data.Id,"leader",settings.LeaderColor);
+                }
+                // 编组
+                var groups=(DBDictionary)tr.GetObject(doc.Database.GroupDictionaryId,OpenMode.ForWrite);
+                var group=new Group("LA批注 "+data.Number,true);
+                groups.SetAt(GroupPrefix+data.Id,group);tr.AddNewlyCreatedDBObject(group,true);group.Append(ids);
+                WriteMaster(group,tr,data);
+                tr.Commit();
+            }
+        }
+
+        /// <summary>创建批注实体组：云线 → 文字 → 边框 → 斜向引出线，统一编组并写入 XRecord 数据。</summary>
         public static bool Create(Document doc, AnnotationData data, AnnotationSettings settings, Point3d firstPoint, Point3d secondPoint, Point3d textLocation)
         {
             using (doc.LockDocument()) using (var tr = doc.Database.TransactionManager.StartTransaction())
@@ -71,24 +204,30 @@ namespace LAAnnotation
                 var ids = new ObjectIdCollection();
                 var min = new Point2d(Math.Min(firstPoint.X, secondPoint.X), Math.Min(firstPoint.Y, secondPoint.Y));
                 var max = new Point2d(Math.Max(firstPoint.X, secondPoint.X), Math.Max(firstPoint.Y, secondPoint.Y));
+
+                // 1. 云线
                 var cloud=BuildCloud(min, max, settings);cloud.Elevation=firstPoint.Z;Add(space, tr, cloud, ids, settings, data.Id, "cloud", settings.CloudColor);
 
-                var attach = ClosestCorner(min, max, textLocation);
-                var leader = new Polyline(); leader.AddVertexAt(0, attach, 0, 0, 0);
-                leader.AddVertexAt(1, new Point2d(textLocation.X, attach.Y), 0, 0, 0);
-                leader.AddVertexAt(2, new Point2d(textLocation.X, textLocation.Y), 0, 0, 0);
-                leader.Elevation=textLocation.Z;
-                Add(space, tr, leader, ids, settings, data.Id, "leader", settings.LeaderColor);
-
+                // 2. 多行文字
                 var requestedWidth = settings.FixedWidth ? settings.FixedWidthValue : Math.Max(55.0, settings.TextHeight * 18.0);
                 var margin=settings.TextHeight*0.5;var innerTextLocation=new Point3d(textLocation.X+margin,textLocation.Y+margin,textLocation.Z);
                 var text = new MText { Location = innerTextLocation, TextHeight = settings.TextHeight, Width = requestedWidth, Contents = FormatText(data,settings), Attachment = AttachmentPoint.BottomLeft };
                 ApplyTextStyle(doc.Database,tr,text,settings.TextStyleName);
                 Add(space, tr, text, ids, settings, data.Id, "text", settings.TextColor);
+
+                // 3. 矩形边框（需要 MText 实际宽高确定尺寸）
                 var width=Math.Max(text.ActualWidth,settings.TextHeight*4)+margin*2;var height=Math.Max(text.ActualHeight,settings.TextHeight*2)+margin*2;
                 var boxEntity=BuildBox(textLocation, width, height);boxEntity.Elevation=textLocation.Z;Add(space, tr, boxEntity, ids, settings, data.Id, "box", settings.SameColors?settings.CloudColor:settings.BoxColor);
 
-                // 视图旋转补偿：若用户指定视图上方非北，则按当前视图扭转角旋转文字和边框
+                // 4. 斜向引出线：云线最近角 → 文字框最近角（直线）
+                var cloudCorner = ClosestCorner(min, max, textLocation);
+                var boxCorners = new[]{new Point2d(textLocation.X,textLocation.Y),new Point2d(textLocation.X+width,textLocation.Y),new Point2d(textLocation.X+width,textLocation.Y+height),new Point2d(textLocation.X,textLocation.Y+height)};
+                var boxCorner = boxCorners.OrderBy(c=>c.GetDistanceTo(cloudCorner)).First();
+                var leader = new Polyline(); leader.AddVertexAt(0, cloudCorner, 0, 0, 0); leader.AddVertexAt(1, boxCorner, 0, 0, 0);
+                leader.Elevation=textLocation.Z;
+                Add(space, tr, leader, ids, settings, data.Id, "leader", settings.LeaderColor);
+
+                // 5. 视图旋转补偿：若用户指定视图上方非北，则按当前视图扭转角旋转文字和边框
                 if (!settings.ViewTopIsNorth) RotateAnnotationByViewTwist(text, boxEntity, textLocation);
 
                 var groups = (DBDictionary)tr.GetObject(doc.Database.GroupDictionaryId, OpenMode.ForWrite);
@@ -231,8 +370,8 @@ namespace LAAnnotation
         private static bool TryGetRole(Entity e,out string role){role=null;var rb=e.GetXDataForApplication(AnnotationCodec.AppName);if(rb==null)return false;var a=rb.AsArray();if(a.Length<3)return false;role=a[2].Value as string;return role!=null;}
         private static void ResizeBox(Polyline box,Point3d p,double w,double h){box.SetPointAt(0,new Point2d(p.X,p.Y));box.SetPointAt(1,new Point2d(p.X+w,p.Y));box.SetPointAt(2,new Point2d(p.X+w,p.Y+h));box.SetPointAt(3,new Point2d(p.X,p.Y+h));}
         private static Polyline BuildScallopedPath(Point2d[] corners,double spacing,string style){var points=new List<Point2d>();for(var i=0;i<corners.Length;i++){var a=corners[i];var b=corners[(i+1)%corners.Length];var count=Math.Min(100,Math.Max(4,(int)Math.Ceiling(a.GetDistanceTo(b)/Math.Max(spacing*2,0.1))));for(var j=0;j<count;j++)points.Add(new Point2d(a.X+(b.X-a.X)*j/count,a.Y+(b.Y-a.Y)*j/count));}return BuildScallopedVertices(points,style);}
-        private static Polyline BuildScallopedVertices(IList<Point2d> points,string style){var p=new Polyline();for(var i=0;i<points.Count;i++)p.AddVertexAt(i,points[i],style=="等宽"?-0.55:(i%2==0?-0.35:-0.7),0,0);p.Closed=true;return p;}
-        private static string EffectiveLayer(AnnotationSettings s){var parts=new List<string>{s.LayerName};if(s.LayerAppendDate&&s.DateBeforeName)parts.Add(DateTime.Today.ToString("yyyyMMdd"));if(s.LayerAppendName)parts.Add(s.DefaultAuthor);if(s.LayerAppendDate&&!s.DateBeforeName)parts.Add(DateTime.Today.ToString("yyyyMMdd"));var connector=s.Connector=="无"?"":s.Connector;return string.Join(connector,parts.Where(x=>!string.IsNullOrWhiteSpace(x)));}
+        internal static Polyline BuildScallopedVertices(IList<Point2d> points,string style){var p=new Polyline();for(var i=0;i<points.Count;i++)p.AddVertexAt(i,points[i],style=="等宽"?-0.55:(i%2==0?-0.35:-0.7),0,0);p.Closed=true;return p;}
+        internal static string EffectiveLayer(AnnotationSettings s){var parts=new List<string>{s.LayerName};if(s.LayerAppendDate&&s.DateBeforeName)parts.Add(DateTime.Today.ToString("yyyyMMdd"));if(s.LayerAppendName)parts.Add(s.DefaultAuthor);if(s.LayerAppendDate&&!s.DateBeforeName)parts.Add(DateTime.Today.ToString("yyyyMMdd"));var connector=s.Connector=="无"?"":s.Connector;return string.Join(connector,parts.Where(x=>!string.IsNullOrWhiteSpace(x)));}
         /// <summary>应用文字样式；若指定样式不存在则记录警告并回退为默认样式。</summary>
         private static void ApplyTextStyle(Database db,Transaction tr,MText text,string name)
         {

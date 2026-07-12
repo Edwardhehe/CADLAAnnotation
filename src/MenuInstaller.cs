@@ -38,6 +38,7 @@ namespace LAAnnotation
                 menu.AddMenuItem(index++, "绘制批注", "LA_PZ_NOTE ");
                 menu.AddMenuItem(index++, "编辑批注", "LA_PZ_EDIT ");
                 menu.AddMenuItem(index++, "删除批注", "LA_PZ_DELETE ");
+                menu.AddMenuItem(index++, "单绘云线", "LA_PZ_CLOUD ");
                 TryAddSeparator(menu, index++);
                 menu.AddMenuItem(index++, "批注设置", "LA_PZ_SETTINGS ");
                 menu.AddMenuItem(index++, "重新加载菜单", "LA_PZ_MENU ");

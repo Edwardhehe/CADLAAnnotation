@@ -33,7 +33,7 @@ namespace LAAnnotation
                 s.AutoNumber = ParseBool(Get(x, "AutoNumber", "true"), true);
                 s.NextNumber = ParseInt(Get(x, "NextNumber", "1"), 1);
                 s.AutoCloseOrtho=ParseBool(Get(x,"AutoCloseOrtho","true"),true);s.AutoCloseSnap=ParseBool(Get(x,"AutoCloseSnap","true"),true);s.ViewTopIsNorth=ParseBool(Get(x,"ViewTopIsNorth","true"),true);s.DoubleClickEdit=ParseBool(Get(x,"DoubleClickEdit","true"),true);s.SameColors=ParseBool(Get(x,"SameColors","true"),true);s.LayerAppendDate=ParseBool(Get(x,"LayerAppendDate","true"),true);s.LayerAppendName=ParseBool(Get(x,"LayerAppendName","false"),false);s.DateBeforeName=ParseBool(Get(x,"DateBeforeName","true"),true);s.Connector=Get(x,"Connector","-");s.Plottable=ParseBool(Get(x,"Plottable","false"),false);s.CheckHeight=ParseDouble(Get(x,"CheckHeight","8"),8);
-                s.AutoTextViewPercent=ParseDouble(Get(x,"AutoTextViewPercent","1.8"),1.8);
+                s.AutoTextViewPercent=ParseDouble(Get(x,"AutoTextViewPercent","4"),4);
             }
             catch (Exception ex) { PluginLog.Error("Settings.Load",ex); }
             return s;
