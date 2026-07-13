@@ -40,7 +40,7 @@ namespace LAAnnotation
         {
             var doc = CadApplication.DocumentManager.MdiActiveDocument; if (doc == null) return;
             var settings = SettingsStore.Load();
-            var preview = AnnotationService.ResolveEffectiveSettings(doc, settings, new AnnotationData());
+            var preview = settings.Clone();
             if (!AnnotationService.PromptCloudOnly(doc, preview, out var first, out var second)) return;
             try
             {

@@ -36,7 +36,7 @@ namespace LAAnnotation
         private const string DataKey = "LA_PZ_DATA";
 
         /// <summary>根据比例因子计算实际生效的字体、云线等参数。若提供云线范围且开启 FontAutoFit，则按云线对角线尺寸计算字高。</summary>
-        public static AnnotationSettings ResolveEffectiveSettings(Document doc, AnnotationSettings source, AnnotationData data, double cloudDiagonal = 0)
+        public static AnnotationSettings ResolveEffectiveSettings(Document doc, AnnotationSettings source, AnnotationData data, double cloudDiagonal = 0, bool captureRenderSettings = false)
         {
             var s=source.Clone();var ratio=Math.Max(source.ScaleRatio,0.01);var baseText=Math.Max(source.TextHeight,0.1);
             var refSize=cloudDiagonal;
@@ -55,8 +55,7 @@ namespace LAAnnotation
                 s.CloudRadius=Math.Max(0.001,source.CloudRadius*ratio);
                 s.LineWidth=Math.Max(0,source.LineWidth*ratio);
             }
-            s.CheckHeight=Math.Max(source.CheckHeight*factor,text*2);
-            data.RenderTextHeight=s.TextHeight;data.RenderHeaderHeight=s.HeaderHeight;data.RenderSecondLineHeight=s.SecondLineHeight;data.RenderCloudRadius=s.CloudRadius;data.RenderLineWidth=s.LineWidth;return s;
+            s.CheckHeight=Math.Max(source.CheckHeight*factor,text*2);if(captureRenderSettings&&data!=null){data.RenderTextHeight=s.TextHeight;data.RenderHeaderHeight=s.HeaderHeight;data.RenderSecondLineHeight=s.SecondLineHeight;data.RenderCloudRadius=s.CloudRadius;data.RenderLineWidth=s.LineWidth;}return s;
         }
 
         private static AnnotationSettings SettingsForExisting(AnnotationData data)
@@ -64,43 +63,79 @@ namespace LAAnnotation
             var s=SettingsStore.Load();if(data.RenderTextHeight<=0)return s;s.TextHeight=data.RenderTextHeight;s.HeaderHeight=data.RenderHeaderHeight>0?data.RenderHeaderHeight:data.RenderTextHeight;s.SecondLineHeight=data.RenderSecondLineHeight>0?data.RenderSecondLineHeight:data.RenderTextHeight;s.CloudRadius=data.RenderCloudRadius>0?data.RenderCloudRadius:s.CloudRadius;s.LineWidth=data.RenderLineWidth>0?data.RenderLineWidth:s.LineWidth;return s;
         }
 
-        /// <summary>交互式选点：第一角点 → 拖拽云线范围 → 拖拽文字框位置。可选自动关闭正交/捕捉。</summary>
-        public static bool PromptGeometry(Document doc, AnnotationSettings s, out Point3d firstPoint, out Point3d secondPoint, out Point3d textLocation)
+        /// <summary>交互式选点：第一角点 → 拖拽云线范围。文字放置由完整预览 Jig 单独完成。</summary>
+        public static bool PromptGeometry(Document doc, AnnotationSettings s, out Point3d firstPoint, out Point3d secondPoint)
         {
-            firstPoint=Point3d.Origin;secondPoint=Point3d.Origin;textLocation=Point3d.Origin;var ed = doc.Editor;object ortho=null,osmode=null;
+            firstPoint=Point3d.Origin;secondPoint=Point3d.Origin;var ed = doc.Editor;object ortho=null,osmode=null;
             try{
                 if(s.AutoCloseOrtho){ortho=CadSystemVariable("ORTHOMODE");SetCadSystemVariable("ORTHOMODE",0);}if(s.AutoCloseSnap){osmode=CadSystemVariable("OSMODE");SetCadSystemVariable("OSMODE",0);}
                 var first = ed.GetPoint("\n指定批注范围第一个角点: "); if (first.Status != PromptStatus.OK) return false;
-                // Editor.GetPoint 返回当前 UCS 坐标；Jig 的 AcquirePoint 返回 WCS。先统一为 WCS，避免 UCS 原点/旋转被重复解释。
                 var firstWcs=first.Value.TransformBy(GetUcsMatrix(doc));
                 var region=new RegionPreviewJig(doc,firstWcs,s);var regionResult=ed.Drag(region);if(regionResult.Status!=PromptStatus.OK)return false;
                 var (_,regionWidth,regionHeight)=UcsAlignedExtents(doc,firstWcs,region.Current);if(regionWidth<=1e-6||regionHeight<=1e-6){ed.WriteMessage("\n批注范围必须同时具有宽度和高度，请重新指定。");return false;}
-                var placement=new PlacementPreviewJig(doc,firstWcs,region.Current,s);var placementResult=ed.Drag(placement);if(placementResult.Status!=PromptStatus.OK)return false;
-                firstPoint=firstWcs;secondPoint=region.Current;textLocation=placement.Current;return true;
+                firstPoint=firstWcs;secondPoint=region.Current;return true;
             }finally{if(ortho!=null)SetCadSystemVariable("ORTHOMODE",ortho);if(osmode!=null)SetCadSystemVariable("OSMODE",osmode);}
         }
 
         /// <summary>交互式选点（仅云线）：第一角点 → 拖拽云线范围，不要求文字框位置。</summary>
         public static bool PromptCloudOnly(Document doc, AnnotationSettings s, out Point3d firstPoint, out Point3d secondPoint)
-            => PromptCloud(doc, s, false, out firstPoint, out secondPoint) == CloudPromptResult.Completed;
+            => PromptCloud(doc, s, false, null, null, out firstPoint, out secondPoint) == CloudPromptResult.Completed;
 
         /// <summary>多对一云线选点：回车/空格结束连续绘制，Esc 取消整次操作。</summary>
-        public static CloudPromptResult PromptCloudOrFinish(Document doc, AnnotationSettings s, out Point3d firstPoint, out Point3d secondPoint)
-            => PromptCloud(doc, s, true, out firstPoint, out secondPoint);
+        public static CloudPromptResult PromptCloudOrFinish(Document doc, AnnotationSettings s, IList<Point3d> historyFirsts, IList<Point3d> historySeconds, out Point3d firstPoint, out Point3d secondPoint)
+            => PromptCloud(doc, s, true, historyFirsts, historySeconds, out firstPoint, out secondPoint);
 
-        private static CloudPromptResult PromptCloud(Document doc, AnnotationSettings s, bool allowFinish, out Point3d firstPoint, out Point3d secondPoint)
+        private static CloudPromptResult PromptCloud(Document doc, AnnotationSettings s, bool allowFinish, IList<Point3d> historyFirsts, IList<Point3d> historySeconds, out Point3d firstPoint, out Point3d secondPoint)
         {
             firstPoint=Point3d.Origin;secondPoint=Point3d.Origin;var ed=doc.Editor;object ortho=null,osmode=null;
             try{
                 if(s.AutoCloseOrtho){ortho=CadSystemVariable("ORTHOMODE");SetCadSystemVariable("ORTHOMODE",0);}if(s.AutoCloseSnap){osmode=CadSystemVariable("OSMODE");SetCadSystemVariable("OSMODE",0);}
                 while(true)
                 {
-                    var firstOptions=new PromptPointOptions(allowFinish?"\n指定下一个云线范围第一个角点，回车/空格结束: ":"\n指定云线范围第一个角点: "){AllowNone=allowFinish};
-                    var first=ed.GetPoint(firstOptions);
-                    if(allowFinish&&first.Status==PromptStatus.None)return CloudPromptResult.Finished;
-                    if(first.Status!=PromptStatus.OK)return CloudPromptResult.Cancelled;
-                    var firstWcs=first.Value.TransformBy(GetUcsMatrix(doc));
-                    var region=new RegionPreviewJig(doc,firstWcs,s);var regionResult=ed.Drag(region);if(regionResult.Status!=PromptStatus.OK)return CloudPromptResult.Cancelled;
+                    Point3d firstWcs;
+                    if (allowFinish)
+                    {
+                        var firstJig = new RegionFirstPointPreviewJig(
+                            doc,
+                            s,
+                            historyFirsts,
+                            historySeconds);
+                        var firstResult = ed.Drag(firstJig);
+
+                        if (firstJig.FinishRequested)
+                        {
+                            return CloudPromptResult.Finished;
+                        }
+
+                        if (firstResult.Status != PromptStatus.OK)
+                        {
+                            return CloudPromptResult.Cancelled;
+                        }
+
+                        firstWcs = firstJig.Current;
+                    }
+                    else
+                    {
+                        var first = ed.GetPoint("\n指定云线范围第一个角点: ");
+                        if (first.Status != PromptStatus.OK)
+                        {
+                            return CloudPromptResult.Cancelled;
+                        }
+
+                        firstWcs = first.Value.TransformBy(GetUcsMatrix(doc));
+                    }
+
+                    var region = new RegionPreviewJig(
+                        doc,
+                        firstWcs,
+                        s,
+                        historyFirsts,
+                        historySeconds);
+                    var regionResult = ed.Drag(region);
+                    if (regionResult.Status != PromptStatus.OK)
+                    {
+                        return CloudPromptResult.Cancelled;
+                    }
                     var (_,width,height)=UcsAlignedExtents(doc,firstWcs,region.Current);
                     if(width<=1e-6||height<=1e-6)
                     {
@@ -258,7 +293,7 @@ namespace LAAnnotation
                 var text=new MText{Location=new Point3d(localText.X+margin,localText.Y+margin,localText.Z),TextHeight=settings.TextHeight,Width=requestedWidth,Contents=FormatText(data,settings),Attachment=AttachmentPoint.BottomLeft};
                 ApplyTextStyle(doc.Database,tr,text,settings.TextStyleName);
                 var boxW=Math.Max(text.ActualWidth,settings.TextHeight*4)+margin*2;var boxH=Math.Max(text.ActualHeight,settings.TextHeight*2)+margin*2;var boxEntity=BuildBox(localText,boxW,boxH);boxEntity.Elevation=localText.Z;
-                var cloudCorner=ClosestCorner(min,max,localText);var boxCorners=new[]{new Point2d(localText.X,localText.Y),new Point2d(localText.X+boxW,localText.Y),new Point2d(localText.X+boxW,localText.Y+boxH),new Point2d(localText.X,localText.Y+boxH)};var boxCorner=boxCorners.OrderBy(c=>c.GetDistanceTo(cloudCorner)).First();
+                var cloudCorner=ResolveRegionLeaderAnchor(cloud,min,max,settings,localText);var boxCorners=new[]{new Point2d(localText.X,localText.Y),new Point2d(localText.X+boxW,localText.Y),new Point2d(localText.X+boxW,localText.Y+boxH),new Point2d(localText.X,localText.Y+boxH)};var boxCorner=boxCorners.OrderBy(c=>c.GetDistanceTo(cloudCorner)).First();
                 var leader=new Polyline();leader.AddVertexAt(0,cloudCorner,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=localText.Z;
                 cloud.TransformBy(ucsToWcs);text.TransformBy(ucsToWcs);boxEntity.TransformBy(ucsToWcs);leader.TransformBy(ucsToWcs);
                 Add(space,tr,cloud,ids,settings,data.Id,"cloud",settings.CloudColor,data);Add(space,tr,text,ids,settings,data.Id,"text",TextColorForStatus(settings,data.Status),data);Add(space,tr,boxEntity,ids,settings,data.Id,"box",settings.SameColors?settings.CloudColor:settings.BoxColor,data);Add(space,tr,leader,ids,settings,data.Id,"leader",settings.LeaderColor,data);
@@ -529,7 +564,72 @@ namespace LAAnnotation
             var values = rb.AsArray(); if (values.Length < 2) return false; id = values[1].Value as string; return !string.IsNullOrWhiteSpace(id);
         }
 
-        private static string FormatText(AnnotationData d,AnnotationSettings s) => $"\\H{s.HeaderHeight:0.###};{Escape(d.Number)}    {Escape(d.Discipline)}    {Escape(d.Author)}（{Escape(d.Role)}）    {Escape(d.Date)}\\P\\H{s.TextHeight:0.###};{Escape(d.Content).Replace("\r\n", "\\P").Replace("\n", "\\P")}\\P\\H{s.SecondLineHeight:0.###};状态: {Escape(d.Status)}";
+        internal static AnnotationSettings SettingsForRegion(Document doc,AnnotationSettings source,Point3d first,Point3d second){var (_,w,h)=UcsAlignedExtents(doc,first,second);return ResolveEffectiveSettings(doc,source,new AnnotationData(),Math.Sqrt(w*w+h*h));}
+        internal static void ApplyPreviewAppearance(Entity entity,AnnotationSettings settings,short color,string role){entity.Color=Color.FromColorIndex(ColorMethod.ByAci,color);if(entity is Polyline poly&&settings.LineWidth>0&&(role=="cloud"||role=="leader"))poly.ConstantWidth=settings.LineWidth;}
+        internal enum InteractionStatus { Accepted, Cancelled, Failed }
+        internal readonly struct InteractionResult
+        {
+            public InteractionStatus Status { get; }
+            public PromptStatus PromptStatus { get; }
+            public string Stage { get; }
+            public Point3d Point { get; }
+            public bool FinishRequested { get; }
+
+            private InteractionResult(
+                InteractionStatus status,
+                PromptStatus promptStatus,
+                string stage,
+                Point3d point,
+                bool finishRequested = false)
+            {
+                Status = status;
+                PromptStatus = promptStatus;
+                Stage = stage;
+                Point = point;
+                FinishRequested = finishRequested;
+            }
+
+            public static InteractionResult From(
+                PromptResult result,
+                string stage,
+                Point3d point,
+                bool finishRequested = false)
+            {
+                var status = result.Status == PromptStatus.OK
+                    ? InteractionStatus.Accepted
+                    : result.Status == PromptStatus.Cancel ||
+                      result.Status == PromptStatus.None
+                        ? InteractionStatus.Cancelled
+                        : InteractionStatus.Failed;
+                return new InteractionResult(
+                    status,
+                    result.Status,
+                    stage,
+                    point,
+                    finishRequested);
+            }
+        }
+
+        internal static InteractionResult PromptPlacement(Document doc,AnnotationSettings settings,AnnotationSettings source,IList<Point3d> firsts,IList<Point3d> seconds,IList<Point3d> polygon,Point3d initial,PlacementGeometryKind kind)
+        {
+            var jig=new PlacementPreviewJig(doc,settings,source,firsts,seconds,polygon,initial,kind);var result=doc.Editor.Drag(jig);return InteractionResult.From(result,"批注框定位",jig.Current);
+        }
+        internal static InteractionResult PromptPlinePoint(
+            Document doc,
+            IList<Point3d> points,
+            AnnotationSettings settings)
+        {
+            var jig = new PlinePointPreviewJig(doc, points, settings);
+            var result = doc.Editor.Drag(jig);
+            return InteractionResult.From(
+                result,
+                "PL 点选择",
+                jig.Current,
+                jig.FinishRequested);
+        }
+        internal static InteractionResult PromptCross(Document doc,AnnotationSettings settings){var jig=new CrossPreviewJig(doc,settings);var result=doc.Editor.Drag(jig);return InteractionResult.From(result,"十字点定位",jig.Current);}
+
+        internal static string FormatText(AnnotationData d,AnnotationSettings s) => $"\\H{s.HeaderHeight:0.###};{Escape(d.Number)}    {Escape(d.Discipline)}    {Escape(d.Author)}（{Escape(d.Role)}）    {Escape(d.Date)}\\P\\H{s.TextHeight:0.###};{Escape(d.Content).Replace("\r\n", "\\P").Replace("\n", "\\P")}\\P\\H{s.SecondLineHeight:0.###};状态: {Escape(d.Status)}";
         private static string Escape(string value) => (value ?? "").Replace("\\", "\\\\").Replace("{", "\\{").Replace("}", "\\}");
         private static short TextColorForStatus(AnnotationSettings settings,string status)
         {
@@ -613,6 +713,22 @@ namespace LAAnnotation
                 for(var j=0;j<count;j++)points.Add(new Point2d(a.X+(b.X-a.X)*j/count,a.Y+(b.Y-a.Y)*j/count));
             }
             return BuildScallopedVertices(points,style);
+        }
+
+        internal static Point2d ResolveRegionLeaderAnchor(
+            Polyline cloud,
+            Point2d min,
+            Point2d max,
+            AnnotationSettings settings,
+            Point3d target)
+        {
+            if (settings.Shape == "椭圆")
+            {
+                var closest = cloud.GetClosestPointTo(target, false);
+                return new Point2d(closest.X, closest.Y);
+            }
+
+            return ClosestCorner(min, max, target);
         }
 
         internal static Point2d ClosestCorner(Point2d min,Point2d max,Point3d p){var target=new Point2d(p.X,p.Y);var a=new[]{min,new Point2d(max.X,min.Y),max,new Point2d(min.X,max.Y)};return a.OrderBy(x=>x.GetDistanceTo(target)).First();}
