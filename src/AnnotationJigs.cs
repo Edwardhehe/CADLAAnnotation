@@ -161,7 +161,27 @@ namespace LAAnnotation
     {
         private readonly Document _doc;private readonly Matrix3d _ucsToWcs,_wcsToUcs;private readonly AnnotationSettings _settings,_source;private readonly PlacementGeometryKind _kind;private readonly List<Point3d> _firsts,_seconds,_polygon;private Point3d _current;
         public Point3d Current=>_current;
-        public PlacementPreviewJig(Document doc,AnnotationSettings settings,AnnotationSettings source,IList<Point3d> firsts,IList<Point3d> seconds,IList<Point3d> polygon,Point3d initial,PlacementGeometryKind kind){_doc=doc;_settings=settings;_source=source??settings;_firsts=firsts?.ToList()??new List<Point3d>();_seconds=seconds?.ToList()??new List<Point3d>();_polygon=polygon?.ToList()??new List<Point3d>();_current=initial;_kind=kind;_ucsToWcs=AnnotationService.GetUcsMatrix(doc);_wcsToUcs=_ucsToWcs.Inverse();}
+        public PlacementPreviewJig(
+            Document doc,
+            AnnotationSettings settings,
+            AnnotationSettings source,
+            IList<Point3d> firsts,
+            IList<Point3d> seconds,
+            IList<Point3d> polygon,
+            Point3d initial,
+            PlacementGeometryKind kind)
+        {
+            _doc = doc;
+            _settings = settings;
+            _source = source ?? settings;
+            _firsts = firsts?.ToList() ?? new List<Point3d>();
+            _seconds = seconds?.ToList() ?? new List<Point3d>();
+            _polygon = polygon?.ToList() ?? new List<Point3d>();
+            _current = initial;
+            _kind = kind;
+            _ucsToWcs = AnnotationService.GetUcsMatrix(doc);
+            _wcsToUcs = _ucsToWcs.Inverse();
+        }
         protected override SamplerStatus Sampler(JigPrompts prompts){var o=new JigPromptPointOptions("\n指定批注框位置: "){Cursor=CursorType.RubberBand};var r=prompts.AcquirePoint(o);if(r.Status!=PromptStatus.OK)return SamplerStatus.Cancel;if(r.Value.DistanceTo(_current)<1e-8)return SamplerStatus.NoChange;_current=r.Value;return SamplerStatus.OK;}
         protected override bool WorldDraw(WorldDraw draw)
         {
@@ -176,12 +196,75 @@ namespace LAAnnotation
                 {
                     var a=_firsts[i].TransformBy(_wcsToUcs);var b=_seconds[i].TransformBy(_wcsToUcs);var min=RegionPreviewJig.ToMin(a,b);var max=RegionPreviewJig.ToMax(a,b);var settings=_kind==PlacementGeometryKind.MultiRegion?AnnotationService.ResolveEffectiveSettings(_doc,_source,new AnnotationData(),Math.Sqrt(Math.Pow(max.X-min.X,2)+Math.Pow(max.Y-min.Y,2))):_settings;var cloud=AnnotationService.BuildCloud(min,max,settings);cloud.Elevation=a.Z;clouds.Add(cloud);anchors.Add(AnnotationService.ResolveRegionLeaderAnchor(cloud,min,max,settings,localText));
                 }
-                var boxW=_settings.FixedWidth?_settings.FixedWidthValue:Math.Max(_settings.TextHeight*18,55);var boxH=Math.Max(_settings.TextHeight*5,_settings.HeaderHeight+_settings.TextHeight+_settings.SecondLineHeight+_settings.TextHeight*2);
-                using(var box=AnnotationService.BuildBox(localText,boxW,boxH))
+
+                var boxW = _settings.FixedWidth
+                    ? _settings.FixedWidthValue
+                    : Math.Max(_settings.TextHeight * 18, 55);
+                var boxH = Math.Max(
+                    _settings.TextHeight * 5,
+                    _settings.HeaderHeight +
+                    _settings.TextHeight +
+                    _settings.SecondLineHeight +
+                    _settings.TextHeight * 2);
+                using (var box = AnnotationService.BuildBox(localText, boxW, boxH))
                 {
-                    var boxCorners=new[]{new Point2d(localText.X,localText.Y),new Point2d(localText.X+boxW,localText.Y),new Point2d(localText.X+boxW,localText.Y+boxH),new Point2d(localText.X,localText.Y+boxH)};box.Elevation=localText.Z;
-                    for(var i=0;i<clouds.Count;i++){var cloudSettings=_kind==PlacementGeometryKind.MultiRegion?AnnotationService.SettingsForRegion(_doc,_source,_firsts[i],_seconds[i]):_settings;AnnotationService.ApplyPreviewAppearance(clouds[i],cloudSettings,cloudSettings.CloudColor,"cloud");clouds[i].TransformBy(_ucsToWcs);draw.Geometry.Draw(clouds[i]);using(var leader=new CadPolyline()){leader.AddVertexAt(0,anchors[i],0,0,0);leader.AddVertexAt(1,boxCorners.OrderBy(c=>c.GetDistanceTo(anchors[i])).First(),0,0,0);leader.Elevation=localText.Z;AnnotationService.ApplyPreviewAppearance(leader,cloudSettings,cloudSettings.LeaderColor,"leader");leader.TransformBy(_ucsToWcs);draw.Geometry.Draw(leader);}}
-                    AnnotationService.ApplyPreviewAppearance(box,_settings,_settings.SameColors?_settings.CloudColor:_settings.BoxColor,"box");box.TransformBy(_ucsToWcs);draw.Geometry.Draw(box);
+                    var boxCorners = new[]
+                    {
+                        new Point2d(localText.X, localText.Y),
+                        new Point2d(localText.X + boxW, localText.Y),
+                        new Point2d(localText.X + boxW, localText.Y + boxH),
+                        new Point2d(localText.X, localText.Y + boxH)
+                    };
+                    box.Elevation = localText.Z;
+
+                    for (var i = 0; i < clouds.Count; i++)
+                    {
+                        var cloudSettings =
+                            _kind == PlacementGeometryKind.MultiRegion
+                                ? AnnotationService.SettingsForRegion(
+                                    _doc,
+                                    _source,
+                                    _firsts[i],
+                                    _seconds[i])
+                                : _settings;
+                        AnnotationService.ApplyPreviewAppearance(
+                            clouds[i],
+                            cloudSettings,
+                            cloudSettings.CloudColor,
+                            "cloud");
+                        clouds[i].TransformBy(_ucsToWcs);
+                        draw.Geometry.Draw(clouds[i]);
+
+                        using (var leader = new CadPolyline())
+                        {
+                            leader.AddVertexAt(
+                                0, anchors[i], 0, 0, 0);
+                            leader.AddVertexAt(
+                                1,
+                                boxCorners
+                                    .OrderBy(c => c.GetDistanceTo(anchors[i]))
+                                    .First(),
+                                0, 0, 0);
+                            leader.Elevation = localText.Z;
+                            AnnotationService.ApplyPreviewAppearance(
+                                leader,
+                                cloudSettings,
+                                cloudSettings.LeaderColor,
+                                "leader");
+                            leader.TransformBy(_ucsToWcs);
+                            draw.Geometry.Draw(leader);
+                        }
+                    }
+
+                    AnnotationService.ApplyPreviewAppearance(
+                        box,
+                        _settings,
+                        _settings.SameColors
+                            ? _settings.CloudColor
+                            : _settings.BoxColor,
+                        "box");
+                    box.TransformBy(_ucsToWcs);
+                    draw.Geometry.Draw(box);
                 }
             }
             finally{foreach(var cloud in clouds)cloud.Dispose();}
@@ -420,12 +503,4 @@ namespace LAAnnotation
         }
     }
 
-    internal sealed class CrossPreviewJig : DrawJig
-    {
-        private readonly Matrix3d _ucsToWcs,_wcsToUcs;private readonly AnnotationSettings _settings;private Point3d _current;private bool _hasSample;
-        public Point3d Current=>_current;
-        public CrossPreviewJig(Document doc,AnnotationSettings settings){_settings=settings;_ucsToWcs=AnnotationService.GetUcsMatrix(doc);_wcsToUcs=_ucsToWcs.Inverse();}
-        protected override SamplerStatus Sampler(JigPrompts prompts){var r=prompts.AcquirePoint(new JigPromptPointOptions("\n指定十字点位置: "));if(r.Status!=PromptStatus.OK)return SamplerStatus.Cancel;if(_hasSample&&r.Value.DistanceTo(_current)<1e-8)return SamplerStatus.NoChange;_current=r.Value;_hasSample=true;return SamplerStatus.OK;}
-        protected override bool WorldDraw(WorldDraw draw){var p=_current.TransformBy(_wcsToUcs);var size=_settings.TextHeight*3;using(var h=new CadPolyline())using(var v=new CadPolyline()){h.AddVertexAt(0,new Point2d(p.X-size,p.Y),0,0,0);h.AddVertexAt(1,new Point2d(p.X+size,p.Y),0,0,0);v.AddVertexAt(0,new Point2d(p.X,p.Y-size),0,0,0);v.AddVertexAt(1,new Point2d(p.X,p.Y+size),0,0,0);h.Elevation=v.Elevation=p.Z;AnnotationService.ApplyPreviewAppearance(h,_settings,_settings.CloudColor,"cloud");AnnotationService.ApplyPreviewAppearance(v,_settings,_settings.CloudColor,"cloud");h.TransformBy(_ucsToWcs);v.TransformBy(_ucsToWcs);draw.Geometry.Draw(h);draw.Geometry.Draw(v);}return true;}
-    }
 }

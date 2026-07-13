@@ -182,24 +182,6 @@ namespace LAAnnotation
             }
         }
 
-        /// <summary>创建十字点标记（两条交叉直线）。</summary>
-        public static void CreateCrossMark(Document doc, AnnotationSettings settings, Point3d pt)
-        {
-            using(doc.LockDocument())using(var tr=doc.Database.TransactionManager.StartTransaction())
-            {
-                EnsureLayer(doc.Database,tr,settings);
-                var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
-                var size=settings.TextHeight*3;var ucsToWcs=GetUcsMatrix(doc);var local=pt.TransformBy(ucsToWcs.Inverse());
-                var h=new Polyline();h.AddVertexAt(0,new Point2d(local.X-size,local.Y),0,0,0);h.AddVertexAt(1,new Point2d(local.X+size,local.Y),0,0,0);h.Elevation=local.Z;h.TransformBy(ucsToWcs);
-                h.Layer=EffectiveLayer(settings);h.Color=Color.FromColorIndex(ColorMethod.ByAci,settings.CloudColor);
-                space.AppendEntity(h);tr.AddNewlyCreatedDBObject(h,true);
-                var v=new Polyline();v.AddVertexAt(0,new Point2d(local.X,local.Y-size),0,0,0);v.AddVertexAt(1,new Point2d(local.X,local.Y+size),0,0,0);v.Elevation=local.Z;v.TransformBy(ucsToWcs);
-                v.Layer=EffectiveLayer(settings);v.Color=Color.FromColorIndex(ColorMethod.ByAci,settings.CloudColor);
-                space.AppendEntity(v);tr.AddNewlyCreatedDBObject(v,true);
-                tr.Commit();
-            }
-        }
-
         /// <summary>沿折线路径生成云线 + 文字框 + 引出线。</summary>
         public static void CreatePlineCloud(Document doc, AnnotationData data, AnnotationSettings settings, List<Point3d> points, Point3d textLocation)
         {
@@ -234,7 +216,15 @@ namespace LAAnnotation
         }
 
         /// <summary>多对一批注：清理选点阶段的临时云线，按最终参数创建云线、文字框和引出线并统一编组。</summary>
-        public static void CreateMultiCloud(Document doc, AnnotationData data, AnnotationSettings settings, AnnotationSettings sourceSettings, List<ObjectId> previewCloudIds, List<Point3d> firstPoints, List<Point3d> secondPoints, Point3d textLocation)
+        public static void CreateMultiCloud(
+            Document doc,
+            AnnotationData data,
+            AnnotationSettings settings,
+            AnnotationSettings sourceSettings,
+            List<ObjectId> previewCloudIds,
+            List<Point3d> firstPoints,
+            List<Point3d> secondPoints,
+            Point3d textLocation)
         {
             if (firstPoints == null || secondPoints == null || firstPoints.Count == 0 || firstPoints.Count != secondPoints.Count)
                 throw new ArgumentException("多对一批注的云线范围数据不完整。");
@@ -262,6 +252,7 @@ namespace LAAnnotation
                     localCloudCorners.Add(new[]{min,new Point2d(max.X,min.Y),max,new Point2d(min.X,max.Y)});
                     var cloud=BuildCloud(min,max,regionSettings);cloud.Elevation=first.Z;cloud.TransformBy(ucsToWcs);Add(space,tr,cloud,ids,regionSettings,data.Id,"cloud",regionSettings.CloudColor,data);
                 }
+
                 var margin=settings.TextHeight*0.5;var requestedWidth=settings.FixedWidth?settings.FixedWidthValue:Math.Max(55.0,settings.TextHeight*18.0);
                 var text=new MText{Location=new Point3d(localText.X+margin,localText.Y+margin,localText.Z),TextHeight=settings.TextHeight,Width=requestedWidth,Contents=FormatText(data,settings),Attachment=AttachmentPoint.BottomLeft};ApplyTextStyle(doc.Database,tr,text,settings.TextStyleName);
                 var widthBox=Math.Max(text.ActualWidth,settings.TextHeight*4)+margin*2;var heightBox=Math.Max(text.ActualHeight,settings.TextHeight*2)+margin*2;var boxEntity=BuildBox(localText,widthBox,heightBox);boxEntity.Elevation=localText.Z;
@@ -786,9 +777,30 @@ namespace LAAnnotation
             }
         }
 
-        internal static InteractionResult PromptPlacement(Document doc,AnnotationSettings settings,AnnotationSettings source,IList<Point3d> firsts,IList<Point3d> seconds,IList<Point3d> polygon,Point3d initial,PlacementGeometryKind kind)
+        internal static InteractionResult PromptPlacement(
+            Document doc,
+            AnnotationSettings settings,
+            AnnotationSettings source,
+            IList<Point3d> firsts,
+            IList<Point3d> seconds,
+            IList<Point3d> polygon,
+            Point3d initial,
+            PlacementGeometryKind kind)
         {
-            var jig=new PlacementPreviewJig(doc,settings,source,firsts,seconds,polygon,initial,kind);var result=doc.Editor.Drag(jig);return InteractionResult.From(result,"批注框定位",jig.Current);
+            var jig = new PlacementPreviewJig(
+                doc,
+                settings,
+                source,
+                firsts,
+                seconds,
+                polygon,
+                initial,
+                kind);
+            var result = doc.Editor.Drag(jig);
+            return InteractionResult.From(
+                result,
+                "批注框定位",
+                jig.Current);
         }
         internal static InteractionResult PromptPlinePoint(
             Document doc,
@@ -803,7 +815,7 @@ namespace LAAnnotation
                 jig.Current,
                 jig.FinishRequested);
         }
-        internal static InteractionResult PromptCross(Document doc,AnnotationSettings settings){var jig=new CrossPreviewJig(doc,settings);var result=doc.Editor.Drag(jig);return InteractionResult.From(result,"十字点定位",jig.Current);}
+
 
         internal static string FormatText(AnnotationData d,AnnotationSettings s) => $"\\H{s.HeaderHeight:0.###};{Escape(d.Number)}    {Escape(d.Discipline)}    {Escape(d.Author)}（{Escape(d.Role)}）    {Escape(d.Date)}\\P\\H{s.TextHeight:0.###};{Escape(d.Content).Replace("\r\n", "\\P").Replace("\n", "\\P")}\\P\\H{s.SecondLineHeight:0.###};状态: {Escape(d.Status)}";
         private static string Escape(string value) => (value ?? "").Replace("\\", "\\\\").Replace("{", "\\{").Replace("}", "\\}");

@@ -38,7 +38,6 @@
                     <RadioButton x:Name="ShapeRectRadio" Content="矩形" IsChecked="True" GroupName="Shape" FontSize="12" Margin="0,2"/>
                     <RadioButton x:Name="ShapePlineRadio" Content="PL 线" GroupName="Shape" FontSize="12" Margin="0,2"/>
                     <RadioButton x:Name="ShapeCircleRadio" Content="圆形" GroupName="Shape" FontSize="12" Margin="0,2"/>
-                    <RadioButton x:Name="ShapeCrossRadio" Content="十字点" GroupName="Shape" FontSize="12" Margin="0,2"/>
                 </UniformGrid>
 
                 <CheckBox x:Name="CloudOnlyCheck" Content="仅绘云线（无文字/引线）" FontSize="12" Margin="0,4,0,2"/>

@@ -239,7 +239,7 @@ namespace LAAnnotation.Views
                 return "圆形";
             }
 
-            return "十字点";
+            return "矩形";
         }
 
         /// <summary>启动批注流程：读取面板当前模式，进入 CAD 交互。</summary>
@@ -335,21 +335,11 @@ namespace LAAnnotation.Views
 
             switch (shape)
             {
-                case "十字点":
-                    DoCrossMark(doc); return;
                 case "pline":
                     DoPlineCloud(doc, data); return;
                 default:
                     DoRegionAnnotation(doc, data); return;
             }
-        }
-
-        private void DoCrossMark(Document doc)
-        {
-            var crossResult=AnnotationService.PromptCross(doc,_runSettings);if(!AcceptInteraction(doc,crossResult))return;var pointWcs=crossResult.Point;
-            AnnotationService.CreateCrossMark(doc, _runSettings, pointWcs);
-            doc.Editor.WriteMessage("\n十字点已放置。");
-            CheckContinuous(doc);
         }
 
         private void DoPlineCloud(Document doc, AnnotationData data)
@@ -417,7 +407,9 @@ namespace LAAnnotation.Views
 
         private void DoMultiAnnotation(Document doc)
         {
-            _multiCloudFirsts.Clear(); _multiCloudSeconds.Clear();
+            _multiCloudFirsts.Clear();
+            _multiCloudSeconds.Clear();
+
             var settings = _runSettings;
             var data = new AnnotationData
             {
@@ -432,41 +424,113 @@ namespace LAAnnotation.Views
             }
 
             var preview = _runSettings.Clone();
-            doc.Editor.WriteMessage("\n多对一批注：连续选择云线范围；在下一个云线的第一个角点提示时按回车或空格结束范围选择。");
+            doc.Editor.WriteMessage(
+                "\n多对一批注：连续选择云线范围；在下一个云线的第一个角点提示时按回车或空格结束范围选择。");
             try
             {
                 while (true)
                 {
-                    var promptResult=AnnotationService.PromptCloudOrFinish(doc,preview,_multiCloudFirsts,_multiCloudSeconds,out var first,out var second);
-                    if(promptResult==CloudPromptResult.Finished)break;
-                    if(promptResult==CloudPromptResult.Cancelled)return;
-                    _multiCloudFirsts.Add(first); _multiCloudSeconds.Add(second);
-                    doc.Editor.WriteMessage($"\n已添加第 {_multiCloudFirsts.Count} 个云线；继续指定下一条，或按回车/空格结束范围选择。");
+                    var promptResult = AnnotationService.PromptCloudOrFinish(
+                        doc,
+                        preview,
+                        _multiCloudFirsts,
+                        _multiCloudSeconds,
+                        out var first,
+                        out var second);
+                    if (promptResult == CloudPromptResult.Finished)
+                    {
+                        break;
+                    }
+
+                    if (promptResult == CloudPromptResult.Cancelled)
+                    {
+                        return;
+                    }
+
+                    _multiCloudFirsts.Add(first);
+                    _multiCloudSeconds.Add(second);
+                    doc.Editor.WriteMessage(
+                        $"\n已添加第 {_multiCloudFirsts.Count} 个云线；" +
+                        "继续指定下一条，或按回车/空格结束范围选择。");
                 }
-                if(_multiCloudFirsts.Count==0)return;
 
-                var diagonals = _multiCloudFirsts.Select((f, i) =>
+                if (_multiCloudFirsts.Count == 0)
                 {
-                    var (_,cw,ch)=AnnotationService.UcsAlignedExtents(doc,f,_multiCloudSeconds[i]);
-                    return Math.Sqrt(cw*cw+ch*ch);
-                }).OrderBy(x=>x).ToList();
-                var middle=diagonals.Count/2;
-                var representativeDiagonal=diagonals.Count%2==1?diagonals[middle]:(diagonals[middle-1]+diagonals[middle])/2.0;
+                    return;
+                }
 
-                var effective = AnnotationService.ResolveEffectiveSettings(doc, _runSettings, data, representativeDiagonal, true);
-                if (effective.FontAutoFit||effective.CloudAutoFit) doc.Editor.WriteMessage($"\n代表云线尺寸: {representativeDiagonal:0.#}  字高: {effective.TextHeight:0.###}  云线半径和线宽按各云线自身尺寸计算。");
+                var diagonals = _multiCloudFirsts
+                    .Select((f, i) =>
+                    {
+                        var (_, cw, ch) =
+                            AnnotationService.UcsAlignedExtents(
+                                doc,
+                                f,
+                                _multiCloudSeconds[i]);
+                        return Math.Sqrt(cw * cw + ch * ch);
+                    })
+                    .OrderBy(x => x)
+                    .ToList();
+                var middle = diagonals.Count / 2;
+                var representativeDiagonal =
+                    diagonals.Count % 2 == 1
+                        ? diagonals[middle]
+                        : (diagonals[middle - 1] +
+                           diagonals[middle]) / 2.0;
 
-                var placementResult=AnnotationService.PromptPlacement(doc,effective,_runSettings,_multiCloudFirsts,_multiCloudSeconds,null,_multiCloudSeconds[_multiCloudSeconds.Count-1],PlacementGeometryKind.MultiRegion);if(!AcceptInteraction(doc,placementResult))return;var textPointWcs=placementResult.Point;
+                var effective = AnnotationService.ResolveEffectiveSettings(
+                    doc,
+                    _runSettings,
+                    data,
+                    representativeDiagonal,
+                    true);
+                if (effective.FontAutoFit || effective.CloudAutoFit)
+                {
+                    doc.Editor.WriteMessage(
+                        $"\n代表云线尺寸: {representativeDiagonal:0.#}" +
+                        $"  字高: {effective.TextHeight:0.###}" +
+                        "  云线半径和线宽按各云线自身尺寸计算。");
+                }
+
+                var placementResult = AnnotationService.PromptPlacement(
+                    doc,
+                    effective,
+                    _runSettings,
+                    _multiCloudFirsts,
+                    _multiCloudSeconds,
+                    null,
+                    _multiCloudSeconds[_multiCloudSeconds.Count - 1],
+                    PlacementGeometryKind.MultiRegion);
+                if (!AcceptInteraction(doc, placementResult))
+                {
+                    return;
+                }
+
+                var textPointWcs = placementResult.Point;
                 var form = new AnnotationWindow(data, false);
-                if (CadDialog.ShowModal(form) != true){doc.Editor.WriteMessage("\n已在填写内容阶段取消多对一批注。");return;}
+                if (CadDialog.ShowModal(form) != true)
+                {
+                    doc.Editor.WriteMessage(
+                        "\n已在填写内容阶段取消多对一批注。");
+                    return;
+                }
 
-                AnnotationService.CreateMultiCloud(doc, data, effective, _runSettings, null, _multiCloudFirsts, _multiCloudSeconds, textPointWcs);
+                AnnotationService.CreateMultiCloud(
+                    doc,
+                    data,
+                    effective,
+                    _runSettings,
+                    null,
+                    _multiCloudFirsts,
+                    _multiCloudSeconds,
+                    textPointWcs);
                 FinalizeAnnotation(doc, data);
                 CheckContinuous(doc);
             }
             finally
             {
-                _multiCloudFirsts.Clear(); _multiCloudSeconds.Clear();
+                _multiCloudFirsts.Clear();
+                _multiCloudSeconds.Clear();
             }
         }
 
@@ -544,8 +608,7 @@ namespace LAAnnotation.Views
         {
             var regionOnly = MultiModeRadio.IsChecked == true;
             ShapePlineRadio.IsEnabled = !regionOnly;
-            ShapeCrossRadio.IsEnabled = !regionOnly;
-            if (regionOnly && (ShapePlineRadio.IsChecked == true || ShapeCrossRadio.IsChecked == true))
+            if (regionOnly && ShapePlineRadio.IsChecked == true)
                 ShapeRectRadio.IsChecked = true;
         }
 
