@@ -369,6 +369,182 @@ namespace LAAnnotation
             }
         }
 
+        /// <summary>移动批注的文字、文字框和引线，云线保持原位。</summary>
+        public static bool MoveAnnotation(Document doc, ObjectId entityId)
+        {
+            var previewEntities = new List<Entity>();
+            var previewLeaders = new List<Polyline>();
+            Point3d basePoint;
+
+            using (var tr = doc.Database.TransactionManager.StartTransaction())
+            {
+                var selected = tr.GetObject(
+                    entityId,
+                    OpenMode.ForRead,
+                    false) as Entity;
+                if (selected == null || !TryGetId(selected, out var id))
+                {
+                    return false;
+                }
+
+                var groups = (DBDictionary)tr.GetObject(
+                    doc.Database.GroupDictionaryId,
+                    OpenMode.ForRead);
+                var groupName = GroupPrefix + id;
+                if (!groups.Contains(groupName))
+                {
+                    return false;
+                }
+
+                var group = (Group)tr.GetObject(
+                    groups.GetAt(groupName),
+                    OpenMode.ForRead);
+                Polyline box = null;
+
+                foreach (ObjectId memberId in group.GetAllEntityIds())
+                {
+                    if (!memberId.IsValid || memberId.IsErased)
+                    {
+                        continue;
+                    }
+
+                    var entity = tr.GetObject(
+                        memberId,
+                        OpenMode.ForRead,
+                        false) as Entity;
+                    if (entity == null || !TryGetRole(entity, out var role))
+                    {
+                        continue;
+                    }
+
+                    if (role == "text" || role == "box")
+                    {
+                        previewEntities.Add(entity.Clone() as Entity);
+                        if (role == "box")
+                        {
+                            box = entity as Polyline;
+                        }
+                    }
+                    else if (role == "leader" && entity is Polyline leader)
+                    {
+                        previewLeaders.Add(leader.Clone() as Polyline);
+                    }
+                }
+
+                if (box == null || box.NumberOfVertices == 0)
+                {
+                    DisposeEntities(previewEntities);
+                    DisposeEntities(previewLeaders);
+                    return false;
+                }
+
+                basePoint = box.GetPoint3dAt(0);
+            }
+
+            try
+            {
+                var jig = new MoveAnnotationPreviewJig(
+                    basePoint,
+                    previewEntities.Where(entity => entity != null),
+                    previewLeaders.Where(leader => leader != null));
+                var result = doc.Editor.Drag(jig);
+                if (result.Status != PromptStatus.OK)
+                {
+                    return true;
+                }
+
+                var displacement = jig.Current - basePoint;
+                if (displacement.Length <= 1e-8)
+                {
+                    return true;
+                }
+
+                ApplyAnnotationMove(doc, entityId, displacement);
+                return true;
+            }
+            finally
+            {
+                DisposeEntities(previewEntities);
+                DisposeEntities(previewLeaders);
+            }
+        }
+
+        private static void ApplyAnnotationMove(
+            Document doc,
+            ObjectId entityId,
+            Vector3d displacement)
+        {
+            using (doc.LockDocument())
+            using (var tr = doc.Database.TransactionManager.StartTransaction())
+            {
+                var selected = tr.GetObject(
+                    entityId,
+                    OpenMode.ForRead,
+                    false) as Entity;
+                if (selected == null || !TryGetId(selected, out var id))
+                {
+                    return;
+                }
+
+                var groups = (DBDictionary)tr.GetObject(
+                    doc.Database.GroupDictionaryId,
+                    OpenMode.ForRead);
+                var groupName = GroupPrefix + id;
+                if (!groups.Contains(groupName))
+                {
+                    return;
+                }
+
+                var group = (Group)tr.GetObject(
+                    groups.GetAt(groupName),
+                    OpenMode.ForRead);
+                var transform = Matrix3d.Displacement(displacement);
+
+                foreach (ObjectId memberId in group.GetAllEntityIds())
+                {
+                    if (!memberId.IsValid || memberId.IsErased)
+                    {
+                        continue;
+                    }
+
+                    var entity = tr.GetObject(
+                        memberId,
+                        OpenMode.ForWrite,
+                        false) as Entity;
+                    if (entity == null || !TryGetRole(entity, out var role))
+                    {
+                        continue;
+                    }
+
+                    if (role == "text" || role == "box")
+                    {
+                        entity.TransformBy(transform);
+                    }
+                    else if (role == "leader" && entity is Polyline leader)
+                    {
+                        if (leader.NumberOfVertices < 2)
+                        {
+                            continue;
+                        }
+
+                        var anchor = leader.GetPoint2dAt(0);
+                        leader.TransformBy(transform);
+                        leader.SetPointAt(0, anchor);
+                    }
+                }
+
+                tr.Commit();
+            }
+        }
+
+        private static void DisposeEntities(IEnumerable<Entity> entities)
+        {
+            foreach (var entity in entities)
+            {
+                entity?.Dispose();
+            }
+        }
+
         /// <summary>删除整个批注编组（云线+引线+文字+边框全部擦除），支持 UNDO。</summary>
         public static bool Delete(Document doc, ObjectId entityId)
         {

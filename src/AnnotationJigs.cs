@@ -335,6 +335,91 @@ namespace LAAnnotation
         }
     }
 
+    internal sealed class MoveAnnotationPreviewJig : DrawJig
+    {
+        private readonly Point3d _basePoint;
+        private readonly List<Entity> _movableEntities;
+        private readonly List<CadPolyline> _leaders;
+        private Point3d _current;
+        private bool _hasSample;
+
+        public Point3d Current => _current;
+
+        public MoveAnnotationPreviewJig(
+            Point3d basePoint,
+            IEnumerable<Entity> movableEntities,
+            IEnumerable<CadPolyline> leaders)
+        {
+            _basePoint = basePoint;
+            _current = basePoint;
+            _movableEntities = movableEntities.ToList();
+            _leaders = leaders.ToList();
+        }
+
+        protected override SamplerStatus Sampler(JigPrompts prompts)
+        {
+            var options = new JigPromptPointOptions(
+                "\n指定批注文字框新位置: ")
+            {
+                UseBasePoint = true,
+                BasePoint = _basePoint,
+                Cursor = CursorType.RubberBand
+            };
+            var result = prompts.AcquirePoint(options);
+            if (result.Status != PromptStatus.OK)
+            {
+                return SamplerStatus.Cancel;
+            }
+
+            if (_hasSample && result.Value.DistanceTo(_current) < 1e-8)
+            {
+                return SamplerStatus.NoChange;
+            }
+
+            _current = result.Value;
+            _hasSample = true;
+            return SamplerStatus.OK;
+        }
+
+        protected override bool WorldDraw(WorldDraw draw)
+        {
+            var displacement = _current - _basePoint;
+            var transform = Matrix3d.Displacement(displacement);
+
+            foreach (var source in _movableEntities)
+            {
+                using (var preview = source.Clone() as Entity)
+                {
+                    if (preview == null)
+                    {
+                        continue;
+                    }
+
+                    preview.TransformBy(transform);
+                    draw.Geometry.Draw(preview);
+                }
+            }
+
+            foreach (var source in _leaders)
+            {
+                using (var preview = source.Clone() as CadPolyline)
+                {
+                    if (preview == null)
+                    {
+                        continue;
+                    }
+
+                    var anchor = preview.GetPoint2dAt(0);
+                    preview.TransformBy(transform);
+                    preview.SetPointAt(0, anchor);
+                    draw.Geometry.Draw(preview);
+                }
+            }
+
+            return true;
+        }
+    }
+
     internal sealed class CrossPreviewJig : DrawJig
     {
         private readonly Matrix3d _ucsToWcs,_wcsToUcs;private readonly AnnotationSettings _settings;private Point3d _current;private bool _hasSample;

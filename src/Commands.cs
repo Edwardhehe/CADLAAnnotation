@@ -86,6 +86,52 @@ namespace LAAnnotation
             catch (System.Exception ex) { doc.Editor.WriteMessage("\n删除失败: " + ex.Message); }
         }
 
+        /// <summary>移动批注文字框、文字和引线末端，云线保持原位。</summary>
+        [CommandMethod("LA_PZ_MOVE", CommandFlags.Modal | CommandFlags.UsePickSet)]
+        public void MoveAnnotation()
+        {
+            var doc = CadApplication.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+            {
+                return;
+            }
+
+            var implied = doc.Editor.SelectImplied();
+            ObjectId target;
+            if (implied.Status == PromptStatus.OK && implied.Value.Count > 0)
+            {
+                target = implied.Value.GetObjectIds()[0];
+            }
+            else
+            {
+                var result = doc.Editor.GetEntity(
+                    "\n选择要移动文字框的 LA批注: ");
+                if (result.Status != PromptStatus.OK)
+                {
+                    return;
+                }
+
+                target = result.ObjectId;
+            }
+
+            try
+            {
+                if (!AnnotationService.MoveAnnotation(doc, target))
+                {
+                    doc.Editor.WriteMessage(
+                        "\n所选对象不是有效的完整 LA批注。");
+                    return;
+                }
+
+                doc.Editor.WriteMessage(
+                    "\n批注文字框、文字和引线已移动，云线位置未改变。");
+            }
+            catch (System.Exception ex)
+            {
+                doc.Editor.WriteMessage("\n移动批注失败: " + ex.Message);
+            }
+        }
+
         /// <summary>打开设置窗口，同时从当前 DWG 获取可用文字样式列表供下拉选择。</summary>
         [CommandMethod("LA_PZ_SETTINGS", CommandFlags.Modal)]
         public void Settings()
@@ -112,6 +158,34 @@ namespace LAAnnotation
         public void AnnotationList()
         {
             AnnotationListPanel.ShowOrActivate();
+        }
+
+        /// <summary>切换当前 CAD 宿主的启动自动加载。</summary>
+        [CommandMethod("LA_PZ_AUTOLOAD", CommandFlags.Modal)]
+        public void ToggleAutoload()
+        {
+            var doc = CadApplication.DocumentManager.MdiActiveDocument;
+            try
+            {
+                if (AutoloadManager.IsInstalled(out var registeredPath))
+                {
+                    var removed = AutoloadManager.Uninstall();
+                    doc?.Editor.WriteMessage(
+                        $"\n已关闭 LA批注自动加载，清理 {removed} 个注册表项。" +
+                        $" 原加载路径: {registeredPath}");
+                    return;
+                }
+
+                var roots = AutoloadManager.Install();
+                doc?.Editor.WriteMessage(
+                    $"\n已开启 LA批注自动加载，共设置 {roots.Count} 个注册表位置。" +
+                    $" DLL: {AutoloadManager.CurrentDllPath}");
+            }
+            catch (System.Exception ex)
+            {
+                doc?.Editor.WriteMessage("\n设置自动加载失败: " + ex.Message);
+                PluginLog.Error("Autoload.Toggle", ex);
+            }
         }
 
         [CommandMethod("LA_PZ_MENU", CommandFlags.Modal)]

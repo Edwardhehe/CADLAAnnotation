@@ -37,11 +37,13 @@ namespace LAAnnotation
                 var index = 0;
                 menu.AddMenuItem(index++, "绘制批注", "LA_PZ_NOTE ");
                 menu.AddMenuItem(index++, "编辑批注", "LA_PZ_EDIT ");
+                menu.AddMenuItem(index++, "移动批注", "LA_PZ_MOVE ");
                 menu.AddMenuItem(index++, "删除批注", "LA_PZ_DELETE ");
                 menu.AddMenuItem(index++, "单绘云线", "LA_PZ_CLOUD ");
                 menu.AddMenuItem(index++, "批注列表", "LA_PZ_LIST ");
                 TryAddSeparator(menu, index++);
                 menu.AddMenuItem(index++, "批注设置", "LA_PZ_SETTINGS ");
+                menu.AddMenuItem(index++, "设置自动加载", "LA_PZ_AUTOLOAD ");
                 menu.AddMenuItem(index++, "重新加载菜单", "LA_PZ_MENU ");
                 menu.InsertInMenuBar(Convert.ToInt32(bar.Count));
                 message = "LA批注菜单已创建。"; return true;
