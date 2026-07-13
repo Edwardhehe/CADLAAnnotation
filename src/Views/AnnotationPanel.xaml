@@ -45,8 +45,8 @@
 
                 <Rectangle Style="{StaticResource SectionSeparator}"/>
 
-                <!-- 实时设置 -->
-                <TextBlock Text="批注设置（实时生效）" Style="{StaticResource SectionHeader}" Margin="0,6,0,4"/>
+                <!-- 待应用设置 -->
+                <TextBlock Text="批注设置（点击开始时生效）" Style="{StaticResource SectionHeader}" Margin="0,6,0,4"/>
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="52"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>

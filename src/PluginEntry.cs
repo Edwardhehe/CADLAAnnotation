@@ -24,6 +24,8 @@ namespace LAAnnotation
         private static ObjectId _pendingId = ObjectId.Null;
         /// <summary>是否已注册 Idle 回调</summary>
         private static bool _idleAttached;
+        private static Database _observedDatabase;
+        private static bool _listRefreshPending;
 
         public void Initialize()
         {
@@ -32,6 +34,7 @@ namespace LAAnnotation
             var doc = CadApplication.DocumentManager.MdiActiveDocument;
             MenuInstaller.Ensure(out var menuMessage);
             AnnotationService.SyncNextNumber(doc);
+            ObserveDatabase(doc?.Database);
             doc?.Editor.WriteMessage("\nLA批注已加载。" + menuMessage + " 命令: LA_PZ_NOTE / LA_PZ_EDIT / LA_PZ_DELETE / LA_PZ_CLOUD / LA_PZ_LIST / LA_PZ_SETTINGS / LA_PZ_MENU");
         }
 
@@ -39,6 +42,7 @@ namespace LAAnnotation
         {
             CadApplication.BeginDoubleClick -= OnBeginDoubleClick;
             CadApplication.DocumentManager.DocumentActivated -= OnDocumentActivated;
+            ObserveDatabase(null);
             if (_idleAttached) CadApplication.Idle -= OnIdle;
         }
 
@@ -47,9 +51,30 @@ namespace LAAnnotation
             try
             {
                 AnnotationService.SyncNextNumber(e.Document);
+                ObserveDatabase(e.Document?.Database);
+                LAAnnotation.Views.AnnotationPanel.HandleDocumentActivated(e.Document);
                 LAAnnotation.Views.AnnotationListPanel.RefreshIfOpen();
             }
             catch (System.Exception ex) { PluginLog.Error("Document.Activated", ex); }
+        }
+
+        private static void ObserveDatabase(Database database)
+        {
+            if(_observedDatabase==database)return;
+            if(_observedDatabase!=null)_observedDatabase.ObjectErased-=OnObjectErased;
+            _observedDatabase=database;
+            if(_observedDatabase!=null)_observedDatabase.ObjectErased+=OnObjectErased;
+        }
+
+        private static void OnObjectErased(object sender,ObjectErasedEventArgs e)
+        {
+            try
+            {
+                if(!(e.DBObject is Entity entity)||entity.GetXDataForApplication(AnnotationCodec.AppName)==null)return;
+                _listRefreshPending=true;
+                if(!_idleAttached){CadApplication.Idle+=OnIdle;_idleAttached=true;}
+            }
+            catch(System.Exception ex){PluginLog.Error("AnnotationList.ObjectErased",ex);}
         }
 
         /// <summary>双击事件：检测选中实体是否为 LA 批注，若是则在 Idle 时触发编辑命令（避免事件上下文中直接执行命令）。</summary>
@@ -75,6 +100,12 @@ namespace LAAnnotation
         private static void OnIdle(object sender, EventArgs e)
         {
             CadApplication.Idle -= OnIdle; _idleAttached = false;
+            if(_listRefreshPending)
+            {
+                _listRefreshPending=false;
+                try{LAAnnotation.Views.AnnotationListPanel.RefreshIfOpen();}
+                catch(System.Exception ex){PluginLog.Error("AnnotationList.Refresh",ex);}
+            }
             var doc = _pendingDocument; var id = _pendingId; _pendingDocument = null; _pendingId = ObjectId.Null;
             if (doc == null || id.IsNull || doc.IsDisposed || CadApplication.DocumentManager.MdiActiveDocument != doc) return;
             try

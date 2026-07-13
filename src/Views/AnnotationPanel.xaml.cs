@@ -19,12 +19,15 @@ using CadApplication = Autodesk.AutoCAD.ApplicationServices.Core.Application;
 
 namespace LAAnnotation.Views
 {
-    /// <summary>浮动批注面板：选择批注类型/形式/设置，实时生效，支持连续批注。</summary>
+    /// <summary>浮动批注面板：选择批注类型、形式和设置，点击开始时统一生效，支持连续批注。</summary>
     internal partial class AnnotationPanel : Window
     {
         private static AnnotationPanel _instance;
         private AnnotationSettings _s;
         private bool _isRunning;
+        private bool _startPending;
+        private Document _queuedDocument;
+        private DateTime _pendingSinceUtc;
         private readonly List<Point3d> _multiCloudFirsts = new List<Point3d>();
         private readonly List<Point3d> _multiCloudSeconds = new List<Point3d>();
         private readonly List<ObjectId> _multiCloudIds = new List<ObjectId>();
@@ -40,32 +43,11 @@ namespace LAAnnotation.Views
             RoleCombo.ItemsSource = new[] { "批注人", "校审人", "回复人" };
             // 加载当前设置值
             RefreshControls();
-            // 所有控件变更 → 即时写入 SettingsStore
-            DisciplineCombo.LostFocus += (_, __) => SaveQuickSetting();
-            DisciplineCombo.SelectionChanged += (_, __) => SaveQuickSetting();
-            AuthorText.TextChanged += (_, __) => SaveQuickSetting();
-            ShapeCombo.LostFocus += (_, __) => SaveQuickSetting();
-            ShapeCombo.SelectionChanged += (_, __) => SaveQuickSetting();
-            CloudStyleCombo.LostFocus += (_, __) => SaveQuickSetting();
-            CloudStyleCombo.SelectionChanged += (_, __) => SaveQuickSetting();
-            RoleCombo.LostFocus += (_, __) => SaveQuickSetting();
-            RoleCombo.SelectionChanged += (_, __) => SaveQuickSetting();
-            AutoNumberCheck.Checked += (_, __) => SaveQuickSetting();
-            AutoNumberCheck.Unchecked += (_, __) => SaveQuickSetting();
-            DoubleClickEditCheck.Checked += (_, __) => SaveQuickSetting();
-            DoubleClickEditCheck.Unchecked += (_, __) => SaveQuickSetting();
-            // 批注形式单选框 → 同步到外形设置
-            ShapeRectRadio.Checked += (_, __) => { ShapeCombo.Text = "矩形"; SaveQuickSetting(); };
-            ShapeCircleRadio.Checked += (_, __) => { ShapeCombo.Text = "椭圆"; SaveQuickSetting(); };
-            ShapePlineRadio.Checked += (_, __) => SaveQuickSetting();
-            ShapeCrossRadio.Checked += (_, __) => SaveQuickSetting();
+            // 面板修改只保留为待应用值；点击“开始批注”时才统一写入设置。
+            ShapeRectRadio.Checked += (_, __) => ShapeCombo.Text = "矩形";
+            ShapeCircleRadio.Checked += (_, __) => ShapeCombo.Text = "椭圆";
             SingleModeRadio.Checked += (_, __) => UpdateModeAvailability();
             MultiModeRadio.Checked += (_, __) => UpdateModeAvailability();
-            // 仅绘云线 / 连续批注 → 即时保存
-            CloudOnlyCheck.Checked += (_, __) => SaveQuickSetting();
-            CloudOnlyCheck.Unchecked += (_, __) => SaveQuickSetting();
-            ContinuousCheck.Checked += (_, __) => SaveQuickSetting();
-            ContinuousCheck.Unchecked += (_, __) => SaveQuickSetting();
             // 打开面板后先允许用户选择模式和参数，再由“开始批注”按钮进入 CAD 交互。
             Loaded += (_, __) => { Left = SystemParameters.WorkArea.Left + 20; Top = SystemParameters.WorkArea.Top + 20; };
             Closing += (_, __) => _instance = null;
@@ -85,8 +67,8 @@ namespace LAAnnotation.Views
             CloudOnlyCheck.IsChecked = _s.CloudOnly;
         }
 
-        /// <summary>将面板所有控件当前值写回设置并持久化。</summary>
-        private void SaveQuickSetting()
+        /// <summary>点击开始时，将面板当前值一次性写回设置并持久化。</summary>
+        private void ApplyPanelSettings()
         {
             _s.DefaultDiscipline = DisciplineCombo.Text.Trim();
             _s.DefaultAuthor = AuthorText.Text.Trim();
@@ -108,17 +90,64 @@ namespace LAAnnotation.Views
             _instance.Show();
         }
 
-        private void Start_Click(object sender, RoutedEventArgs e) => StartAnnotation();
+        private void Start_Click(object sender, RoutedEventArgs e) => QueueAnnotationCommand(true, false);
 
-        /// <summary>启动批注流程：读取面板当前模式，进入 CAD 交互。</summary>
-        private void StartAnnotation()
+        /// <summary>由 CAD 内部命令调用，确保所有 Editor 选点都运行在正式命令上下文。</summary>
+        internal static void RunQueuedAnnotation()
         {
-            if (_isRunning) return;
-            _isRunning = true;
+            var panel=_instance;
+            if(panel==null||!panel.IsLoaded||!panel._startPending)return;
+            var queuedDocument=panel._queuedDocument;
+            if(queuedDocument==null||queuedDocument.IsDisposed){panel.ResetPendingStart();return;}
+            // 旧图纸队列中的延迟命令不能消费另一张图纸的新请求。
+            if(CadApplication.DocumentManager.MdiActiveDocument!=queuedDocument)return;
+            panel.ResetPendingStart();
+            panel.StartAnnotation(queuedDocument);
+        }
+
+        /// <summary>切换图纸时取消旧图纸尚未执行的面板请求，避免跨图绘制。</summary>
+        internal static void HandleDocumentActivated(Document activeDocument)
+        {
+            var panel=_instance;
+            if(panel==null||!panel.IsLoaded||!panel._startPending)return;
+            if(panel._queuedDocument!=activeDocument)panel.ResetPendingStart();
+        }
+
+        private void ResetPendingStart()
+        {
+            _startPending=false;_queuedDocument=null;_pendingSinceUtc=default(DateTime);
+            if(IsLoaded){StartButton.IsEnabled=true;StartButton.Content="开始批注";}
+        }
+
+        private void QueueAnnotationCommand(bool applyPanelSettings,bool fromContinuous)
+        {
+            if(_isRunning&&!fromContinuous)return;
             try
             {
-                var doc = CadApplication.DocumentManager.MdiActiveDocument;
-                if (doc == null) { Close(); return; }
+                if(applyPanelSettings)ApplyPanelSettings();
+                var doc=CadApplication.DocumentManager.MdiActiveDocument;
+                if(doc==null){Close();return;}
+                if(_startPending&&_queuedDocument==doc&&(DateTime.UtcNow-_pendingSinceUtc).TotalSeconds<2)return;
+                _queuedDocument=doc;_startPending=true;_pendingSinceUtc=DateTime.UtcNow;
+                StartButton.IsEnabled=!_isRunning;StartButton.Content="等待 CAD…（可重试）";
+                doc.SendStringToExecute("LA_PZ_RUN ",true,false,false);
+            }
+            catch(Exception ex)
+            {
+                ResetPendingStart();
+                var doc=CadApplication.DocumentManager.MdiActiveDocument;
+                doc?.Editor.WriteMessage("\n无法启动批注命令: "+ex.Message);
+            }
+        }
+
+        /// <summary>启动批注流程：读取面板当前模式，进入 CAD 交互。</summary>
+        private void StartAnnotation(Document doc)
+        {
+            if (_isRunning) return;
+            _isRunning = true;StartButton.IsEnabled=false;
+            try
+            {
+                if(doc==null||doc.IsDisposed||CadApplication.DocumentManager.MdiActiveDocument!=doc)return;
 
                 var isSingle = SingleModeRadio.IsChecked == true;
                 var shape = ShapeRectRadio.IsChecked == true ? "矩形"
@@ -130,7 +159,7 @@ namespace LAAnnotation.Views
                 else DoMultiAnnotation(doc);
             }
             catch (Exception ex) { var d = CadApplication.DocumentManager.MdiActiveDocument; d?.Editor.WriteMessage("\n批注失败: " + ex.Message); }
-            finally { _isRunning = false; }
+            finally { _isRunning = false;if(IsLoaded)StartButton.IsEnabled=true; }
         }
 
         private void Settings_Click(object sender, RoutedEventArgs e)
@@ -163,7 +192,8 @@ namespace LAAnnotation.Views
         {
             var pt = doc.Editor.GetPoint("\n指定十字点位置: ");
             if (pt.Status != PromptStatus.OK) return;
-            AnnotationService.CreateCrossMark(doc, _s, pt.Value);
+            var pointWcs=pt.Value.TransformBy(AnnotationService.GetUcsMatrix(doc));
+            AnnotationService.CreateCrossMark(doc, _s, pointWcs);
             doc.Editor.WriteMessage("\n十字点已放置。");
             CheckContinuous(doc);
         }
@@ -172,15 +202,16 @@ namespace LAAnnotation.Views
         {
             var points = CollectPlinePoints(doc, out var cancelled);
             if (cancelled || points == null) return;
-            var polygonPoints=points.Select(p=>new Point2d(p.X,p.Y)).ToList();
+            var ucsMatrix=AnnotationService.GetUcsMatrix(doc);var wcsToUcs=ucsMatrix.Inverse();var localPoints=points.Select(p=>p.TransformBy(wcsToUcs)).ToList();
+            var polygonPoints=localPoints.Select(p=>new Point2d(p.X,p.Y)).ToList();
             if(!AnnotationService.ValidateCloudPolygon(polygonPoints,out var validationError)){doc.Editor.WriteMessage("\n"+validationError);return;}
-            var xs = points.Select(p => p.X); var ys = points.Select(p => p.Y);
+            var xs=localPoints.Select(p=>p.X);var ys=localPoints.Select(p=>p.Y);
             var w = xs.Max() - xs.Min(); var h = ys.Max() - ys.Min();
             var diagonal = Math.Sqrt(w * w + h * h);
             var effective = AnnotationService.ResolveEffectiveSettings(doc, _s, data, diagonal);
 
             // 仅绘云线模式：沿折线创建云线后即结束
-            if (CloudOnlyCheck.IsChecked == true)
+            if (_s.CloudOnly)
             {
                 AnnotationService.CreatePlineCloudOnly(doc,effective,points);
                 doc.Editor.WriteMessage("\nPL 云线已创建。");
@@ -190,10 +221,11 @@ namespace LAAnnotation.Views
             // 完整 PL 批注
             var textPt = doc.Editor.GetPoint("\n指定批注文字位置: ");
             if (textPt.Status != PromptStatus.OK) return;
+            var textPointWcs=textPt.Value.TransformBy(AnnotationService.GetUcsMatrix(doc));
             if (effective.FontAutoFit) doc.Editor.WriteMessage($"\n云线范围: {w:0.#}×{h:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}");
             var form = new AnnotationWindow(data, false);
             if (CadDialog.ShowModal(form) != true) return;
-            AnnotationService.CreatePlineCloud(doc, data, effective, points, textPt.Value);
+            AnnotationService.CreatePlineCloud(doc, data, effective, points, textPointWcs);
             FinalizeAnnotation(doc, data);
             CheckContinuous(doc);
         }
@@ -203,10 +235,10 @@ namespace LAAnnotation.Views
             var preview = AnnotationService.ResolveEffectiveSettings(doc, _s, data);
 
             // 仅绘云线：跳过文字位置选点，直接画云线
-            if (CloudOnlyCheck.IsChecked == true)
+            if (_s.CloudOnly)
             {
                 if (!AnnotationService.PromptCloudOnly(doc, preview, out var first, out var second)) return;
-                var w = Math.Abs(second.X - first.X); var h = Math.Abs(second.Y - first.Y);
+                var (_,w,h)=AnnotationService.UcsAlignedExtents(doc,first,second);
                 var diagonal = Math.Sqrt(w * w + h * h);
                 var effective = AnnotationService.ResolveEffectiveSettings(doc, _s, data, diagonal);
                 if (effective.FontAutoFit) doc.Editor.WriteMessage($"\n云线对角线: {diagonal:0.#}  云线半径: {effective.CloudRadius:0.###}");
@@ -217,7 +249,7 @@ namespace LAAnnotation.Views
             }
             // 完整批注：选云线范围 → 选文字位置 → 填表 → 创建实体组
             if (!AnnotationService.PromptGeometry(doc, preview, out var f, out var s, out var textPt)) return;
-            var bw = Math.Abs(s.X - f.X); var bh = Math.Abs(s.Y - f.Y);
+            var (_,bw,bh)=AnnotationService.UcsAlignedExtents(doc,f,s);
             var bdiagonal = Math.Sqrt(bw * bw + bh * bh);
             var beffective = AnnotationService.ResolveEffectiveSettings(doc, _s, data, bdiagonal);
             if (beffective.FontAutoFit) doc.Editor.WriteMessage($"\n云线对角线: {bdiagonal:0.#}  字高: {beffective.TextHeight:0.###}  云线半径: {beffective.CloudRadius:0.###}");
@@ -253,20 +285,24 @@ namespace LAAnnotation.Views
                 }
                 if(_multiCloudFirsts.Count==0)return;
 
-                var allX = _multiCloudFirsts.SelectMany((f, i) => new[] { f.X, _multiCloudSeconds[i].X });
-                var allY = _multiCloudFirsts.SelectMany((f, i) => new[] { f.Y, _multiCloudSeconds[i].Y });
-                var w = allX.Max() - allX.Min(); var h = allY.Max() - allY.Min();
-                var diagonal = Math.Sqrt(w * w + h * h);
+                var diagonals = _multiCloudFirsts.Select((f, i) =>
+                {
+                    var (_,cw,ch)=AnnotationService.UcsAlignedExtents(doc,f,_multiCloudSeconds[i]);
+                    return Math.Sqrt(cw*cw+ch*ch);
+                }).OrderBy(x=>x).ToList();
+                var middle=diagonals.Count/2;
+                var representativeDiagonal=diagonals.Count%2==1?diagonals[middle]:(diagonals[middle-1]+diagonals[middle])/2.0;
 
                 var textPt = doc.Editor.GetPoint("\n指定批注文字位置: ");
                 if (textPt.Status != PromptStatus.OK) return;
-                var effective = AnnotationService.ResolveEffectiveSettings(doc, _s, data, diagonal);
-                if (effective.FontAutoFit) doc.Editor.WriteMessage($"\n多区域范围: {w:0.#}×{h:0.#}  字高: {effective.TextHeight:0.###}");
+                var textPointWcs=textPt.Value.TransformBy(AnnotationService.GetUcsMatrix(doc));
+                var effective = AnnotationService.ResolveEffectiveSettings(doc, _s, data, representativeDiagonal);
+                if (effective.FontAutoFit||effective.CloudAutoFit) doc.Editor.WriteMessage($"\n代表云线尺寸: {representativeDiagonal:0.#}  字高: {effective.TextHeight:0.###}  云线半径和线宽按各云线自身尺寸计算。");
 
                 var form = new AnnotationWindow(data, false);
                 if (CadDialog.ShowModal(form) != true) return;
 
-                AnnotationService.CreateMultiCloud(doc, data, effective, _multiCloudIds, _multiCloudFirsts, _multiCloudSeconds, textPt.Value);
+                AnnotationService.CreateMultiCloud(doc, data, effective, _s, _multiCloudIds, _multiCloudFirsts, _multiCloudSeconds, textPointWcs);
                 completed = true;
                 FinalizeAnnotation(doc, data);
                 CheckContinuous(doc);
@@ -293,8 +329,9 @@ namespace LAAnnotation.Views
                 var result = ed.GetPoint(opts);
                 if(result.Status==PromptStatus.OK)
                 {
-                    if(points.Count>0&&points[points.Count-1].DistanceTo(result.Value)<=1e-8){ed.WriteMessage("\n该点与上一点重复，请重新指定。");continue;}
-                    points.Add(result.Value);continue;
+                    var pointWcs=result.Value.TransformBy(AnnotationService.GetUcsMatrix(doc));
+                    if(points.Count>0&&points[points.Count-1].DistanceTo(pointWcs)<=1e-8){ed.WriteMessage("\n该点与上一点重复，请重新指定。");continue;}
+                    points.Add(pointWcs);continue;
                 }
                 if(result.Status==PromptStatus.None)
                 {
@@ -324,7 +361,7 @@ namespace LAAnnotation.Views
 
         private void CheckContinuous(Document doc)
         {
-            if (ContinuousCheck.IsChecked == true) { Activate(); Dispatcher.BeginInvoke(new Action(() => StartAnnotation()), System.Windows.Threading.DispatcherPriority.Background); return; }
+            if (_s.ContinuousAnnotation) { QueueAnnotationCommand(false,true); return; }
             Close();
         }
 

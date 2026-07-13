@@ -40,7 +40,7 @@
                             <TextBlock Grid.Row="3" Grid.Column="0" Text="云线线宽" Style="{StaticResource FieldLabel}"/>
                             <TextBox x:Name="LineWidthText" Grid.Row="3" Grid.Column="1"/>
                         </Grid>
-                        <CheckBox x:Name="CloudAutoFitCheck" Content="云线自适应" Margin="130,6,0,2"/>
+                        <CheckBox x:Name="CloudAutoFitCheck" Content="云线自适应" Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="130,6,0,2"/>
 
                         <Rectangle Style="{StaticResource SectionSeparator}"/>
 

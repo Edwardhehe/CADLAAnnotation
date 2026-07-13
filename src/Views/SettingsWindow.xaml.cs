@@ -103,7 +103,14 @@ namespace LAAnnotation.Views
         {
             if (!IsInitialized) return;
             FixedWidthValueText.IsEnabled = On(FixedWidthCheck);
-            AutoTextViewPercentText.IsEnabled = On(FontAutoFitCheck);
+            var cloudAuto = On(CloudAutoFitCheck);
+            CloudRadiusText.IsEnabled = !cloudAuto;
+            LineWidthText.IsEnabled = !cloudAuto;
+            var fontAuto = On(FontAutoFitCheck);
+            AutoTextViewPercentText.IsEnabled = fontAuto;
+            HeaderHeightText.IsEnabled = !fontAuto;
+            SecondLineHeightText.IsEnabled = !fontAuto;
+            TextHeightText.IsEnabled = !fontAuto;
             var same = On(SameColorsCheck);
             ColorIndexCombo.IsEnabled = same;
             foreach (var x in new[] { CloudColorCombo, LeaderColorCombo, TextColorCombo, BoxColorCombo, ReplyColorCombo, PassColorCombo, CheckColorCombo })

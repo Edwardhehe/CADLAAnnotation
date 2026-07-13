@@ -27,6 +27,13 @@ namespace LAAnnotation
             AnnotationPanel.ShowOrActivate();
         }
 
+        /// <summary>面板排队使用的内部命令，让选点流程在 CAD 命令上下文中执行。</summary>
+        [CommandMethod("LA_PZ_RUN", CommandFlags.Modal)]
+        public void RunAnnotationFromPanel()
+        {
+            AnnotationPanel.RunQueuedAnnotation();
+        }
+
         /// <summary>单绘云线：仅绘制云线范围框，不生成文字和引线。</summary>
         [CommandMethod("LA_PZ_CLOUD", CommandFlags.Modal)]
         public void CloudOnly()
@@ -37,7 +44,7 @@ namespace LAAnnotation
             if (!AnnotationService.PromptCloudOnly(doc, preview, out var first, out var second)) return;
             try
             {
-                var width = Math.Abs(second.X - first.X); var height = Math.Abs(second.Y - first.Y);
+                var (_,width,height)=AnnotationService.UcsAlignedExtents(doc,first,second);
                 var effective = AnnotationService.ResolveEffectiveSettings(doc, settings, new AnnotationData(), Math.Sqrt(width * width + height * height));
                 if (effective.FontAutoFit) doc.Editor.WriteMessage($"\n云线半径: {effective.CloudRadius:0.###}");
                 var id = AnnotationService.CreateCloudOnly(doc, effective, first, second);

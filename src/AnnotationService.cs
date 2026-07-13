@@ -38,17 +38,24 @@ namespace LAAnnotation
         /// <summary>根据比例因子计算实际生效的字体、云线等参数。若提供云线范围且开启 FontAutoFit，则按云线对角线尺寸计算字高。</summary>
         public static AnnotationSettings ResolveEffectiveSettings(Document doc, AnnotationSettings source, AnnotationData data, double cloudDiagonal = 0)
         {
-            var s=source.Clone();var ratio=Math.Max(source.ScaleRatio,0.01);var baseText=Math.Max(source.TextHeight,0.1);var text=baseText*ratio;
-            if(source.FontAutoFit)
-            {
-                // 优先用云线对角线尺寸，否则回退到视图高度
-                var refSize=cloudDiagonal>0?cloudDiagonal:0;
-                if(refSize<=0){using(var view=doc.Editor.GetCurrentView())refSize=view.Height;}
-                text=Math.Max(text,refSize*Math.Max(0.1,source.AutoTextViewPercent)/100.0);
-            }
+            var s=source.Clone();var ratio=Math.Max(source.ScaleRatio,0.01);var baseText=Math.Max(source.TextHeight,0.1);
+            var refSize=cloudDiagonal;
+            if(refSize<=0){using(var view=doc.Editor.GetCurrentView())refSize=view.Height;}
+            var adaptiveText=Math.Max(0.1,refSize*Math.Max(0.1,source.AutoTextViewPercent)/100.0*ratio);
+            var text=source.FontAutoFit?adaptiveText:baseText*ratio;
             var factor=text/baseText;s.TextHeight=text;s.HeaderHeight=Math.Max(0.1,source.HeaderHeight*factor);s.SecondLineHeight=Math.Max(0.1,source.SecondLineHeight*factor);
-            s.FixedWidthValue=Math.Max(text*6,source.FixedWidthValue*factor);s.LineWidth=Math.Max(source.LineWidth*ratio,text*0.035);
-            s.CloudRadius=source.CloudAutoFit?Math.Max(source.CloudRadius*ratio,text*0.75):source.CloudRadius*ratio;s.CheckHeight=Math.Max(source.CheckHeight*factor,text*2);
+            s.FixedWidthValue=Math.Max(text*6,source.FixedWidthValue*factor);
+            if(source.CloudAutoFit)
+            {
+                s.CloudRadius=Math.Max(0.001,adaptiveText*0.75);
+                s.LineWidth=Math.Max(0.001,adaptiveText*0.035);
+            }
+            else
+            {
+                s.CloudRadius=Math.Max(0.001,source.CloudRadius*ratio);
+                s.LineWidth=Math.Max(0,source.LineWidth*ratio);
+            }
+            s.CheckHeight=Math.Max(source.CheckHeight*factor,text*2);
             data.RenderTextHeight=s.TextHeight;data.RenderHeaderHeight=s.HeaderHeight;data.RenderSecondLineHeight=s.SecondLineHeight;data.RenderCloudRadius=s.CloudRadius;data.RenderLineWidth=s.LineWidth;return s;
         }
 
@@ -64,10 +71,12 @@ namespace LAAnnotation
             try{
                 if(s.AutoCloseOrtho){ortho=CadSystemVariable("ORTHOMODE");SetCadSystemVariable("ORTHOMODE",0);}if(s.AutoCloseSnap){osmode=CadSystemVariable("OSMODE");SetCadSystemVariable("OSMODE",0);}
                 var first = ed.GetPoint("\n指定批注范围第一个角点: "); if (first.Status != PromptStatus.OK) return false;
-                var region=new RegionPreviewJig(first.Value,s);var regionResult=ed.Drag(region);if(regionResult.Status!=PromptStatus.OK)return false;
-                if(first.Value.DistanceTo(region.Current)<1e-6){ed.WriteMessage("\n批注范围太小，请重新指定两个不同的角点。");return false;}
-                var placement=new PlacementPreviewJig(first.Value,region.Current,s);var placementResult=ed.Drag(placement);if(placementResult.Status!=PromptStatus.OK)return false;
-                firstPoint=first.Value;secondPoint=region.Current;textLocation=placement.Current;return true;
+                // Editor.GetPoint 返回当前 UCS 坐标；Jig 的 AcquirePoint 返回 WCS。先统一为 WCS，避免 UCS 原点/旋转被重复解释。
+                var firstWcs=first.Value.TransformBy(GetUcsMatrix(doc));
+                var region=new RegionPreviewJig(doc,firstWcs,s);var regionResult=ed.Drag(region);if(regionResult.Status!=PromptStatus.OK)return false;
+                var (_,regionWidth,regionHeight)=UcsAlignedExtents(doc,firstWcs,region.Current);if(regionWidth<=1e-6||regionHeight<=1e-6){ed.WriteMessage("\n批注范围必须同时具有宽度和高度，请重新指定。");return false;}
+                var placement=new PlacementPreviewJig(doc,firstWcs,region.Current,s);var placementResult=ed.Drag(placement);if(placementResult.Status!=PromptStatus.OK)return false;
+                firstPoint=firstWcs;secondPoint=region.Current;textLocation=placement.Current;return true;
             }finally{if(ortho!=null)SetCadSystemVariable("ORTHOMODE",ortho);if(osmode!=null)SetCadSystemVariable("OSMODE",osmode);}
         }
 
@@ -84,13 +93,22 @@ namespace LAAnnotation
             firstPoint=Point3d.Origin;secondPoint=Point3d.Origin;var ed=doc.Editor;object ortho=null,osmode=null;
             try{
                 if(s.AutoCloseOrtho){ortho=CadSystemVariable("ORTHOMODE");SetCadSystemVariable("ORTHOMODE",0);}if(s.AutoCloseSnap){osmode=CadSystemVariable("OSMODE");SetCadSystemVariable("OSMODE",0);}
-                var firstOptions=new PromptPointOptions(allowFinish?"\n指定下一个云线范围第一个角点，回车/空格结束: ":"\n指定云线范围第一个角点: "){AllowNone=allowFinish};
-                var first=ed.GetPoint(firstOptions);
-                if(allowFinish&&first.Status==PromptStatus.None)return CloudPromptResult.Finished;
-                if(first.Status!=PromptStatus.OK)return CloudPromptResult.Cancelled;
-                var region=new RegionPreviewJig(first.Value,s);var regionResult=ed.Drag(region);if(regionResult.Status!=PromptStatus.OK)return CloudPromptResult.Cancelled;
-                if(first.Value.DistanceTo(region.Current)<1e-6){ed.WriteMessage("\n云线范围太小，请重新指定两个不同的角点。");return CloudPromptResult.Cancelled;}
-                firstPoint=first.Value;secondPoint=region.Current;return CloudPromptResult.Completed;
+                while(true)
+                {
+                    var firstOptions=new PromptPointOptions(allowFinish?"\n指定下一个云线范围第一个角点，回车/空格结束: ":"\n指定云线范围第一个角点: "){AllowNone=allowFinish};
+                    var first=ed.GetPoint(firstOptions);
+                    if(allowFinish&&first.Status==PromptStatus.None)return CloudPromptResult.Finished;
+                    if(first.Status!=PromptStatus.OK)return CloudPromptResult.Cancelled;
+                    var firstWcs=first.Value.TransformBy(GetUcsMatrix(doc));
+                    var region=new RegionPreviewJig(doc,firstWcs,s);var regionResult=ed.Drag(region);if(regionResult.Status!=PromptStatus.OK)return CloudPromptResult.Cancelled;
+                    var (_,width,height)=UcsAlignedExtents(doc,firstWcs,region.Current);
+                    if(width<=1e-6||height<=1e-6)
+                    {
+                        ed.WriteMessage("\n云线范围必须同时具有宽度和高度，请重新指定。");
+                        continue;
+                    }
+                    firstPoint=firstWcs;secondPoint=region.Current;return CloudPromptResult.Completed;
+                }
             }finally{if(ortho!=null)SetCadSystemVariable("ORTHOMODE",ortho);if(osmode!=null)SetCadSystemVariable("OSMODE",osmode);}
         }
 
@@ -101,9 +119,9 @@ namespace LAAnnotation
             {
                 EnsureRegApp(doc.Database,tr);EnsureLayer(doc.Database,tr,settings);
                 var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
-                var min=new Point2d(Math.Min(firstPoint.X,secondPoint.X),Math.Min(firstPoint.Y,secondPoint.Y));
-                var max=new Point2d(Math.Max(firstPoint.X,secondPoint.X),Math.Max(firstPoint.Y,secondPoint.Y));
-                var cloud=BuildCloud(min,max,settings);cloud.Elevation=firstPoint.Z;
+                var ucsToWcs=GetUcsMatrix(doc);var wcsToUcs=ucsToWcs.Inverse();var first=firstPoint.TransformBy(wcsToUcs);var second=secondPoint.TransformBy(wcsToUcs);
+                var min=new Point2d(Math.Min(first.X,second.X),Math.Min(first.Y,second.Y));var max=new Point2d(Math.Max(first.X,second.X),Math.Max(first.Y,second.Y));
+                var cloud=BuildCloud(min,max,settings);cloud.Elevation=first.Z;cloud.TransformBy(ucsToWcs);
                 cloud.Layer=EffectiveLayer(settings);cloud.Color=Color.FromColorIndex(ColorMethod.ByAci,settings.CloudColor);
                 if(settings.LineWidth>0)cloud.ConstantWidth=settings.LineWidth;
                 var id=space.AppendEntity(cloud);tr.AddNewlyCreatedDBObject(cloud,true);
@@ -118,8 +136,9 @@ namespace LAAnnotation
             using(doc.LockDocument())using(var tr=doc.Database.TransactionManager.StartTransaction())
             {
                 EnsureLayer(doc.Database,tr,settings);
-                var cloudPoints=points.Select(point=>new Point2d(point.X,point.Y)).ToList();
-                var cloud=BuildPolygonCloud(cloudPoints,settings);cloud.Elevation=points[0].Z;
+                var ucsToWcs=GetUcsMatrix(doc);var wcsToUcs=ucsToWcs.Inverse();var localPoints=points.Select(point=>point.TransformBy(wcsToUcs)).ToList();
+                var cloudPoints=localPoints.Select(point=>new Point2d(point.X,point.Y)).ToList();
+                var cloud=BuildPolygonCloud(cloudPoints,settings);cloud.Elevation=localPoints[0].Z;cloud.TransformBy(ucsToWcs);
                 cloud.Layer=EffectiveLayer(settings);cloud.Color=Color.FromColorIndex(ColorMethod.ByAci,settings.CloudColor);
                 if(settings.LineWidth>0)cloud.ConstantWidth=settings.LineWidth;
                 var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
@@ -135,11 +154,11 @@ namespace LAAnnotation
             {
                 EnsureLayer(doc.Database,tr,settings);
                 var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
-                var size=settings.TextHeight*3;
-                var h=new Polyline();h.AddVertexAt(0,new Point2d(pt.X-size,pt.Y),0,0,0);h.AddVertexAt(1,new Point2d(pt.X+size,pt.Y),0,0,0);h.Elevation=pt.Z;
+                var size=settings.TextHeight*3;var ucsToWcs=GetUcsMatrix(doc);var local=pt.TransformBy(ucsToWcs.Inverse());
+                var h=new Polyline();h.AddVertexAt(0,new Point2d(local.X-size,local.Y),0,0,0);h.AddVertexAt(1,new Point2d(local.X+size,local.Y),0,0,0);h.Elevation=local.Z;h.TransformBy(ucsToWcs);
                 h.Layer=EffectiveLayer(settings);h.Color=Color.FromColorIndex(ColorMethod.ByAci,settings.CloudColor);
                 space.AppendEntity(h);tr.AddNewlyCreatedDBObject(h,true);
-                var v=new Polyline();v.AddVertexAt(0,new Point2d(pt.X,pt.Y-size),0,0,0);v.AddVertexAt(1,new Point2d(pt.X,pt.Y+size),0,0,0);v.Elevation=pt.Z;
+                var v=new Polyline();v.AddVertexAt(0,new Point2d(local.X,local.Y-size),0,0,0);v.AddVertexAt(1,new Point2d(local.X,local.Y+size),0,0,0);v.Elevation=local.Z;v.TransformBy(ucsToWcs);
                 v.Layer=EffectiveLayer(settings);v.Color=Color.FromColorIndex(ColorMethod.ByAci,settings.CloudColor);
                 space.AppendEntity(v);tr.AddNewlyCreatedDBObject(v,true);
                 tr.Commit();
@@ -151,29 +170,25 @@ namespace LAAnnotation
         {
             using(doc.LockDocument())using(var tr=doc.Database.TransactionManager.StartTransaction())
             {
-                EnsureRegApp(doc.Database,tr);EnsureLayer(doc.Database,tr,settings);
+                EnsureRegApp(doc.Database,tr);EnsureLayer(doc.Database,tr,settings,data);
                 var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
                 var ids=new ObjectIdCollection();
-                // 云线沿折线路径
-                var cloudPts=points.Select(p=>new Point2d(p.X,p.Y)).ToList();
-                var cloud=BuildPolygonCloud(cloudPts,settings);cloud.Elevation=points[0].Z;
-                Add(space,tr,cloud,ids,settings,data.Id,"cloud",settings.CloudColor);
+                var ucsToWcs=GetUcsMatrix(doc);var wcsToUcs=ucsToWcs.Inverse();var localPoints=points.Select(p=>p.TransformBy(wcsToUcs)).ToList();var localText=textLocation.TransformBy(wcsToUcs);
+                var cloudPts=localPoints.Select(p=>new Point2d(p.X,p.Y)).ToList();
+                var cloud=BuildPolygonCloud(cloudPts,settings);cloud.Elevation=localPoints[0].Z;
                 // 文字 + 边框
                 var margin=settings.TextHeight*0.5;
-                var innerTextLocation=new Point3d(textLocation.X+margin,textLocation.Y+margin,textLocation.Z);
+                var innerTextLocation=new Point3d(localText.X+margin,localText.Y+margin,localText.Z);
                 var requestedWidth=settings.FixedWidth?settings.FixedWidthValue:Math.Max(55.0,settings.TextHeight*18.0);
                 var text=new MText{Location=innerTextLocation,TextHeight=settings.TextHeight,Width=requestedWidth,Contents=FormatText(data,settings),Attachment=AttachmentPoint.BottomLeft};
                 ApplyTextStyle(doc.Database,tr,text,settings.TextStyleName);
-                Add(space,tr,text,ids,settings,data.Id,"text",TextColorForStatus(settings,data.Status));
                 var width=Math.Max(text.ActualWidth,settings.TextHeight*4)+margin*2;var height=Math.Max(text.ActualHeight,settings.TextHeight*2)+margin*2;
-                var boxEntity=BuildBox(textLocation,width,height);boxEntity.Elevation=textLocation.Z;Add(space,tr,boxEntity,ids,settings,data.Id,"box",settings.SameColors?settings.CloudColor:settings.BoxColor);
-                // 引出线：云线实体上的真实最近点 → 最近框角
-                var nearestCloudPoint=cloud.GetClosestPointTo(textLocation,false);
-                var nearestPt=new Point2d(nearestCloudPoint.X,nearestCloudPoint.Y);
-                var boxCorners=new[]{new Point2d(textLocation.X,textLocation.Y),new Point2d(textLocation.X+width,textLocation.Y),new Point2d(textLocation.X+width,textLocation.Y+height),new Point2d(textLocation.X,textLocation.Y+height)};
-                var boxCorner=boxCorners.OrderBy(c=>c.GetDistanceTo(nearestPt)).First();
-                var leader=new Polyline();leader.AddVertexAt(0,nearestPt,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=textLocation.Z;
-                Add(space,tr,leader,ids,settings,data.Id,"leader",settings.LeaderColor);
+                var boxEntity=BuildBox(localText,width,height);boxEntity.Elevation=localText.Z;
+                var nearestCloudPoint=cloud.GetClosestPointTo(localText,false);var nearestPt=new Point2d(nearestCloudPoint.X,nearestCloudPoint.Y);
+                var boxCorners=new[]{new Point2d(localText.X,localText.Y),new Point2d(localText.X+width,localText.Y),new Point2d(localText.X+width,localText.Y+height),new Point2d(localText.X,localText.Y+height)};
+                var boxCorner=boxCorners.OrderBy(c=>c.GetDistanceTo(nearestPt)).First();var leader=new Polyline();leader.AddVertexAt(0,nearestPt,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=localText.Z;
+                cloud.TransformBy(ucsToWcs);text.TransformBy(ucsToWcs);boxEntity.TransformBy(ucsToWcs);leader.TransformBy(ucsToWcs);
+                Add(space,tr,cloud,ids,settings,data.Id,"cloud",settings.CloudColor,data);Add(space,tr,text,ids,settings,data.Id,"text",TextColorForStatus(settings,data.Status),data);Add(space,tr,boxEntity,ids,settings,data.Id,"box",settings.SameColors?settings.CloudColor:settings.BoxColor,data);Add(space,tr,leader,ids,settings,data.Id,"leader",settings.LeaderColor,data);
                 // 编组
                 var groups=(DBDictionary)tr.GetObject(doc.Database.GroupDictionaryId,OpenMode.ForWrite);
                 var group=new Group("LA批注 "+data.Number,true);
@@ -184,13 +199,13 @@ namespace LAAnnotation
         }
 
         /// <summary>多对一批注：清理选点阶段的临时云线，按最终参数创建云线、文字框和引出线并统一编组。</summary>
-        public static void CreateMultiCloud(Document doc, AnnotationData data, AnnotationSettings settings, List<ObjectId> previewCloudIds, List<Point3d> firstPoints, List<Point3d> secondPoints, Point3d textLocation)
+        public static void CreateMultiCloud(Document doc, AnnotationData data, AnnotationSettings settings, AnnotationSettings sourceSettings, List<ObjectId> previewCloudIds, List<Point3d> firstPoints, List<Point3d> secondPoints, Point3d textLocation)
         {
             if (firstPoints == null || secondPoints == null || firstPoints.Count == 0 || firstPoints.Count != secondPoints.Count)
                 throw new ArgumentException("多对一批注的云线范围数据不完整。");
             using(doc.LockDocument())using(var tr=doc.Database.TransactionManager.StartTransaction())
             {
-                EnsureRegApp(doc.Database,tr);EnsureLayer(doc.Database,tr,settings);
+                EnsureRegApp(doc.Database,tr);EnsureLayer(doc.Database,tr,settings,data);
                 var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
                 var ids=new ObjectIdCollection();
                 // 临时云线只负责在连续选点期间提供可见反馈；最终使用统一的自适应参数重建并写入 XData。
@@ -203,33 +218,21 @@ namespace LAAnnotation
                         if (previewEntity != null && !previewEntity.IsErased) previewEntity.Erase();
                     }
                 }
-                for (var k = 0; k < firstPoints.Count; k++)
+                var ucsToWcs=GetUcsMatrix(doc);var wcsToUcs=ucsToWcs.Inverse();var localText=textLocation.TransformBy(wcsToUcs);var localFirsts=firstPoints.Select(p=>p.TransformBy(wcsToUcs)).ToList();var localSeconds=secondPoints.Select(p=>p.TransformBy(wcsToUcs)).ToList();
+                var cloudSettings=new List<AnnotationSettings>(firstPoints.Count);var localCloudCorners=new List<Point2d[]>(firstPoints.Count);
+                for(var k=0;k<localFirsts.Count;k++)
                 {
-                    var min = new Point2d(Math.Min(firstPoints[k].X, secondPoints[k].X), Math.Min(firstPoints[k].Y, secondPoints[k].Y));
-                    var max = new Point2d(Math.Max(firstPoints[k].X, secondPoints[k].X), Math.Max(firstPoints[k].Y, secondPoints[k].Y));
-                    var cloud = BuildCloud(min, max, settings); cloud.Elevation = firstPoints[k].Z;
-                    Add(space, tr, cloud, ids, settings, data.Id, "cloud", settings.CloudColor);
+                    var first=localFirsts[k];var second=localSeconds[k];var min=new Point2d(Math.Min(first.X,second.X),Math.Min(first.Y,second.Y));var max=new Point2d(Math.Max(first.X,second.X),Math.Max(first.Y,second.Y));var width=max.X-min.X;var height=max.Y-min.Y;
+                    var regionSettings=ResolveEffectiveSettings(doc,sourceSettings??settings,new AnnotationData(),Math.Sqrt(width*width+height*height));cloudSettings.Add(regionSettings);
+                    localCloudCorners.Add(new[]{min,new Point2d(max.X,min.Y),max,new Point2d(min.X,max.Y)});
+                    var cloud=BuildCloud(min,max,regionSettings);cloud.Elevation=first.Z;cloud.TransformBy(ucsToWcs);Add(space,tr,cloud,ids,regionSettings,data.Id,"cloud",regionSettings.CloudColor,data);
                 }
-                // 文字 + 边框
-                var margin=settings.TextHeight*0.5;
-                var innerTextLocation=new Point3d(textLocation.X+margin,textLocation.Y+margin,textLocation.Z);
-                var requestedWidth=settings.FixedWidth?settings.FixedWidthValue:Math.Max(55.0,settings.TextHeight*18.0);
-                var text=new MText{Location=innerTextLocation,TextHeight=settings.TextHeight,Width=requestedWidth,Contents=FormatText(data,settings),Attachment=AttachmentPoint.BottomLeft};
-                ApplyTextStyle(doc.Database,tr,text,settings.TextStyleName);
-                Add(space,tr,text,ids,settings,data.Id,"text",TextColorForStatus(settings,data.Status));
-                var width=Math.Max(text.ActualWidth,settings.TextHeight*4)+margin*2;var height=Math.Max(text.ActualHeight,settings.TextHeight*2)+margin*2;
-                var boxEntity=BuildBox(textLocation,width,height);boxEntity.Elevation=textLocation.Z;Add(space,tr,boxEntity,ids,settings,data.Id,"box",settings.SameColors?settings.CloudColor:settings.BoxColor);
-                // 每条引出线：云线角 → 最近框角
-                var boxCorners=new[]{new Point2d(textLocation.X,textLocation.Y),new Point2d(textLocation.X+width,textLocation.Y),new Point2d(textLocation.X+width,textLocation.Y+height),new Point2d(textLocation.X,textLocation.Y+height)};
-                for(var k=0;k<firstPoints.Count;k++)
-                {
-                    var min=new Point2d(Math.Min(firstPoints[k].X,secondPoints[k].X),Math.Min(firstPoints[k].Y,secondPoints[k].Y));
-                    var max=new Point2d(Math.Max(firstPoints[k].X,secondPoints[k].X),Math.Max(firstPoints[k].Y,secondPoints[k].Y));
-                    var cloudCorner=ClosestCorner(min,max,textLocation);
-                    var boxCorner=boxCorners.OrderBy(c=>c.GetDistanceTo(cloudCorner)).First();
-                    var leader=new Polyline();leader.AddVertexAt(0,cloudCorner,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=textLocation.Z;
-                    Add(space,tr,leader,ids,settings,data.Id,"leader",settings.LeaderColor);
-                }
+                var margin=settings.TextHeight*0.5;var requestedWidth=settings.FixedWidth?settings.FixedWidthValue:Math.Max(55.0,settings.TextHeight*18.0);
+                var text=new MText{Location=new Point3d(localText.X+margin,localText.Y+margin,localText.Z),TextHeight=settings.TextHeight,Width=requestedWidth,Contents=FormatText(data,settings),Attachment=AttachmentPoint.BottomLeft};ApplyTextStyle(doc.Database,tr,text,settings.TextStyleName);
+                var widthBox=Math.Max(text.ActualWidth,settings.TextHeight*4)+margin*2;var heightBox=Math.Max(text.ActualHeight,settings.TextHeight*2)+margin*2;var boxEntity=BuildBox(localText,widthBox,heightBox);boxEntity.Elevation=localText.Z;
+                var boxCorners=new[]{new Point2d(localText.X,localText.Y),new Point2d(localText.X+widthBox,localText.Y),new Point2d(localText.X+widthBox,localText.Y+heightBox),new Point2d(localText.X,localText.Y+heightBox)};var leaders=new List<Polyline>();
+                for(var k=0;k<localCloudCorners.Count;k++){var cloudCorner=localCloudCorners[k].OrderBy(c=>c.GetDistanceTo(new Point2d(localText.X,localText.Y))).First();var boxCorner=boxCorners.OrderBy(c=>c.GetDistanceTo(cloudCorner)).First();var leader=new Polyline();leader.AddVertexAt(0,cloudCorner,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=localText.Z;leader.TransformBy(ucsToWcs);Add(space,tr,leader,ids,cloudSettings[k],data.Id,"leader",cloudSettings[k].LeaderColor,data);leaders.Add(leader);}
+                text.TransformBy(ucsToWcs);boxEntity.TransformBy(ucsToWcs);Add(space,tr,text,ids,settings,data.Id,"text",TextColorForStatus(settings,data.Status),data);Add(space,tr,boxEntity,ids,settings,data.Id,"box",settings.SameColors?settings.CloudColor:settings.BoxColor,data);
                 // 编组
                 var groups=(DBDictionary)tr.GetObject(doc.Database.GroupDictionaryId,OpenMode.ForWrite);
                 var group=new Group("LA批注 "+data.Number,true);
@@ -244,55 +247,21 @@ namespace LAAnnotation
         {
             using (doc.LockDocument()) using (var tr = doc.Database.TransactionManager.StartTransaction())
             {
-                EnsureRegApp(doc.Database, tr); EnsureLayer(doc.Database, tr, settings);
+                EnsureRegApp(doc.Database, tr); EnsureLayer(doc.Database, tr, settings,data);
                 var space = (BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId, OpenMode.ForWrite);
                 var ids = new ObjectIdCollection();
 
-                // UCS 对齐：将两个角点转到 UCS 求对齐矩形，再转回 WCS 四个角点
-                var (ucsOrigin, ucsW, ucsH) = UcsAlignedExtents(doc, firstPoint, secondPoint);
-                var ucsZ = ucsOrigin.Z;
-                Point2d[] cloudCorners;
-                if (settings.Shape == "菱形" || settings.Shape == "椭圆")
-                {
-                    // 菱形/椭圆仍用 WCS min/max
-                    var min = new Point2d(Math.Min(firstPoint.X, secondPoint.X), Math.Min(firstPoint.Y, secondPoint.Y));
-                    var max = new Point2d(Math.Max(firstPoint.X, secondPoint.X), Math.Max(firstPoint.Y, secondPoint.Y));
-                    cloudCorners = new[]{min, new Point2d(max.X, min.Y), max, new Point2d(min.X, max.Y)};
-                }
-                else
-                {
-                    var c0 = UcsToWcs(doc, new Point3d(ucsOrigin.X, ucsOrigin.Y, ucsZ));
-                    var c1 = UcsToWcs(doc, new Point3d(ucsOrigin.X + ucsW, ucsOrigin.Y, ucsZ));
-                    var c2 = UcsToWcs(doc, new Point3d(ucsOrigin.X + ucsW, ucsOrigin.Y + ucsH, ucsZ));
-                    var c3 = UcsToWcs(doc, new Point3d(ucsOrigin.X, ucsOrigin.Y + ucsH, ucsZ));
-                    cloudCorners = new[]{new Point2d(c0.X,c0.Y),new Point2d(c1.X,c1.Y),new Point2d(c2.X,c2.Y),new Point2d(c3.X,c3.Y)};
-                }
-
-                // 1. 云线
-                var cloud = (settings.Shape=="矩形") ? BuildCloudFromUcsCorners(cloudCorners, settings) : BuildCloud(new Point2d(cloudCorners[0].X,cloudCorners[0].Y), new Point2d(cloudCorners[2].X,cloudCorners[2].Y), settings);
-                cloud.Elevation = firstPoint.Z; Add(space, tr, cloud, ids, settings, data.Id, "cloud", settings.CloudColor);
-
-                // 2. 多行文字（使用 UCS 原点处的 textLocation）
-                var requestedWidth = settings.FixedWidth ? settings.FixedWidthValue : Math.Max(55.0, settings.TextHeight * 18.0);
-                var margin = settings.TextHeight * 0.5; var innerTextLocation = new Point3d(textLocation.X + margin, textLocation.Y + margin, textLocation.Z);
-                var text = new MText { Location = innerTextLocation, TextHeight = settings.TextHeight, Width = requestedWidth, Contents = FormatText(data, settings), Attachment = AttachmentPoint.BottomLeft };
-                ApplyTextStyle(doc.Database, tr, text, settings.TextStyleName);
-                Add(space, tr, text, ids, settings, data.Id, "text", TextColorForStatus(settings, data.Status));
-
-                // 3. 矩形边框
-                var boxW = Math.Max(text.ActualWidth, settings.TextHeight * 4) + margin * 2; var boxH = Math.Max(text.ActualHeight, settings.TextHeight * 2) + margin * 2;
-                var boxEntity = BuildBox(textLocation, boxW, boxH); boxEntity.Elevation = textLocation.Z; Add(space, tr, boxEntity, ids, settings, data.Id, "box", settings.SameColors ? settings.CloudColor : settings.BoxColor);
-
-                // 4. 斜向引出线：云线最近角 → 文字框最近角
-                var cloudCorner = ClosestCorner4(cloudCorners, textLocation);
-                var boxCorners = new[]{new Point2d(textLocation.X,textLocation.Y),new Point2d(textLocation.X+boxW,textLocation.Y),new Point2d(textLocation.X+boxW,textLocation.Y+boxH),new Point2d(textLocation.X,textLocation.Y+boxH)};
-                var boxCorner = boxCorners.OrderBy(c => c.GetDistanceTo(cloudCorner)).First();
-                var leader = new Polyline(); leader.AddVertexAt(0, cloudCorner, 0, 0, 0); leader.AddVertexAt(1, boxCorner, 0, 0, 0);
-                leader.Elevation = textLocation.Z;
-                Add(space, tr, leader, ids, settings, data.Id, "leader", settings.LeaderColor);
-
-                // 5. 视图旋转补偿
-                if (!settings.ViewTopIsNorth) RotateAnnotationByViewTwist(text, boxEntity, textLocation);
+                var ucsToWcs=GetUcsMatrix(doc);var wcsToUcs=ucsToWcs.Inverse();var first=firstPoint.TransformBy(wcsToUcs);var second=secondPoint.TransformBy(wcsToUcs);var localText=textLocation.TransformBy(wcsToUcs);
+                var min=new Point2d(Math.Min(first.X,second.X),Math.Min(first.Y,second.Y));var max=new Point2d(Math.Max(first.X,second.X),Math.Max(first.Y,second.Y));
+                var cloud=BuildCloud(min,max,settings);cloud.Elevation=first.Z;
+                var requestedWidth=settings.FixedWidth?settings.FixedWidthValue:Math.Max(55.0,settings.TextHeight*18.0);var margin=settings.TextHeight*0.5;
+                var text=new MText{Location=new Point3d(localText.X+margin,localText.Y+margin,localText.Z),TextHeight=settings.TextHeight,Width=requestedWidth,Contents=FormatText(data,settings),Attachment=AttachmentPoint.BottomLeft};
+                ApplyTextStyle(doc.Database,tr,text,settings.TextStyleName);
+                var boxW=Math.Max(text.ActualWidth,settings.TextHeight*4)+margin*2;var boxH=Math.Max(text.ActualHeight,settings.TextHeight*2)+margin*2;var boxEntity=BuildBox(localText,boxW,boxH);boxEntity.Elevation=localText.Z;
+                var cloudCorner=ClosestCorner(min,max,localText);var boxCorners=new[]{new Point2d(localText.X,localText.Y),new Point2d(localText.X+boxW,localText.Y),new Point2d(localText.X+boxW,localText.Y+boxH),new Point2d(localText.X,localText.Y+boxH)};var boxCorner=boxCorners.OrderBy(c=>c.GetDistanceTo(cloudCorner)).First();
+                var leader=new Polyline();leader.AddVertexAt(0,cloudCorner,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=localText.Z;
+                cloud.TransformBy(ucsToWcs);text.TransformBy(ucsToWcs);boxEntity.TransformBy(ucsToWcs);leader.TransformBy(ucsToWcs);
+                Add(space,tr,cloud,ids,settings,data.Id,"cloud",settings.CloudColor,data);Add(space,tr,text,ids,settings,data.Id,"text",TextColorForStatus(settings,data.Status),data);Add(space,tr,boxEntity,ids,settings,data.Id,"box",settings.SameColors?settings.CloudColor:settings.BoxColor,data);Add(space,tr,leader,ids,settings,data.Id,"leader",settings.LeaderColor,data);
 
                 var groups = (DBDictionary)tr.GetObject(doc.Database.GroupDictionaryId, OpenMode.ForWrite);
                 var group = new Group("LA批注 " + data.Number, true);
@@ -324,14 +293,18 @@ namespace LAAnnotation
                 var groupName = GroupPrefix + id; if (!groups.Contains(groupName)) return false;
                 var group = (Group)tr.GetObject(groups.GetAt(groupName), OpenMode.ForWrite);
                 if (!Contains(group, entityId)) return false;
+                var existingSettings=SettingsForExisting(data);
+                EnsureLayer(doc.Database,tr,existingSettings,data);
+                var targetLayer=EffectiveLayer(existingSettings,data);
                 MText changedText=null;Polyline box=null;var leaders=new List<Polyline>();
                 foreach (ObjectId oid in group.GetAllEntityIds())
                 {
                     if(!oid.IsValid||oid.IsErased)continue;
                     var entity = tr.GetObject(oid, OpenMode.ForWrite, false) as Entity;
+                    if(entity==null)continue;
+                    entity.Layer=targetLayer;
                     if (entity is MText text)
                     {
-                        var existingSettings=SettingsForExisting(data);
                         text.Contents=FormatText(data,existingSettings);
                         text.Color=Color.FromColorIndex(ColorMethod.ByAci,TextColorForStatus(existingSettings,data.Status));
                         changedText=text;
@@ -342,17 +315,19 @@ namespace LAAnnotation
                         else if(role=="leader")leaders.Add(poly);
                     }
                 }
-                if(changedText!=null&&box!=null)
+                if(changedText!=null&&box!=null&&box.NumberOfVertices>=4)
                 {
-                    var margin=changedText.TextHeight/2;
-                    var origin=new Point3d(changedText.Location.X-margin,changedText.Location.Y-margin,changedText.Location.Z);
-                    ResizeBox(box,origin,Math.Max(changedText.ActualWidth,changedText.TextHeight*4)+margin*2,Math.Max(changedText.ActualHeight,changedText.TextHeight*2)+margin*2,changedText.Rotation);
+                    var margin=changedText.TextHeight/2;var origin=box.GetPoint2dAt(0);var xVector=box.GetPoint2dAt(1)-origin;var yVector=box.GetPoint2dAt(3)-origin;
+                    var xLength=Math.Max(xVector.Length,1e-9);var yLength=Math.Max(yVector.Length,1e-9);var xAxis=xVector/xLength;var yAxis=yVector/yLength;var width=Math.Max(changedText.ActualWidth,changedText.TextHeight*4)+margin*2;var height=Math.Max(changedText.ActualHeight,changedText.TextHeight*2)+margin*2;
+                    box.SetPointAt(0,origin);
+                    box.SetPointAt(1,origin+xAxis*width);
+                    box.SetPointAt(2,origin+xAxis*width+yAxis*height);
+                    box.SetPointAt(3,origin+yAxis*height);
                     var corners=Enumerable.Range(0,box.NumberOfVertices).Select(box.GetPoint2dAt).ToArray();
                     foreach(var leader in leaders)
                     {
                         if(leader.NumberOfVertices<2)continue;
-                        var anchor=leader.GetPoint2dAt(0);
-                        leader.SetPointAt(leader.NumberOfVertices-1,corners.OrderBy(c=>c.GetDistanceTo(anchor)).First());
+                        var anchor=leader.GetPoint2dAt(0);leader.SetPointAt(leader.NumberOfVertices-1,corners.OrderBy(c=>c.GetDistanceTo(anchor)).First());
                     }
                 }
                 group.Description = "LA批注 " + data.Number; WriteMaster(group, tr, data); tr.Commit(); return true;
@@ -465,6 +440,7 @@ namespace LAAnnotation
                         var ids = group.GetAllEntityIds();
                         ObjectId firstId = ObjectId.Null;
                         foreach (ObjectId oid in ids) { if (oid.IsValid && !oid.IsErased) { firstId = oid; break; } }
+                        if(firstId.IsNull)continue;
                         result.Add(new AnnotationInfo
                         {
                             Id = data.Id, Number = data.Number, Discipline = data.Discipline,
@@ -504,15 +480,22 @@ namespace LAAnnotation
                             }
                         }
                     }
-                    // 缩放到范围 +10% 边距
-                    var delta = ext.MaxPoint - ext.MinPoint;
-                    ext.AddPoint(ext.MinPoint - delta * 0.1);
-                    ext.AddPoint(ext.MaxPoint + delta * 0.1);
+                    // 实体范围是 WCS；视图 CenterPoint/Width/Height 使用 DCS，必须先转换。
                     using (var view = doc.Editor.GetCurrentView())
                     {
-                        view.CenterPoint = new Point2d((ext.MinPoint.X + ext.MaxPoint.X) / 2, (ext.MinPoint.Y + ext.MaxPoint.Y) / 2);
-                        view.Width = Math.Max(ext.MaxPoint.X - ext.MinPoint.X, 1);
-                        view.Height = Math.Max(ext.MaxPoint.Y - ext.MinPoint.Y, 1);
+                        var wcsToDcs=Matrix3d.PlaneToWorld(view.ViewDirection);
+                        wcsToDcs=Matrix3d.Displacement(view.Target-Point3d.Origin)*wcsToDcs;
+                        wcsToDcs=Matrix3d.Rotation(-view.ViewTwist,view.ViewDirection,view.Target)*wcsToDcs;
+                        wcsToDcs=wcsToDcs.Inverse();
+                        var min=ext.MinPoint;var max=ext.MaxPoint;
+                        var dcsCorners=new[]{
+                            new Point3d(min.X,min.Y,min.Z),new Point3d(max.X,min.Y,min.Z),new Point3d(max.X,max.Y,min.Z),new Point3d(min.X,max.Y,min.Z),
+                            new Point3d(min.X,min.Y,max.Z),new Point3d(max.X,min.Y,max.Z),new Point3d(max.X,max.Y,max.Z),new Point3d(min.X,max.Y,max.Z)
+                        }.Select(point=>point.TransformBy(wcsToDcs)).ToArray();
+                        var minX=dcsCorners.Min(point=>point.X);var maxX=dcsCorners.Max(point=>point.X);var minY=dcsCorners.Min(point=>point.Y);var maxY=dcsCorners.Max(point=>point.Y);
+                        var width=Math.Max(maxX-minX,1);var height=Math.Max(maxY-minY,1);var margin=1.2;
+                        view.CenterPoint=new Point2d((minX+maxX)/2,(minY+maxY)/2);
+                        view.Width=width*margin;view.Height=height*margin;
                         doc.Editor.SetCurrentView(view);
                     }
                 }
@@ -556,24 +539,6 @@ namespace LAAnnotation
             return settings.TextColor;
         }
         internal static Polyline BuildBox(Point3d p, double w, double h) { var x=new Polyline();x.AddVertexAt(0,new Point2d(p.X,p.Y),0,0,0);x.AddVertexAt(1,new Point2d(p.X+w,p.Y),0,0,0);x.AddVertexAt(2,new Point2d(p.X+w,p.Y+h),0,0,0);x.AddVertexAt(3,new Point2d(p.X,p.Y+h),0,0,0);x.Closed=true;return x; }
-        /// <summary>根据当前视图扭转角旋转文字和边框，使批注在旋转视图中保持可读。</summary>
-        private static void RotateAnnotationByViewTwist(MText text, Polyline box, Point3d origin)
-        {
-            try
-            {
-                var twist = Convert.ToDouble(CadSystemVariable("VIEWTWIST"));
-                if (Math.Abs(twist) < 1e-9) return;
-                text.Rotation = twist;
-                var cos = Math.Cos(twist); var sin = Math.Sin(twist);
-                for (var i = 0; i < 4; i++)
-                {
-                    var pt = box.GetPoint2dAt(i);
-                    var dx = pt.X - origin.X; var dy = pt.Y - origin.Y;
-                    box.SetPointAt(i, new Point2d(origin.X + dx * cos - dy * sin, origin.Y + dx * sin + dy * cos));
-                }
-            }
-            catch { /* 获取系统变量失败时静默跳过，不中断批注创建 */ }
-        }
         /// <summary>构建云线多段线，支持矩形/菱形/椭圆三种外形，开启 CloudAutoFit 时自适应弧段数。</summary>
         internal static Polyline BuildCloud(Point2d min, Point2d max, AnnotationSettings settings)
         {
@@ -583,11 +548,19 @@ namespace LAAnnotation
             if(perimeter<1e-9){var empty=new Polyline();empty.AddVertexAt(0,min,0,0,0);empty.AddVertexAt(1,max,0,0,0);return empty;}
             var spacing=Math.Max(0.1,radius*2);
             if(settings.CloudAutoFit){var desired=Math.Max(20,Math.Min(160,(int)Math.Ceiling(perimeter/Math.Max(settings.TextHeight*1.2,0.1))));spacing=perimeter/desired;}
-            // 菱形与矩形共用闭合多边形云线算法
-            if(settings.Shape=="菱形"){var cx=(min.X+max.X)/2;var cy=(min.Y+max.Y)/2;return BuildPolygonCloud(new[]{new Point2d(cx,min.Y),new Point2d(max.X,cy),new Point2d(cx,max.Y),new Point2d(min.X,cy)},settings);}
+            // 菱形：使用框选云线专用的四边细分，不进入 PL 多边形校验。
+            if(settings.Shape=="菱形"){var cx=(min.X+max.X)/2;var cy=(min.Y+max.Y)/2;return BuildRegionCloudPath(new[]{new Point2d(cx,min.Y),new Point2d(max.X,cy),new Point2d(cx,max.Y),new Point2d(min.X,cy)},spacing,settings.CloudStyle);}
             // 椭圆：自适应采样点数
             if(settings.Shape=="椭圆"){var cx=(min.X+max.X)/2;var cy=(min.Y+max.Y)/2;var rx=w/2;var ry=h/2;var count=Math.Max(20,Math.Min(160,(int)Math.Ceiling(perimeter/spacing)));var points=new List<Point2d>();for(var i=0;i<count;i++){var a=2*Math.PI*i/count;points.Add(new Point2d(cx+rx*Math.Cos(a),cy+ry*Math.Sin(a)));}return BuildScallopedVertices(points,settings.CloudStyle);}
-            return BuildPolygonCloud(new[]{min,new Point2d(max.X,min.Y),max,new Point2d(min.X,max.Y)},settings);
+            // 矩形：按宽高分别均匀布点，与任意折点的 PL 云线算法完全分离。
+            var nx=Math.Max(4,(int)Math.Ceiling(w/spacing));var ny=Math.Max(4,(int)Math.Ceiling(h/spacing));
+            const int maxVertices=400;var total=2*(nx+ny);if(total>maxVertices){var scale=(double)maxVertices/total;nx=Math.Max(4,(int)Math.Floor(nx*scale));ny=Math.Max(4,(int)Math.Floor(ny*scale));}
+            var rectanglePoints=new List<Point2d>(2*(nx+ny));
+            for(var i=0;i<nx;i++)rectanglePoints.Add(new Point2d(min.X+w*i/nx,min.Y));
+            for(var i=0;i<ny;i++)rectanglePoints.Add(new Point2d(max.X,min.Y+h*i/ny));
+            for(var i=0;i<nx;i++)rectanglePoints.Add(new Point2d(max.X-w*i/nx,max.Y));
+            for(var i=0;i<ny;i++)rectanglePoints.Add(new Point2d(min.X,max.Y-h*i/ny));
+            return BuildScallopedVertices(rectanglePoints,settings.CloudStyle);
         }
         /// <summary>计算各外形的近似周长，用于自适应弧段数。</summary>
         private static double ComputePerimeter(double w, double h, string shape)
@@ -596,27 +569,58 @@ namespace LAAnnotation
             if(shape=="椭圆") return Math.PI*(w+h)/2*1.05;        // 椭圆近似周长
             return 2*(w+h);                                        // 矩形周长
         }
+        /// <summary>按当前 UCS 对齐的四个 WCS 角点构建框选云线。</summary>
+        internal static Polyline BuildRegionCloud(Point2d[] corners,AnnotationSettings settings)
+        {
+            if(settings.Shape=="菱形")
+            {
+                var diamond=new[]{MidPoint(corners[0],corners[1]),MidPoint(corners[1],corners[2]),MidPoint(corners[2],corners[3]),MidPoint(corners[3],corners[0])};
+                return BuildCloudFromUcsCorners(diamond,settings);
+            }
+            if(settings.Shape=="椭圆")
+            {
+                var center=new Point2d((corners[0].X+corners[2].X)/2,(corners[0].Y+corners[2].Y)/2);
+                var axisX=new Vector2d((corners[1].X-corners[0].X)/2,(corners[1].Y-corners[0].Y)/2);
+                var axisY=new Vector2d((corners[3].X-corners[0].X)/2,(corners[3].Y-corners[0].Y)/2);
+                var perimeter=Math.PI*(axisX.Length+axisY.Length)*1.05;var spacing=Math.Max(settings.CloudRadius*2,0.1);
+                if(settings.CloudAutoFit){var desired=Math.Max(20,Math.Min(160,(int)Math.Ceiling(perimeter/Math.Max(settings.TextHeight*1.2,0.1))));spacing=perimeter/desired;}
+                var count=Math.Max(20,Math.Min(160,(int)Math.Ceiling(perimeter/spacing)));var points=new List<Point2d>(count);
+                for(var i=0;i<count;i++){var angle=2*Math.PI*i/count;points.Add(center+axisX*Math.Cos(angle)+axisY*Math.Sin(angle));}
+                return BuildScallopedVertices(points,settings.CloudStyle);
+            }
+            return BuildCloudFromUcsCorners(corners,settings);
+        }
+
+        private static Point2d MidPoint(Point2d a,Point2d b)=>new Point2d((a.X+b.X)/2,(a.Y+b.Y)/2);
+
         /// <summary>用四个角点（WCS）构建 UCS 对齐云线（仅矩形外形）。</summary>
         internal static Polyline BuildCloudFromUcsCorners(Point2d[] wcsCorners,AnnotationSettings settings)
         {
-            return BuildPolygonCloud(wcsCorners,settings);
+            var spacing=Math.Max(settings.CloudRadius*2,0.1);
+            var perimeter=0.0;for(var i=0;i<wcsCorners.Length;i++)perimeter+=wcsCorners[i].GetDistanceTo(wcsCorners[(i+1)%wcsCorners.Length]);
+            if(settings.CloudAutoFit){var desired=Math.Max(20,Math.Min(160,(int)Math.Ceiling(perimeter/Math.Max(settings.TextHeight*1.2,0.1))));spacing=perimeter/desired;}
+            return BuildRegionCloudPath(wcsCorners,spacing,settings.CloudStyle);
+        }
+
+        /// <summary>框选区域专用云线路径细分；矩形和菱形不经过 PL 折点校验。</summary>
+        private static Polyline BuildRegionCloudPath(IList<Point2d> corners,double spacing,string style)
+        {
+            var points=new List<Point2d>();
+            for(var i=0;i<corners.Count;i++)
+            {
+                var a=corners[i];var b=corners[(i+1)%corners.Count];
+                var count=Math.Min(100,Math.Max(4,(int)Math.Ceiling(a.GetDistanceTo(b)/Math.Max(spacing,0.1))));
+                for(var j=0;j<count;j++)points.Add(new Point2d(a.X+(b.X-a.X)*j/count,a.Y+(b.Y-a.Y)*j/count));
+            }
+            return BuildScallopedVertices(points,style);
         }
 
         internal static Point2d ClosestCorner(Point2d min,Point2d max,Point3d p){var target=new Point2d(p.X,p.Y);var a=new[]{min,new Point2d(max.X,min.Y),max,new Point2d(min.X,max.Y)};return a.OrderBy(x=>x.GetDistanceTo(target)).First();}
         /// <summary>给定 4 个 WCS 角点，找离目标最近的角。</summary>
         internal static Point2d ClosestCorner4(Point2d[] corners,Point3d p){var target=new Point2d(p.X,p.Y);return corners.OrderBy(c=>c.GetDistanceTo(target)).First();}
         private static bool Contains(Group group,ObjectId id){foreach(ObjectId member in group.GetAllEntityIds())if(member==id)return true;return false;}
-        private static void Add(BlockTableRecord space,Transaction tr,Entity e,ObjectIdCollection ids,AnnotationSettings s,string id,string role,short color){e.Layer=EffectiveLayer(s);e.Color=Color.FromColorIndex(ColorMethod.ByAci,color);if(e is Polyline p&&s.LineWidth>0&&(role=="cloud"||role=="leader"))p.ConstantWidth=s.LineWidth;e.XData=new ResultBuffer(new TypedValue((int)DxfCode.ExtendedDataRegAppName,AnnotationCodec.AppName),new TypedValue((int)DxfCode.ExtendedDataAsciiString,id),new TypedValue((int)DxfCode.ExtendedDataAsciiString,role));ids.Add(space.AppendEntity(e));tr.AddNewlyCreatedDBObject(e,true);}
+        private static void Add(BlockTableRecord space,Transaction tr,Entity e,ObjectIdCollection ids,AnnotationSettings s,string id,string role,short color,AnnotationData data=null){e.Layer=EffectiveLayer(s,data);e.Color=Color.FromColorIndex(ColorMethod.ByAci,color);if(e is Polyline p&&s.LineWidth>0&&(role=="cloud"||role=="leader"))p.ConstantWidth=s.LineWidth;e.XData=new ResultBuffer(new TypedValue((int)DxfCode.ExtendedDataRegAppName,AnnotationCodec.AppName),new TypedValue((int)DxfCode.ExtendedDataAsciiString,id),new TypedValue((int)DxfCode.ExtendedDataAsciiString,role));ids.Add(space.AppendEntity(e));tr.AddNewlyCreatedDBObject(e,true);}
         private static bool TryGetRole(Entity e,out string role){role=null;var rb=e.GetXDataForApplication(AnnotationCodec.AppName);if(rb==null)return false;var a=rb.AsArray();if(a.Length<3)return false;role=a[2].Value as string;return role!=null;}
-        private static void ResizeBox(Polyline box,Point3d p,double w,double h,double rotation)
-        {
-            var cos=Math.Cos(rotation);var sin=Math.Sin(rotation);
-            var offsets=new[]{new Point2d(0,0),new Point2d(w,0),new Point2d(w,h),new Point2d(0,h)};
-            for(var i=0;i<offsets.Length;i++)
-            {
-                var o=offsets[i];box.SetPointAt(i,new Point2d(p.X+o.X*cos-o.Y*sin,p.Y+o.X*sin+o.Y*cos));
-            }
-        }
         /// <summary>矩形、菱形、UCS 矩形和 PL 线共用的闭合多边形云线算法。</summary>
         internal static Polyline BuildPolygonCloud(IList<Point2d> sourcePoints,AnnotationSettings settings)
         {
@@ -722,7 +726,21 @@ namespace LAAnnotation
         }
         /// <summary>沿顶点序列生成锯齿云线，始终闭合。</summary>
         internal static Polyline BuildScallopedVertices(IList<Point2d> points,string style){var p=new Polyline();for(var i=0;i<points.Count;i++)p.AddVertexAt(i,points[i],style=="等宽"?-0.55:(i%2==0?-0.35:-0.7),0,0);p.Closed=true;return p;}
-        internal static string EffectiveLayer(AnnotationSettings s){var parts=new List<string>{s.LayerName};if(s.LayerAppendDate&&s.DateBeforeName)parts.Add(DateTime.Today.ToString("yyyyMMdd"));if(s.LayerAppendName)parts.Add(s.DefaultAuthor);if(s.LayerAppendDate&&!s.DateBeforeName)parts.Add(DateTime.Today.ToString("yyyyMMdd"));var connector=s.Connector=="无"?"":s.Connector;return string.Join(connector,parts.Where(x=>!string.IsNullOrWhiteSpace(x)));}
+        internal static string EffectiveLayer(AnnotationSettings s,AnnotationData data=null)
+        {
+            var date=DateTime.Today;
+            if(data!=null&&!string.IsNullOrWhiteSpace(data.Date))
+            {
+                if(DateTime.TryParseExact(data.Date,"yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.None,out var parsedDate))date=parsedDate;
+            }
+            var author=data!=null&&!string.IsNullOrWhiteSpace(data.Author)?data.Author:s.DefaultAuthor;
+            var parts=new List<string>{s.LayerName};
+            if(s.LayerAppendDate&&s.DateBeforeName)parts.Add(date.ToString("yyyyMMdd"));
+            if(s.LayerAppendName)parts.Add(author);
+            if(s.LayerAppendDate&&!s.DateBeforeName)parts.Add(date.ToString("yyyyMMdd"));
+            var connector=s.Connector=="无"?"":s.Connector;
+            return string.Join(connector,parts.Where(x=>!string.IsNullOrWhiteSpace(x)));
+        }
         /// <summary>应用文字样式；若指定样式不存在则记录警告并回退为默认样式。</summary>
         private static void ApplyTextStyle(Database db,Transaction tr,MText text,string name)
         {
@@ -749,6 +767,16 @@ namespace LAAnnotation
         internal static (Point3d origin,double w,double h) UcsAlignedExtents(Document doc,Point3d a,Point3d b){var ua=WcsToUcs(doc,a);var ub=WcsToUcs(doc,b);return (new Point3d(Math.Min(ua.X,ub.X),Math.Min(ua.Y,ub.Y),ua.Z),Math.Abs(ub.X-ua.X),Math.Abs(ub.Y-ua.Y));}
 
         private static void EnsureRegApp(Database db,Transaction tr){var t=(RegAppTable)tr.GetObject(db.RegAppTableId,OpenMode.ForRead);if(t.Has(AnnotationCodec.AppName))return;t.UpgradeOpen();var r=new RegAppTableRecord{Name=AnnotationCodec.AppName};t.Add(r);tr.AddNewlyCreatedDBObject(r,true);}
-        private static void EnsureLayer(Database db,Transaction tr,AnnotationSettings s){var name=EffectiveLayer(s);var t=(LayerTable)tr.GetObject(db.LayerTableId,OpenMode.ForRead);if(t.Has(name))return;t.UpgradeOpen();var r=new LayerTableRecord{Name=name,Color=Color.FromColorIndex(ColorMethod.ByAci,s.CloudColor),IsPlottable=s.Plottable};t.Add(r);tr.AddNewlyCreatedDBObject(r,true);}
+        private static void EnsureLayer(Database db,Transaction tr,AnnotationSettings s,AnnotationData data=null)
+        {
+            var name=EffectiveLayer(s,data);var t=(LayerTable)tr.GetObject(db.LayerTableId,OpenMode.ForRead);
+            if(t.Has(name))
+            {
+                var existing=(LayerTableRecord)tr.GetObject(t[name],OpenMode.ForWrite);
+                existing.IsPlottable=s.Plottable;
+                return;
+            }
+            t.UpgradeOpen();var r=new LayerTableRecord{Name=name,Color=Color.FromColorIndex(ColorMethod.ByAci,s.CloudColor),IsPlottable=s.Plottable};t.Add(r);tr.AddNewlyCreatedDBObject(r,true);
+        }
     }
 }
