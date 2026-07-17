@@ -24,18 +24,18 @@ namespace LAAnnotation
     internal sealed class AnnotationSettings
     {
         public string Shape { get; set; } = "矩形";
-        public string CloudStyle { get; set; } = "渐变";
+        public string CloudStyle { get; set; } = "等宽";
         public string LayerName { get; set; } = "LA-批注";
         public string TextStyleName { get; set; } = "Standard";
         public short ColorIndex { get; set; } = 6;
         public short CloudColor { get; set; } = 6;
         public short LeaderColor { get; set; } = 6;
-        public short TextColor { get; set; } = 1;
-        public short BoxColor { get; set; } = 5;
+        public short TextColor { get; set; } = 6;
+        public short BoxColor { get; set; } = 6;
         public short ReplyColor { get; set; } = 6;
         public short ScreenshotBackgroundColor { get; set; } = 7;
-        public short PassColor { get; set; } = 3;
-        public short CheckColor { get; set; } = 3;
+        public short PassColor { get; set; } = 6;
+        public short CheckColor { get; set; } = 6;
         public bool ScreenshotBackgroundOnceReply { get; set; } = false;
         public double TextHeight { get; set; } = 3.0;
         public double HeaderHeight { get; set; } = 3.0;
@@ -48,7 +48,7 @@ namespace LAAnnotation
         public bool FixedWidth { get; set; } = false;
         public double FixedWidthValue { get; set; } = 55.0;
         public string DefaultAuthor { get; set; } = Environment.UserName;
-        public string DefaultDiscipline { get; set; } = "建筑";
+        public string DefaultDiscipline { get; set; } = "岩土";
         public string DefaultRole { get; set; } = "批注人";
         public bool AutoNumber { get; set; } = true;
         public int NextNumber { get; set; } = 1;
@@ -56,7 +56,7 @@ namespace LAAnnotation
         public bool AutoCloseSnap { get; set; } = true;
         public bool ViewTopIsNorth { get; set; } = true;
         public bool DoubleClickEdit { get; set; } = true;
-        public bool ContinuousAnnotation { get; set; } = false;
+        public bool ContinuousAnnotation { get; set; } = true;
         public bool CloudOnly { get; set; } = false;
         public bool SameColors { get; set; } = true;
         public bool LayerAppendDate { get; set; } = true;
@@ -65,7 +65,7 @@ namespace LAAnnotation
         public string Connector { get; set; } = "-";
         public bool Plottable { get; set; } = false;
         public double CheckHeight { get; set; } = 8.0;
-        public double AutoTextViewPercent { get; set; } = 4.0; // 字高 ≈ 云线对角线 × 此百分比
+        public double AutoTextViewPercent { get; set; } = 5.0; // 字高 ≈ 云线对角线 × 此百分比
 
         public AnnotationSettings Clone() => (AnnotationSettings)MemberwiseClone();
     }

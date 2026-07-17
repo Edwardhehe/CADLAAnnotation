@@ -57,6 +57,53 @@ namespace LAAnnotation.Views
             if (info.FirstEntityId.IsValid) AnnotationService.ZoomToAnnotation(doc, info.FirstEntityId);
         }
 
+        private void Delete_Click(object sender, RoutedEventArgs e)
+        {
+            var info = AnnotationList.SelectedItem
+                as AnnotationService.AnnotationInfo;
+            if (info == null)
+            {
+                return;
+            }
+
+            var doc = CadApplication.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+            {
+                return;
+            }
+
+            var result = MessageBox.Show(
+                $"确定要删除批注 {info.Number} 吗？",
+                "LA批注",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (result != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            try
+            {
+                if (!AnnotationService.Delete(doc, info.FirstEntityId))
+                {
+                    doc.Editor.WriteMessage(
+                        "\n删除失败：批注实体已不存在。");
+                }
+                else
+                {
+                    doc.Editor.WriteMessage(
+                        $"\nLA批注 {info.Number} 已删除。");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                doc.Editor.WriteMessage(
+                    "\n删除批注失败: " + ex.Message);
+            }
+
+            LoadAnnotations();
+        }
+
         private void Refresh_Click(object sender, RoutedEventArgs e) => LoadAnnotations();
     }
 }
