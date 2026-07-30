@@ -599,6 +599,161 @@ namespace LAAnnotation
             }
         }
 
+        /// <summary>批注汇总用的轻量条目：业务数据 + 文字高度 + 批注框角点（WCS）。</summary>
+        private sealed class SummaryItem
+        {
+            public AnnotationData Data;
+            public double TextHeight;
+            public Point2d[] BoxCorners;
+            public double BoxElevation;
+        }
+
+        /// <summary>批注汇总：框选批注（窗口/窗交均可）后，在用户点击位置绘制"日期+内容"汇总表，并从各批注框引线指向表位。</summary>
+        public static void SummarizeAnnotations(Document doc)
+        {
+            var ed=doc.Editor;
+            var options=new PromptSelectionOptions{MessageForAdding="\n框选要汇总的批注（窗口/窗交均可）: "};
+            var filter=new SelectionFilter(new[]{new TypedValue((int)DxfCode.ExtendedDataRegAppName,AnnotationCodec.AppName)});
+            var selection=ed.GetSelection(options,filter);
+            if(selection.Status!=PromptStatus.OK||selection.Value==null||selection.Value.Count==0){ed.WriteMessage("\n未选择任何批注。");return;}
+
+            // 一个批注的多个子实体可能同时被选中，按批注 Id 去重后再读取数据。
+            var items=new List<SummaryItem>();
+            var seen=new HashSet<string>(StringComparer.Ordinal);
+            using(var tr=doc.Database.TransactionManager.StartTransaction())
+            {
+                var groups=(DBDictionary)tr.GetObject(doc.Database.GroupDictionaryId,OpenMode.ForRead);
+                foreach(SelectedObject selected in selection.Value)
+                {
+                    if(selected==null)continue;
+                    var entity=tr.GetObject(selected.ObjectId,OpenMode.ForRead,false) as Entity;
+                    if(entity==null||!TryGetId(entity,out var id)||!seen.Add(id))continue;
+                    var groupName=GroupPrefix+id;if(!groups.Contains(groupName))continue;
+                    var group=(Group)tr.GetObject(groups.GetAt(groupName),OpenMode.ForRead);
+                    if(!TryReadMaster(group,tr,out var data))continue;
+                    Polyline box=null;var measuredHeight=0.0;
+                    foreach(ObjectId member in group.GetAllEntityIds())
+                    {
+                        if(!member.IsValid||member.IsErased)continue;
+                        var memberEntity=tr.GetObject(member,OpenMode.ForRead,false) as Entity;
+                        if(memberEntity==null)continue;
+                        if(box==null&&memberEntity is Polyline poly&&TryGetRole(memberEntity,out var role)&&role=="box")box=poly;
+                        else if(measuredHeight<=0&&memberEntity is MText mtext)measuredHeight=mtext.TextHeight;
+                    }
+                    items.Add(new SummaryItem
+                    {
+                        Data=data,
+                        TextHeight=data.RenderTextHeight>0?data.RenderTextHeight:measuredHeight,
+                        BoxCorners=box!=null&&box.NumberOfVertices>=4
+                            ?Enumerable.Range(0,box.NumberOfVertices).Select(i=>box.GetPoint2dAt(i)).ToArray()
+                            :null,
+                        BoxElevation=box!=null?box.Elevation:0
+                    });
+                }
+            }
+            if(items.Count==0){ed.WriteMessage("\n所选对象中没有有效的 LA批注。");return;}
+            items=items.OrderBy(x=>x.Data.Number,StringComparer.OrdinalIgnoreCase).ToList();
+
+            var placement=ed.GetPoint("\n指定批注汇总表位置: ");
+            if(placement.Status!=PromptStatus.OK)return;
+
+            var settings=SettingsStore.Load();
+            // 汇总表文字高度 = 全部选中批注文字高度的平均值。
+            var textHeight=items.Average(x=>x.TextHeight>0?x.TextHeight:settings.TextHeight);
+            CreateSummaryTable(doc,settings,items,placement.Value,textHeight);
+            ed.WriteMessage($"\n已生成 {items.Count} 条批注的汇总表。");
+        }
+
+        /// <summary>在指定位置绘制批注汇总表（日期+内容两列），并从各批注框绘制引线指向表位左上角。</summary>
+        private static void CreateSummaryTable(Document doc,AnnotationSettings settings,List<SummaryItem> items,Point3d ucsPoint,double textHeight)
+        {
+            using(doc.LockDocument())using(var tr=doc.Database.TransactionManager.StartTransaction())
+            {
+                EnsureLayer(doc.Database,tr,settings);
+                var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
+                var ucsToWcs=GetUcsMatrix(doc);var wcsToUcs=ucsToWcs.Inverse();
+                // GetPoint 返回 UCS 坐标，其数值即局部坐标；几何在局部坐标构建后统一 TransformBy(ucsToWcs)。
+                var origin=new Point3d(ucsPoint.X,ucsPoint.Y,ucsPoint.Z);
+                var margin=textHeight*0.5;
+                var layer=EffectiveLayer(settings);
+                var gridColor=Color.FromColorIndex(ColorMethod.ByAci,settings.BoxColor);
+                var textColor=Color.FromColorIndex(ColorMethod.ByAci,settings.TextColor);
+                var leaderColor=Color.FromColorIndex(ColorMethod.ByAci,settings.LeaderColor);
+
+                // 列宽：日期列取最长日期的实际宽度；内容列取最长单行宽度，超过上限时按上限换行。
+                var dateInner=0.0;var contentNatural=0.0;
+                foreach(var item in items)
+                {
+                    using(var dateText=new MText{TextHeight=textHeight,Contents=Escape(item.Data.Date)})
+                    {
+                        ApplyTextStyle(doc.Database,tr,dateText,settings.TextStyleName);
+                        dateInner=Math.Max(dateInner,dateText.ActualWidth);
+                    }
+                    using(var contentText=new MText{TextHeight=textHeight,Contents=EscapeContent(item.Data.Content)})
+                    {
+                        ApplyTextStyle(doc.Database,tr,contentText,settings.TextStyleName);
+                        contentNatural=Math.Max(contentNatural,contentText.ActualWidth);
+                    }
+                }
+                var contentInner=Math.Min(Math.Max(contentNatural,textHeight*6),textHeight*50);
+                var dateWidth=dateInner+margin*2;var contentWidth=contentInner+margin*2;
+
+                // 行高随内容换行后的实际高度自适应。
+                var rowHeights=new double[items.Count];var totalHeight=0.0;
+                for(var i=0;i<items.Count;i++)
+                {
+                    using(var contentText=new MText{TextHeight=textHeight,Width=contentInner,Contents=EscapeContent(items[i].Data.Content)})
+                    {
+                        ApplyTextStyle(doc.Database,tr,contentText,settings.TextStyleName);
+                        rowHeights[i]=Math.Max(contentText.ActualHeight,textHeight)+margin*2;
+                    }
+                    totalHeight+=rowHeights[i];
+                }
+                var tableWidth=dateWidth+contentWidth;
+
+                void Append(Entity entity,Color color)
+                {
+                    entity.Layer=layer;entity.Color=color;
+                    entity.TransformBy(ucsToWcs);
+                    space.AppendEntity(entity);tr.AddNewlyCreatedDBObject(entity,true);
+                }
+
+                // 表格外框 + 行列分隔线（origin 为表格左上角）。
+                Append(BuildBox(new Point3d(origin.X,origin.Y-totalHeight,origin.Z),tableWidth,totalHeight),gridColor);
+                Append(new Line(new Point3d(origin.X+dateWidth,origin.Y,origin.Z),new Point3d(origin.X+dateWidth,origin.Y-totalHeight,origin.Z)),gridColor);
+                var rowTop=origin.Y;
+                for(var i=0;i<items.Count;i++)
+                {
+                    var rowBottom=rowTop-rowHeights[i];
+                    Append(new Line(new Point3d(origin.X,rowBottom,origin.Z),new Point3d(origin.X+tableWidth,rowBottom,origin.Z)),gridColor);
+                    var dateCell=new MText{Location=new Point3d(origin.X+margin,rowTop-margin,origin.Z),TextHeight=textHeight,Contents=Escape(items[i].Data.Date),Attachment=AttachmentPoint.TopLeft};
+                    ApplyTextStyle(doc.Database,tr,dateCell,settings.TextStyleName);
+                    Append(dateCell,textColor);
+                    var contentCell=new MText{Location=new Point3d(origin.X+dateWidth+margin,rowTop-margin,origin.Z),TextHeight=textHeight,Width=contentInner,Contents=EscapeContent(items[i].Data.Content),Attachment=AttachmentPoint.TopLeft};
+                    ApplyTextStyle(doc.Database,tr,contentCell,settings.TextStyleName);
+                    Append(contentCell,textColor);
+                    rowTop=rowBottom;
+                }
+
+                // 各批注框的引线汇总到用户点击的点位（表格左上角）。
+                foreach(var item in items)
+                {
+                    if(item.BoxCorners==null||item.BoxCorners.Length==0)continue;
+                    var localCorners=item.BoxCorners.Select(c=>{var w=new Point3d(c.X,c.Y,item.BoxElevation).TransformBy(wcsToUcs);return new Point2d(w.X,w.Y);}).ToArray();
+                    var anchor=localCorners.OrderBy(c=>c.GetDistanceTo(new Point2d(origin.X,origin.Y))).First();
+                    var leader=new Polyline();
+                    leader.AddVertexAt(0,anchor,0,0,0);
+                    leader.AddVertexAt(1,new Point2d(origin.X,origin.Y),0,0,0);
+                    leader.Elevation=origin.Z;
+                    if(settings.LineWidth>0)leader.ConstantWidth=settings.LineWidth;
+                    Append(leader,leaderColor);
+                }
+                tr.Commit();
+            }
+        }
+
+        private static string EscapeContent(string content)=>Escape(content).Replace("\r\n","\\P").Replace("\n","\\P");
+
         /// <summary>轻量批注摘要，供列表面板展示。</summary>
         public sealed class AnnotationInfo
         {

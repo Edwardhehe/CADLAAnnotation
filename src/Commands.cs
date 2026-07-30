@@ -209,6 +209,22 @@ namespace LAAnnotation
             AnnotationListPanel.ShowOrActivate();
         }
 
+        /// <summary>批注汇总：框选批注后，在点击位置绘制日期+内容汇总表，并从各批注框引线指向表位。</summary>
+        [CommandMethod("LA_PZ_SUMMARY", CommandFlags.Modal)]
+        public void AnnotationSummary()
+        {
+            var doc = CadApplication.DocumentManager.MdiActiveDocument; if (doc == null) return;
+            try
+            {
+                AnnotationService.SummarizeAnnotations(doc);
+            }
+            catch (System.Exception ex)
+            {
+                doc.Editor.WriteMessage("\n批注汇总失败: " + ex.Message);
+                PluginLog.Error("Summary", ex);
+            }
+        }
+
         /// <summary>切换当前 CAD 宿主的启动自动加载。</summary>
         [CommandMethod("LA_PZ_AUTOLOAD", CommandFlags.Modal)]
         public void ToggleAutoload()
