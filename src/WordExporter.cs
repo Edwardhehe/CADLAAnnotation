@@ -284,25 +284,31 @@ namespace LAAnnotation
 
             private static void WriteImagesParagraph(XmlWriter writer, List<byte[]> images, List<string> relationshipIds, ref int docPrId)
             {
-                writer.WriteStartElement("w", "p", W);
-                // 同一批注的多张云线截图放在同一段落内，超出可用宽度时由 Word 自动换行。
-                var slotWidth = UsableWidthEmu / Math.Min(images.Count, 3);
-                for (var i = 0; i < images.Count; i++)
+                // 每行最多两张图片，分批写入独立段落。
+                const int perRow = 2;
+                for (var rowStart = 0; rowStart < images.Count; rowStart += perRow)
                 {
-                    Size pixelSize;
-                    using (var stream = new MemoryStream(images[i]))
-                    using (var bitmap = new Bitmap(stream)) pixelSize = bitmap.Size;
-                    var cx = Math.Min(slotWidth, pixelSize.Width * EmuPerPixel);
-                    var cy = cx * pixelSize.Height / Math.Max(1, pixelSize.Width);
-                    if (cy > MaxImageHeightEmu)
+                    var rowEnd = Math.Min(rowStart + perRow, images.Count);
+                    var rowCount = rowEnd - rowStart;
+                    var slotWidth = UsableWidthEmu / rowCount;
+                    writer.WriteStartElement("w", "p", W);
+                    for (var i = rowStart; i < rowEnd; i++)
                     {
-                        cx *= MaxImageHeightEmu / cy;
-                        cy = MaxImageHeightEmu;
+                        Size pixelSize;
+                        using (var stream = new MemoryStream(images[i]))
+                        using (var bitmap = new Bitmap(stream)) pixelSize = bitmap.Size;
+                        var cx = Math.Min(slotWidth, pixelSize.Width * EmuPerPixel);
+                        var cy = cx * pixelSize.Height / Math.Max(1, pixelSize.Width);
+                        if (cy > MaxImageHeightEmu)
+                        {
+                            cx *= MaxImageHeightEmu / cy;
+                            cy = MaxImageHeightEmu;
+                        }
+                        docPrId++;
+                        WriteImageRun(writer, relationshipIds[i], docPrId, (long)cx, (long)cy, "云线范围" + docPrId);
                     }
-                    docPrId++;
-                    WriteImageRun(writer, relationshipIds[i], docPrId, (long)cx, (long)cy, "云线范围" + docPrId);
+                    writer.WriteEndElement(); // p
                 }
-                writer.WriteEndElement(); // p
             }
 
             private static void WriteImageRun(XmlWriter writer, string relationshipId, int docPrId, long cx, long cy, string name)
