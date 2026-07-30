@@ -10,10 +10,11 @@
 
 | CAD 宿主 | DLL |
 |---|---|
-| ZWCAD 2025 | `bin/v0.4.0/ZWCAD/LAAnnotation.ZWCAD.dll` |
-| AutoCAD 2019+ | `bin/v0.4.0/AutoCAD/LAAnnotation.AutoCAD.dll` |
+| AutoCAD 2015~2024 | `bin/v0.4.0/AutoCAD/LAAnnotation.AutoCAD.dll` |
+| AutoCAD 2025~2027 | `bin/v0.4.0/AutoCAD2025/LAAnnotation.AutoCAD2025.dll` |
+| 中望 ZWCAD 2025~2026 | `bin/v0.4.0/ZWCAD/LAAnnotation.ZWCAD.dll` |
 
-**注意**：不要在 AutoCAD 中加载 ZWCAD DLL，反之亦然。
+**注意**：三个 DLL 不可混用，请严格按 CAD 宿主和版本选择。
 
 ### 2. 加载插件
 
@@ -53,6 +54,7 @@ NETLOAD
 | 仅画云线 | 在面板中勾选"仅绘云线"再开始，或 `LA_PZ_CLOUD` |
 | 查看/搜索批注 | `LA_PZ_LIST` 打开批注列表，双击条目可缩放定位 |
 | 批注汇总 | `LA_PZ_SUMMARY`，框选批注后点击汇总表位置，绘制日期+内容汇总表并引线指向各批注框 |
+| 导出Word | `LA_PZ_WORD`，框选或全部导出，每条批注生成"时间+云线范围截图+批注文字" |
 
 ---
 
@@ -133,6 +135,7 @@ NETLOAD
 | `LA_PZ_DELETE` | 删除整条批注 |
 | `LA_PZ_LIST` | 打开批注列表面板 |
 | `LA_PZ_SUMMARY` | 框选批注后绘制日期+内容汇总表，并从各批注框引线指向表位 |
+| `LA_PZ_WORD` | 导出批注到 Word（时间/云线截图/批注文字），支持框选或全部 |
 | `LA_PZ_SETTINGS` | 打开完整设置窗口 |
 | `LA_PZ_AUTOLOAD` | 切换当前 CAD 的启动自动加载 |
 | `LA_PZ_MENU` | 重建顶部"LA批注"菜单 |

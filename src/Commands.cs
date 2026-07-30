@@ -225,6 +225,22 @@ namespace LAAnnotation
             }
         }
 
+        /// <summary>导出批注到 Word：每条批注输出时间、云线范围截图和批注文字。</summary>
+        [CommandMethod("LA_PZ_WORD", CommandFlags.Modal)]
+        public void ExportWord()
+        {
+            var doc = CadApplication.DocumentManager.MdiActiveDocument; if (doc == null) return;
+            try
+            {
+                AnnotationService.ExportAnnotationsToWord(doc);
+            }
+            catch (System.Exception ex)
+            {
+                doc.Editor.WriteMessage("\n导出 Word 失败: " + ex.Message);
+                PluginLog.Error("WordExport", ex);
+            }
+        }
+
         /// <summary>切换当前 CAD 宿主的启动自动加载。</summary>
         [CommandMethod("LA_PZ_AUTOLOAD", CommandFlags.Modal)]
         public void ToggleAutoload()

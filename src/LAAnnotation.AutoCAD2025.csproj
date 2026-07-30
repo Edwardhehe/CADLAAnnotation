@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- AutoCAD 2025~2027（.NET 8）构建：与 net45 的 AutoCAD 2015~2024 工程共用全部源码，仅宿主引用不同。 -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <OutputType>Library</OutputType>
+    <RootNamespace>LAAnnotation</RootNamespace>
+    <AssemblyName>LAAnnotation.AutoCAD2025</AssemblyName>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>latest</LangVersion>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <UseWPF>true</UseWPF>
+    <DefineConstants>AUTOCAD</DefineConstants>
+    <!-- 插件只运行于 Windows 上的 AutoCAD 宿主，注册表 CA1416 平台告警无需提示。 -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- AutoCAD 2025 .Net API 引用（仅编译期，运行时使用 CAD 宿主自带程序集） -->
+    <PackageReference Include="AutoCAD.NET" Version="25.0.1">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <!-- net8 下 Bitmap/GDI 截图所需的 System.Drawing.Common（仅 Windows，CAD 插件场景天然满足） -->
+    <PackageReference Include="System.Drawing.Common" Version="8.0.10" />
+  </ItemGroup>
+</Project>

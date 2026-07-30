@@ -58,6 +58,7 @@ namespace LAAnnotation
                 AddCommandMenuItem(menu, index++, "增补云线", "LA_PZ_ADDCLOUD");
                 AddCommandMenuItem(menu, index++, "批注列表", "LA_PZ_LIST");
                 AddCommandMenuItem(menu, index++, "批注汇总", "LA_PZ_SUMMARY");
+                AddCommandMenuItem(menu, index++, "导出Word", "LA_PZ_WORD");
                 menu.InvokeMethod("AddSeparator", index++);
                 AddCommandMenuItem(menu, index++, "批注设置", "LA_PZ_SETTINGS");
                 AddCommandMenuItem(menu, index++, "设置自动加载", "LA_PZ_AUTOLOAD");

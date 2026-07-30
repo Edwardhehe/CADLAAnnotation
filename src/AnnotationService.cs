@@ -754,6 +754,74 @@ namespace LAAnnotation
 
         private static string EscapeContent(string content)=>Escape(content).Replace("\r\n","\\P").Replace("\n","\\P");
 
+        /// <summary>导出批注到 Word：每条批注输出三行（时间 / 云线范围截图 / 批注文字），支持框选或全部导出。</summary>
+        public static void ExportAnnotationsToWord(Document doc)
+        {
+            var ed=doc.Editor;
+            var keywordOptions=new PromptKeywordOptions("\n导出范围 [框选(K)/全部(A)] <A>: ");
+            keywordOptions.Keywords.Add("K");
+            keywordOptions.Keywords.Add("A");
+            keywordOptions.Keywords.Default="A";
+            keywordOptions.AllowNone=true;
+            var keyword=ed.GetKeywords(keywordOptions);
+            if(keyword.Status!=PromptStatus.OK&&keyword.Status!=PromptStatus.None)return;
+            var exportAll=keyword.Status==PromptStatus.None||keyword.StringResult=="A";
+
+            HashSet<string> filter=null;
+            if(!exportAll)
+            {
+                var options=new PromptSelectionOptions{MessageForAdding="\n框选要导出的批注（窗口/窗交均可）: "};
+                var selectionFilter=new SelectionFilter(new[]{new TypedValue((int)DxfCode.ExtendedDataRegAppName,AnnotationCodec.AppName)});
+                var selection=ed.GetSelection(options,selectionFilter);
+                if(selection.Status!=PromptStatus.OK||selection.Value==null||selection.Value.Count==0){ed.WriteMessage("\n未选择任何批注。");return;}
+                filter=new HashSet<string>(StringComparer.Ordinal);
+                using(var tr=doc.Database.TransactionManager.StartTransaction())
+                {
+                    foreach(SelectedObject selected in selection.Value)
+                    {
+                        if(selected==null)continue;
+                        var entity=tr.GetObject(selected.ObjectId,OpenMode.ForRead,false) as Entity;
+                        if(entity!=null&&TryGetId(entity,out var id))filter.Add(id);
+                    }
+                }
+                if(filter.Count==0){ed.WriteMessage("\n所选对象中没有有效的 LA批注。");return;}
+            }
+
+            var entries=CollectWordEntries(doc,filter);
+            if(entries.Count==0){ed.WriteMessage("\n当前图纸中没有可导出的 LA批注。");return;}
+            WordExporter.Export(doc,entries);
+        }
+
+        /// <summary>收集导出条目：复用 GetAllAnnotations 保证与列表面板内容完全一致，再补充云线 WCS 范围。</summary>
+        private static List<AnnotationWordEntry> CollectWordEntries(Document doc,HashSet<string> filter)
+        {
+            // 直接复用批注列表面板的数据源，确保导出内容与面板完全统一。
+            var allAnnotations=GetAllAnnotations(doc);
+            var entries=new List<AnnotationWordEntry>();
+            using(var tr=doc.Database.TransactionManager.StartTransaction())
+            {
+                var groups=(DBDictionary)tr.GetObject(doc.Database.GroupDictionaryId,OpenMode.ForRead);
+                foreach(var info in allAnnotations)
+                {
+                    if(filter!=null&&!filter.Contains(info.Id))continue;
+                    var groupName=GroupPrefix+info.Id;
+                    if(!groups.Contains(groupName))continue;
+                    var group=(Group)tr.GetObject(groups.GetAt(groupName),OpenMode.ForRead);
+                    var clouds=new List<Extents3d>();
+                    foreach(ObjectId member in group.GetAllEntityIds())
+                    {
+                        if(!member.IsValid||member.IsErased)continue;
+                        var entity=tr.GetObject(member,OpenMode.ForRead,false) as Entity;
+                        if(entity==null)continue;
+                        if(!TryGetRole(entity,out var role)||role!="cloud")continue;
+                        try{clouds.Add(entity.GeometricExtents);}catch{/* 忽略无法计算范围的云线 */}
+                    }
+                    entries.Add(new AnnotationWordEntry{Number=info.Number,Date=info.Date,Content=info.Content,CloudExtents=clouds});
+                }
+            }
+            return entries; // GetAllAnnotations 已按编号排序
+        }
+
         /// <summary>轻量批注摘要，供列表面板展示。</summary>
         public sealed class AnnotationInfo
         {
