@@ -268,6 +268,53 @@ namespace LAAnnotation
             }
         }
 
+        /// <summary>增补云线：向既有批注编组追加一条云线和一条连到原文字框的引出线。</summary>
+        public static bool AppendCloud(Document doc, AnnotationData data, Point3d firstPoint, Point3d secondPoint)
+        {
+            using(doc.LockDocument())using(var tr=doc.Database.TransactionManager.StartTransaction())
+            {
+                var groups=(DBDictionary)tr.GetObject(doc.Database.GroupDictionaryId,OpenMode.ForRead);
+                var groupName=GroupPrefix+data.Id;if(!groups.Contains(groupName))return false;
+                var group=(Group)tr.GetObject(groups.GetAt(groupName),OpenMode.ForWrite);
+                // 找文字框（role=box）作为引线锚点；找不到时退化为编组内文字的位置。
+                Polyline box=null;Point3d textWcs=Point3d.Origin;var hasText=false;
+                foreach(ObjectId member in group.GetAllEntityIds())
+                {
+                    if(!member.IsValid||member.IsErased)continue;
+                    var entity=tr.GetObject(member,OpenMode.ForRead,false) as Entity;
+                    if(entity==null)continue;
+                    if(box==null&&entity is Polyline poly&&TryGetRole(entity,out var role)&&role=="box")box=poly;
+                    else if(!hasText&&entity is MText mtext){textWcs=mtext.Location;hasText=true;}
+                }
+                var baseSettings=SettingsForExisting(data);
+                EnsureRegApp(doc.Database,tr);EnsureLayer(doc.Database,tr,baseSettings,data);
+                var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
+                var ids=new ObjectIdCollection();
+                var ucsToWcs=GetUcsMatrix(doc);var wcsToUcs=ucsToWcs.Inverse();
+                var first=firstPoint.TransformBy(wcsToUcs);var second=secondPoint.TransformBy(wcsToUcs);
+                var min=new Point2d(Math.Min(first.X,second.X),Math.Min(first.Y,second.Y));var max=new Point2d(Math.Max(first.X,second.X),Math.Max(first.Y,second.Y));
+                var width=max.X-min.X;var height=max.Y-min.Y;
+                var effective=ResolveEffectiveSettings(doc,baseSettings,new AnnotationData(),Math.Sqrt(width*width+height*height));
+                var cloud=BuildCloud(min,max,effective);cloud.Elevation=first.Z;
+                // 引线锚点目标：文字框四角（无框时用文字位置），统一转到 UCS 局部坐标比较。
+                Point3d targetLocal;Point2d[] boxCornersLocal=null;
+                if(box!=null&&box.NumberOfVertices>=4)
+                {
+                    boxCornersLocal=Enumerable.Range(0,box.NumberOfVertices).Select(i=>{var p=box.GetPoint2dAt(i);var w=new Point3d(p.X,p.Y,box.Elevation).TransformBy(wcsToUcs);return new Point2d(w.X,w.Y);}).ToArray();
+                    targetLocal=new Point3d(boxCornersLocal.Average(c=>c.X),boxCornersLocal.Average(c=>c.Y),first.Z);
+                }
+                else targetLocal=textWcs.TransformBy(wcsToUcs);
+                var cloudCorner=ResolveRegionLeaderAnchor(cloud,min,max,effective,targetLocal);
+                var boxCorner=boxCornersLocal!=null?boxCornersLocal.OrderBy(c=>c.GetDistanceTo(cloudCorner)).First():new Point2d(targetLocal.X,targetLocal.Y);
+                var leader=new Polyline();leader.AddVertexAt(0,cloudCorner,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=first.Z;
+                cloud.TransformBy(ucsToWcs);leader.TransformBy(ucsToWcs);
+                Add(space,tr,cloud,ids,effective,data.Id,"cloud",effective.CloudColor,data);
+                Add(space,tr,leader,ids,effective,data.Id,"leader",effective.LeaderColor,data);
+                group.Append(ids);
+                tr.Commit();return true;
+            }
+        }
+
         /// <summary>创建批注实体组：UCS 对齐云线 → 文字 → 边框 → 斜向引出线。</summary>
         public static bool Create(Document doc, AnnotationData data, AnnotationSettings settings, Point3d firstPoint, Point3d secondPoint, Point3d textLocation)
         {
@@ -817,7 +864,24 @@ namespace LAAnnotation
         }
 
 
-        internal static string FormatText(AnnotationData d,AnnotationSettings s) => $"\\H{s.HeaderHeight:0.###};{Escape(d.Number)}    {Escape(d.Discipline)}    {Escape(d.Author)}（{Escape(d.Role)}）    {Escape(d.Date)}\\P\\H{s.TextHeight:0.###};{Escape(d.Content).Replace("\r\n", "\\P").Replace("\n", "\\P")}\\P\\H{s.SecondLineHeight:0.###};状态: {Escape(d.Status)}";
+        internal static string FormatText(AnnotationData d,AnnotationSettings s)
+        {
+            var lines=new List<string>();
+            // 首行：编号/专业/批注人（角色）/日期，按设置勾选拼接，全部取消时整行省略
+            var header=new List<string>();
+            if(s.ShowNumber)header.Add(Escape(d.Number));
+            if(s.ShowDiscipline)header.Add(Escape(d.Discipline));
+            if(s.ShowAuthor&&s.ShowRole)header.Add(Escape(d.Author)+"（"+Escape(d.Role)+"）");
+            else if(s.ShowAuthor)header.Add(Escape(d.Author));
+            else if(s.ShowRole)header.Add(Escape(d.Role));
+            if(s.ShowDate)header.Add(Escape(d.Date));
+            if(header.Count>0)lines.Add($"\\H{s.HeaderHeight:0.###};"+string.Join("    ",header));
+            // 正文：批注内容必选，始终显示
+            lines.Add($"\\H{s.TextHeight:0.###};{Escape(d.Content).Replace("\r\n", "\\P").Replace("\n", "\\P")}");
+            // 末行：状态
+            if(s.ShowStatus)lines.Add($"\\H{s.SecondLineHeight:0.###};状态: {Escape(d.Status)}");
+            return string.Join("\\P",lines);
+        }
         private static string Escape(string value) => (value ?? "").Replace("\\", "\\\\").Replace("{", "\\{").Replace("}", "\\}");
         private static short TextColorForStatus(AnnotationSettings settings,string status)
         {

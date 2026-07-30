@@ -106,6 +106,19 @@
                             <TextBox x:Name="DefaultDisciplineText" Grid.Row="2" Grid.Column="1"/>
                         </Grid>
                         <CheckBox x:Name="AutoNumberCheck" Content="自动编号" Margin="130,8,0,2"/>
+
+                        <Rectangle Style="{StaticResource SectionSeparator}"/>
+
+                        <TextBlock Text="批注框内显示内容" Style="{StaticResource SectionHeader}"/>
+                        <StackPanel Margin="0,0,0,4">
+                            <CheckBox Content="批注内容（必选）" IsChecked="True" IsEnabled="False"/>
+                            <CheckBox x:Name="ShowNumberCheck" Content="编号"/>
+                            <CheckBox x:Name="ShowDisciplineCheck" Content="专业"/>
+                            <CheckBox x:Name="ShowAuthorCheck" Content="批注人"/>
+                            <CheckBox x:Name="ShowRoleCheck" Content="角色"/>
+                            <CheckBox x:Name="ShowDateCheck" Content="日期"/>
+                            <CheckBox x:Name="ShowStatusCheck" Content="状态"/>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

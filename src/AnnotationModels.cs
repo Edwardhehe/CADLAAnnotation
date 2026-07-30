@@ -66,6 +66,13 @@ namespace LAAnnotation
         public bool Plottable { get; set; } = false;
         public double CheckHeight { get; set; } = 8.0;
         public double AutoTextViewPercent { get; set; } = 5.0; // 字高 ≈ 云线对角线 × 此百分比
+        // 批注框内显示内容（批注内容必选，始终显示；其余可选，默认全勾选）
+        public bool ShowNumber { get; set; } = true;
+        public bool ShowDiscipline { get; set; } = true;
+        public bool ShowAuthor { get; set; } = true;
+        public bool ShowRole { get; set; } = true;
+        public bool ShowDate { get; set; } = true;
+        public bool ShowStatus { get; set; } = true;
 
         public AnnotationSettings Clone() => (AnnotationSettings)MemberwiseClone();
     }

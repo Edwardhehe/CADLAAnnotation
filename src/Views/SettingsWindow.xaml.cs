@@ -56,6 +56,9 @@ namespace LAAnnotation.Views
             LayerAppendDateCheck.IsChecked = _s.LayerAppendDate; LayerAppendNameCheck.IsChecked = _s.LayerAppendName;
             DateBeforeNameCheck.IsChecked = _s.DateBeforeName; ConnectorCombo.Text = _s.Connector;
             PlottableCheck.IsChecked = _s.Plottable;
+            ShowNumberCheck.IsChecked = _s.ShowNumber; ShowDisciplineCheck.IsChecked = _s.ShowDiscipline;
+            ShowAuthorCheck.IsChecked = _s.ShowAuthor; ShowRoleCheck.IsChecked = _s.ShowRole;
+            ShowDateCheck.IsChecked = _s.ShowDate; ShowStatusCheck.IsChecked = _s.ShowStatus;
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)
@@ -89,6 +92,9 @@ namespace LAAnnotation.Views
                 _s.LayerAppendDate = On(LayerAppendDateCheck); _s.LayerAppendName = On(LayerAppendNameCheck);
                 _s.DateBeforeName = On(DateBeforeNameCheck); _s.Connector = ConnectorCombo.Text.Trim();
                 _s.Plottable = On(PlottableCheck);
+                _s.ShowNumber = On(ShowNumberCheck); _s.ShowDiscipline = On(ShowDisciplineCheck);
+                _s.ShowAuthor = On(ShowAuthorCheck); _s.ShowRole = On(ShowRoleCheck);
+                _s.ShowDate = On(ShowDateCheck); _s.ShowStatus = On(ShowStatusCheck);
                 // 统一颜色模式：所有独立颜色同步为统一颜色
                 if (_s.SameColors) _s.CloudColor = _s.LeaderColor = _s.TextColor = _s.BoxColor = _s.ReplyColor = _s.PassColor = _s.CheckColor = _s.ColorIndex;
                 SettingsStore.Save(_s); DialogResult = true;

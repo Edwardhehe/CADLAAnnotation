@@ -5,12 +5,14 @@ using LAAnnotation.Views;
 using ZwSoft.ZwCAD.ApplicationServices;
 using ZwSoft.ZwCAD.DatabaseServices;
 using ZwSoft.ZwCAD.EditorInput;
+using ZwSoft.ZwCAD.Geometry;
 using ZwSoft.ZwCAD.Runtime;
 using CadApplication = ZwSoft.ZwCAD.ApplicationServices.Core.Application;
 #else
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using CadApplication = Autodesk.AutoCAD.ApplicationServices.Core.Application;
 #endif
@@ -51,6 +53,53 @@ namespace LAAnnotation
                 doc.Editor.WriteMessage("\n云线已创建: " + id);
             }
             catch (System.Exception ex) { doc.Editor.WriteMessage("\n云线创建失败: " + ex.Message); }
+        }
+
+        /// <summary>增补云线：点选既有批注后连续框选新云线范围，每个范围自动生成连到原文字框的引出线，回车/空格结束。</summary>
+        [CommandMethod("LA_PZ_ADDCLOUD", CommandFlags.Modal | CommandFlags.UsePickSet)]
+        public void AddCloudToAnnotation()
+        {
+            var doc = CadApplication.DocumentManager.MdiActiveDocument; if (doc == null) return;
+            var implied = doc.Editor.SelectImplied();
+            ObjectId id;
+            if (implied.Status == PromptStatus.OK && implied.Value.Count > 0) id = implied.Value.GetObjectIds()[0];
+            else
+            {
+                var result = doc.Editor.GetEntity("\n选择要增补云线的 LA批注: "); if (result.Status != PromptStatus.OK) return; id = result.ObjectId;
+            }
+            AnnotationData data;
+            try
+            {
+                using (var tr = doc.Database.TransactionManager.StartTransaction())
+                {
+                    var entity = tr.GetObject(id, OpenMode.ForRead, false) as Entity;
+                    if (entity == null || !AnnotationService.TryReadFromEntity(tr, entity, out data)) { doc.Editor.WriteMessage("\n所选对象不是有效的 LA批注，或批注数据已损坏。"); return; }
+                }
+            }
+            catch (System.Exception ex) { doc.Editor.WriteMessage("\n读取批注失败: " + ex.Message); return; }
+
+            var preview = SettingsStore.Load();
+            var historyFirsts = new List<Point3d>();
+            var historySeconds = new List<Point3d>();
+            var added = 0;
+            while (true)
+            {
+                var prompt = AnnotationService.PromptCloudOrFinish(doc, preview, historyFirsts, historySeconds, out var first, out var second);
+                if (prompt == CloudPromptResult.Finished) break;
+                if (prompt == CloudPromptResult.Cancelled)
+                {
+                    if (added == 0) doc.Editor.WriteMessage("\n已取消增补云线。");
+                    break;
+                }
+                try
+                {
+                    if (!AnnotationService.AppendCloud(doc, data, first, second)) { doc.Editor.WriteMessage("\n增补失败：批注编组已不存在。"); break; }
+                    historyFirsts.Add(first); historySeconds.Add(second); added++;
+                    doc.Editor.WriteMessage($"\n已增补 {added} 条云线，可继续框选，回车/空格结束。");
+                }
+                catch (System.Exception ex) { doc.Editor.WriteMessage("\n增补云线失败: " + ex.Message); }
+            }
+            if (added > 0) doc.Editor.WriteMessage($"\n批注 {data.Number} 共增补 {added} 条云线。");
         }
 
         /// <summary>编辑批注：优先使用已选实体，否则让用户点选。</summary>
