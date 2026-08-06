@@ -7,11 +7,12 @@ using Autodesk.AutoCAD.Runtime;
 #endif
 
 [assembly: AssemblyTitle("LA批注")]
-[assembly: AssemblyDescription("ZWCAD drawing annotation plug-in")]
+[assembly: AssemblyDescription("AutoCAD and ZWCAD drawing annotation plug-in")]
 [assembly: AssemblyCompany("LA")]
 [assembly: AssemblyProduct("LA批注")]
-[assembly: AssemblyVersion("0.4.0.0")]
-[assembly: AssemblyFileVersion("0.4.0.0")]
+[assembly: AssemblyVersion("0.5.0.0")]
+[assembly: AssemblyFileVersion("0.5.0.0")]
+[assembly: AssemblyInformationalVersion("0.5.0")]
 [assembly: ComVisible(false)]
 [assembly: ExtensionApplication(typeof(LAAnnotation.PluginEntry))]
 [assembly: CommandClass(typeof(LAAnnotation.Commands))]

@@ -10,6 +10,8 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <UseWPF>true</UseWPF>
     <DefineConstants>AUTOCAD</DefineConstants>
+    <!-- CAD 通过 NETLOAD 加载类库时不会执行 dotnet publish；构建目录必须直接带齐截图功能的运行依赖。 -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <!-- 插件只运行于 Windows 上的 AutoCAD 宿主，注册表 CA1416 平台告警无需提示。 -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>

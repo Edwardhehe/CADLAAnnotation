@@ -1,4 +1,4 @@
-# LA批注 v0.4.0
+# LA批注 v0.5.0
 
 同时支持 AutoCAD 与 ZWCAD 的本地批注插件，无需登录或联网。两种宿主共用同一套源码、DWG 数据格式、界面和命令。
 
@@ -10,9 +10,9 @@
 
 | CAD 宿主 | DLL |
 |---|---|
-| AutoCAD 2015~2024 | `bin/v0.4.0/AutoCAD/LAAnnotation.AutoCAD.dll` |
-| AutoCAD 2025~2027 | `bin/v0.4.0/AutoCAD2025/LAAnnotation.AutoCAD2025.dll` |
-| 中望 ZWCAD 2025~2026 | `bin/v0.4.0/ZWCAD/LAAnnotation.ZWCAD.dll` |
+| AutoCAD 2015~2024 | `bin/v0.5.0/AutoCAD/LAAnnotation.AutoCAD.dll` |
+| AutoCAD 2025~2027 | `bin/v0.5.0/AutoCAD2025/LAAnnotation.AutoCAD2025.dll` |
+| 中望 ZWCAD 2025~2026 | `bin/v0.5.0/ZWCAD/LAAnnotation.ZWCAD.dll` |
 
 **注意**：三个 DLL 不可混用，请严格按 CAD 宿主和版本选择。
 
