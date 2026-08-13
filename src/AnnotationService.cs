@@ -156,7 +156,7 @@ namespace LAAnnotation
                 var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
                 var ucsToWcs=GetUcsMatrix(doc);var wcsToUcs=ucsToWcs.Inverse();var first=firstPoint.TransformBy(wcsToUcs);var second=secondPoint.TransformBy(wcsToUcs);
                 var min=new Point2d(Math.Min(first.X,second.X),Math.Min(first.Y,second.Y));var max=new Point2d(Math.Max(first.X,second.X),Math.Max(first.Y,second.Y));
-                var cloud=BuildCloud(min,max,settings);cloud.Elevation=first.Z;cloud.TransformBy(ucsToWcs);
+                var cloud=BuildCloud(min,max,settings);cloud.Elevation=first.Z;cloud.TransformBy(ucsToWcs);OrientCloudBulgesForView(doc,cloud);
                 cloud.Layer=EffectiveLayer(settings);cloud.Color=Color.FromColorIndex(ColorMethod.ByAci,settings.CloudColor);
                 if(settings.LineWidth>0)cloud.ConstantWidth=settings.LineWidth;
                 var id=space.AppendEntity(cloud);tr.AddNewlyCreatedDBObject(cloud,true);
@@ -173,7 +173,7 @@ namespace LAAnnotation
                 EnsureLayer(doc.Database,tr,settings);
                 var ucsToWcs=GetUcsMatrix(doc);var wcsToUcs=ucsToWcs.Inverse();var localPoints=points.Select(point=>point.TransformBy(wcsToUcs)).ToList();
                 var cloudPoints=localPoints.Select(point=>new Point2d(point.X,point.Y)).ToList();
-                var cloud=BuildPolygonCloud(cloudPoints,settings);cloud.Elevation=localPoints[0].Z;cloud.TransformBy(ucsToWcs);
+                var cloud=BuildPolygonCloud(cloudPoints,settings);cloud.Elevation=localPoints[0].Z;cloud.TransformBy(ucsToWcs);OrientCloudBulgesForView(doc,cloud);
                 cloud.Layer=EffectiveLayer(settings);cloud.Color=Color.FromColorIndex(ColorMethod.ByAci,settings.CloudColor);
                 if(settings.LineWidth>0)cloud.ConstantWidth=settings.LineWidth;
                 var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
@@ -204,7 +204,7 @@ namespace LAAnnotation
                 var nearestCloudPoint=cloud.GetClosestPointTo(localText,false);var nearestPt=new Point2d(nearestCloudPoint.X,nearestCloudPoint.Y);
                 var boxCorners=new[]{new Point2d(localText.X,localText.Y),new Point2d(localText.X+width,localText.Y),new Point2d(localText.X+width,localText.Y+height),new Point2d(localText.X,localText.Y+height)};
                 var boxCorner=boxCorners.OrderBy(c=>c.GetDistanceTo(nearestPt)).First();var leader=new Polyline();leader.AddVertexAt(0,nearestPt,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=localText.Z;
-                cloud.TransformBy(ucsToWcs);text.TransformBy(ucsToWcs);boxEntity.TransformBy(ucsToWcs);leader.TransformBy(ucsToWcs);
+                cloud.TransformBy(ucsToWcs);OrientCloudBulgesForView(doc,cloud);text.TransformBy(ucsToWcs);boxEntity.TransformBy(ucsToWcs);leader.TransformBy(ucsToWcs);
                 Add(space,tr,cloud,ids,settings,data.Id,"cloud",settings.CloudColor,data);Add(space,tr,text,ids,settings,data.Id,"text",TextColorForStatus(settings,data.Status),data);Add(space,tr,boxEntity,ids,settings,data.Id,"box",settings.SameColors?settings.CloudColor:settings.BoxColor,data);Add(space,tr,leader,ids,settings,data.Id,"leader",settings.LeaderColor,data);
                 // 编组
                 var groups=(DBDictionary)tr.GetObject(doc.Database.GroupDictionaryId,OpenMode.ForWrite);
@@ -250,7 +250,7 @@ namespace LAAnnotation
                     var first=localFirsts[k];var second=localSeconds[k];var min=new Point2d(Math.Min(first.X,second.X),Math.Min(first.Y,second.Y));var max=new Point2d(Math.Max(first.X,second.X),Math.Max(first.Y,second.Y));var width=max.X-min.X;var height=max.Y-min.Y;
                     var regionSettings=ResolveEffectiveSettings(doc,sourceSettings??settings,new AnnotationData(),Math.Sqrt(width*width+height*height));cloudSettings.Add(regionSettings);
                     localCloudCorners.Add(new[]{min,new Point2d(max.X,min.Y),max,new Point2d(min.X,max.Y)});
-                    var cloud=BuildCloud(min,max,regionSettings);cloud.Elevation=first.Z;cloud.TransformBy(ucsToWcs);Add(space,tr,cloud,ids,regionSettings,data.Id,"cloud",regionSettings.CloudColor,data);
+                    var cloud=BuildCloud(min,max,regionSettings);cloud.Elevation=first.Z;cloud.TransformBy(ucsToWcs);OrientCloudBulgesForView(doc,cloud);Add(space,tr,cloud,ids,regionSettings,data.Id,"cloud",regionSettings.CloudColor,data);
                 }
 
                 var margin=settings.TextHeight*0.5;var requestedWidth=settings.FixedWidth?settings.FixedWidthValue:Math.Max(55.0,settings.TextHeight*18.0);
@@ -307,7 +307,7 @@ namespace LAAnnotation
                 var cloudCorner=ResolveRegionLeaderAnchor(cloud,min,max,effective,targetLocal);
                 var boxCorner=boxCornersLocal!=null?boxCornersLocal.OrderBy(c=>c.GetDistanceTo(cloudCorner)).First():new Point2d(targetLocal.X,targetLocal.Y);
                 var leader=new Polyline();leader.AddVertexAt(0,cloudCorner,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=first.Z;
-                cloud.TransformBy(ucsToWcs);leader.TransformBy(ucsToWcs);
+                cloud.TransformBy(ucsToWcs);OrientCloudBulgesForView(doc,cloud);leader.TransformBy(ucsToWcs);
                 Add(space,tr,cloud,ids,effective,data.Id,"cloud",effective.CloudColor,data);
                 Add(space,tr,leader,ids,effective,data.Id,"leader",effective.LeaderColor,data);
                 group.Append(ids);
@@ -333,7 +333,7 @@ namespace LAAnnotation
                 var boxW=Math.Max(text.ActualWidth,settings.TextHeight*4)+margin*2;var boxH=Math.Max(text.ActualHeight,settings.TextHeight*2)+margin*2;var boxEntity=BuildBox(localText,boxW,boxH);boxEntity.Elevation=localText.Z;
                 var cloudCorner=ResolveRegionLeaderAnchor(cloud,min,max,settings,localText);var boxCorners=new[]{new Point2d(localText.X,localText.Y),new Point2d(localText.X+boxW,localText.Y),new Point2d(localText.X+boxW,localText.Y+boxH),new Point2d(localText.X,localText.Y+boxH)};var boxCorner=boxCorners.OrderBy(c=>c.GetDistanceTo(cloudCorner)).First();
                 var leader=new Polyline();leader.AddVertexAt(0,cloudCorner,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=localText.Z;
-                cloud.TransformBy(ucsToWcs);text.TransformBy(ucsToWcs);boxEntity.TransformBy(ucsToWcs);leader.TransformBy(ucsToWcs);
+                cloud.TransformBy(ucsToWcs);OrientCloudBulgesForView(doc,cloud);text.TransformBy(ucsToWcs);boxEntity.TransformBy(ucsToWcs);leader.TransformBy(ucsToWcs);
                 Add(space,tr,cloud,ids,settings,data.Id,"cloud",settings.CloudColor,data);Add(space,tr,text,ids,settings,data.Id,"text",TextColorForStatus(settings,data.Status),data);Add(space,tr,boxEntity,ids,settings,data.Id,"box",settings.SameColors?settings.CloudColor:settings.BoxColor,data);Add(space,tr,leader,ids,settings,data.Id,"leader",settings.LeaderColor,data);
 
                 var groups = (DBDictionary)tr.GetObject(doc.Database.GroupDictionaryId, OpenMode.ForWrite);
@@ -1251,7 +1251,7 @@ namespace LAAnnotation
             return BuildScallopedVertices(sampled,settings.CloudStyle);
         }
 
-        /// <summary>去除重复点并统一为逆时针方向，使负 bulge 始终向多边形外侧鼓出。</summary>
+        /// <summary>去除重复点并统一为逆时针方向，使正 bulge 始终向多边形外侧鼓出。</summary>
         private static bool TryNormalizePolygon(IList<Point2d> sourcePoints,out List<Point2d> points,out string error)
         {
             points=new List<Point2d>();error=null;
@@ -1315,8 +1315,23 @@ namespace LAAnnotation
         {
             return TryNormalizePolygon(points,out var ignored,out error);
         }
-        /// <summary>沿顶点序列生成锯齿云线，始终闭合。</summary>
-        internal static Polyline BuildScallopedVertices(IList<Point2d> points,string style){var p=new Polyline();for(var i=0;i<points.Count;i++)p.AddVertexAt(i,points[i],style=="等宽"?-0.55:(i%2==0?-0.35:-0.7),0,0);p.Closed=true;return p;}
+        /// <summary>沿顶点序列生成锯齿云线，始终闭合。顶点按逆时针排列，正 bulge（逆时针弧）向行进方向右侧、即多边形外侧鼓出。</summary>
+        internal static Polyline BuildScallopedVertices(IList<Point2d> points,string style){var p=new Polyline();for(var i=0;i<points.Count;i++)p.AddVertexAt(i,points[i],style=="等宽"?0.55:(i%2==0?0.35:0.7),0,0);p.Closed=true;return p;}
+        /// <summary>镜像 UCS 或背面视图下，逆时针环在屏幕呈顺时针，弧瓣会鼓向内侧。按当前视图翻转全部 bulge，使弧瓣始终在屏幕中外侧鼓出。</summary>
+        internal static void OrientCloudBulgesForView(Document doc,Polyline cloud)
+        {
+            try
+            {
+                using(var view=doc.Editor.GetCurrentView())
+                {
+                    // 法向指向相机时看到正面（无需翻转）；指向背离相机时看到背面（翻转全部 bulge）。
+                    if(cloud.Normal.DotProduct(view.ViewDirection)<0)
+                        for(var i=0;i<cloud.NumberOfVertices;i++)
+                            cloud.SetBulgeAt(i,-cloud.GetBulgeAt(i));
+                }
+            }
+            catch{ /* 视图不可用时保持原方向 */ }
+        }
         internal static string EffectiveLayer(AnnotationSettings s,AnnotationData data=null)
         {
             var date=DateTime.Today;

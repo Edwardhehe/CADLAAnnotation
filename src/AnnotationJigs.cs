@@ -57,6 +57,7 @@ namespace LAAnnotation
                         "cloud");
                     cloud.Elevation = a.Z;
                     cloud.TransformBy(ucsToWcs);
+                    AnnotationService.OrientCloudBulgesForView(doc,cloud);
                     draw.Geometry.Draw(cloud);
                 }
             }
@@ -149,7 +150,7 @@ namespace LAAnnotation
             RegionPreviewDrawing.DrawHistory(draw,_doc,_ucsToWcs,_wcsToUcs,_source,_historyFirsts,_historySeconds);
             var first=_first.TransformBy(_wcsToUcs);var current=_current.TransformBy(_wcsToUcs);var w=Math.Abs(current.X-first.X);var h=Math.Abs(current.Y-first.Y);if(w<1e-8||h<1e-8)return true;
             var settings=AnnotationService.ResolveEffectiveSettings(_doc,_source,new AnnotationData(),Math.Sqrt(w*w+h*h));
-            using(var cloud=AnnotationService.BuildCloud(ToMin(first,current),ToMax(first,current),settings)){AnnotationService.ApplyPreviewAppearance(cloud,settings,settings.CloudColor,"cloud");cloud.Elevation=first.Z;cloud.TransformBy(_ucsToWcs);draw.Geometry.Draw(cloud);}return true;
+            using(var cloud=AnnotationService.BuildCloud(ToMin(first,current),ToMax(first,current),settings)){AnnotationService.ApplyPreviewAppearance(cloud,settings,settings.CloudColor,"cloud");cloud.Elevation=first.Z;cloud.TransformBy(_ucsToWcs);AnnotationService.OrientCloudBulgesForView(_doc,cloud);draw.Geometry.Draw(cloud);}return true;
         }
         internal static Point2d ToMin(Point3d a,Point3d b)=>new Point2d(Math.Min(a.X,b.X),Math.Min(a.Y,b.Y));internal static Point2d ToMax(Point3d a,Point3d b)=>new Point2d(Math.Max(a.X,b.X),Math.Max(a.Y,b.Y));
     }
@@ -233,6 +234,7 @@ namespace LAAnnotation
                             cloudSettings.CloudColor,
                             "cloud");
                         clouds[i].TransformBy(_ucsToWcs);
+                        AnnotationService.OrientCloudBulgesForView(_doc,clouds[i]);
                         draw.Geometry.Draw(clouds[i]);
 
                         using (var leader = new CadPolyline())
@@ -391,6 +393,7 @@ namespace LAAnnotation
                         settings.CloudColor,
                         "cloud");
                     cloud.TransformBy(_ucsToWcs);
+                    AnnotationService.OrientCloudBulgesForView(_doc,cloud);
                     draw.Geometry.Draw(cloud);
                 }
             }
