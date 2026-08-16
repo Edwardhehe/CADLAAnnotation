@@ -144,7 +144,8 @@ namespace LAAnnotation
         private readonly Document _doc;private readonly Matrix3d _ucsToWcs,_wcsToUcs;private readonly Point3d _first;private readonly AnnotationSettings _source;private readonly List<Point3d> _historyFirsts,_historySeconds;private Point3d _current;
         public Point3d Current=>_current;
         public RegionPreviewJig(Document doc,Point3d first,AnnotationSettings source,IList<Point3d> historyFirsts=null,IList<Point3d> historySeconds=null){_doc=doc;_ucsToWcs=AnnotationService.GetUcsMatrix(doc);_wcsToUcs=_ucsToWcs.Inverse();_first=first;_current=first;_source=source;_historyFirsts=historyFirsts?.ToList()??new List<Point3d>();_historySeconds=historySeconds?.ToList()??new List<Point3d>();}
-        protected override SamplerStatus Sampler(JigPrompts prompts){var o=new JigPromptPointOptions("\n指定批注范围另一个角点: "){UseBasePoint=true,BasePoint=_first,Cursor=CursorType.RubberBand};var r=prompts.AcquirePoint(o);if(r.Status!=PromptStatus.OK)return SamplerStatus.Cancel;if(r.Value.DistanceTo(_current)<1e-8)return SamplerStatus.NoChange;_current=r.Value;return SamplerStatus.OK;}
+        // 保留 BasePoint 以支持相对坐标和对象捕捉，但使用普通十字光标，避免 CAD 额外画出角点对角虚线。
+        protected override SamplerStatus Sampler(JigPrompts prompts){var o=new JigPromptPointOptions("\n指定批注范围另一个角点: "){UseBasePoint=true,BasePoint=_first,Cursor=CursorType.Crosshair};var r=prompts.AcquirePoint(o);if(r.Status!=PromptStatus.OK)return SamplerStatus.Cancel;if(r.Value.DistanceTo(_current)<1e-8)return SamplerStatus.NoChange;_current=r.Value;return SamplerStatus.OK;}
         protected override bool WorldDraw(WorldDraw draw)
         {
             RegionPreviewDrawing.DrawHistory(draw,_doc,_ucsToWcs,_wcsToUcs,_source,_historyFirsts,_historySeconds);

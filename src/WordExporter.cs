@@ -7,6 +7,7 @@ using System.IO;
 using System.IO.Packaging;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Xml;
 #if ZWCAD
 using ZwSoft.ZwCAD.ApplicationServices;
@@ -124,42 +125,120 @@ namespace LAAnnotation
             ed.Regen();
         }
 
-        /// <summary>抓取当前文档绘图窗口的客户区位图，返回 PNG 字节（宽度超过 1600px 时等比缩小）。</summary>
+        /// <summary>
+        /// 抓取当前文档绘图窗口的客户区位图，返回 PNG 字节（宽度超过 1600px 时等比缩小）。
+        /// 主路径使用 CAD 自带的 CapturePreviewImage，仅读取当前视图渲染结果；
+        /// 后备路径也只请求 CAD 文档窗口自身重绘。两者都不允许抓取桌面像素，防止输入法或其他程序混入 Word。
+        /// </summary>
         private static byte[] CaptureWindowPng(Document doc)
         {
             var hwnd = doc.Window.Handle;
             if (hwnd == IntPtr.Zero) return null;
-            if (!NativeMethods.GetClientRect(hwnd, out var rect)) return null;
-            var width = rect.Right - rect.Left; var height = rect.Bottom - rect.Top;
-            if (width < 10 || height < 10) return null;
-
-            var hdcSource = NativeMethods.GetDC(hwnd);
-            if (hdcSource == IntPtr.Zero) return null;
-            try
+            byte[] lastCapture = null;
+            const int maxAttempts = 3;
+            for (var attempt = 0; attempt < maxAttempts; attempt++)
             {
-                using (var bitmap = new Bitmap(width, height, PixelFormat.Format24bppRgb))
-                using (var graphics = Graphics.FromImage(bitmap))
+                RefreshViewportForCapture(doc, hwnd, attempt);
+                if (!NativeMethods.GetClientRect(hwnd, out var rect)) return null;
+                var width = rect.Right - rect.Left; var height = rect.Bottom - rect.Top;
+                if (width < 10 || height < 10) return null;
+
+                using (var bitmap = CaptureCadView(doc, hwnd, width, height))
                 {
-                    var hdcTarget = graphics.GetHdc();
-                    NativeMethods.BitBlt(hdcTarget, 0, 0, width, height, hdcSource, 0, 0, NativeMethods.SrcCopy);
-                    graphics.ReleaseHdc(hdcTarget);
+                    if (bitmap == null) return null;
+                    var nearlyUniform = LooksNearlyUniform(bitmap);
                     using (var scaled = Downscale(bitmap, 1600))
                     using (var stream = new MemoryStream())
                     {
                         scaled.Save(stream, ImageFormat.Png);
-                        return stream.ToArray();
+                        lastCapture = stream.ToArray();
                     }
+                    if (!nearlyUniform) return lastCapture;
+                }
+                if (attempt < maxAttempts - 1)
+                    PluginLog.Warning("WordExport.Capture", $"第 {attempt + 1} 次截图接近纯色，等待 CAD 完成渲染后重试。");
+            }
+            return lastCapture;
+        }
+
+        private static Bitmap CaptureCadView(Document doc, IntPtr hwnd, int width, int height)
+        {
+            try
+            {
+                // CAD 原生预览图由宿主的图形管线产生，不受窗口遮挡、输入法或桌面上其他程序影响。
+                var native = doc.CapturePreviewImage((uint)width, (uint)height);
+                if (native != null) return native;
+            }
+            catch (System.Exception ex)
+            {
+                PluginLog.Warning("WordExport.CapturePreviewImage", "CAD 原生视图截图失败，改用文档窗口重绘：" + ex.Message);
+            }
+            return CaptureCadWindow(hwnd, width, height);
+        }
+
+        private static Bitmap CaptureCadWindow(IntPtr hwnd, int width, int height)
+        {
+            var bitmap = new Bitmap(width, height, PixelFormat.Format24bppRgb);
+            var captured = false;
+            using (var graphics = Graphics.FromImage(bitmap))
+            {
+                var hdc = graphics.GetHdc();
+                try
+                {
+                    // PrintWindow 让 CAD 自己绘制客户区，不会把覆盖在上面的其他窗口复制进来。
+                    captured = NativeMethods.PrintWindow(
+                        hwnd, hdc,
+                        NativeMethods.PwClientOnly | NativeMethods.PwRenderFullContent);
+                }
+                finally { graphics.ReleaseHdc(hdc); }
+            }
+            if (!captured) { bitmap.Dispose(); return null; }
+            return bitmap;
+        }
+
+        /// <summary>让缩放后的 CAD 视图完成再生、窗口重绘和 DWM 合成，再读取屏幕像素。</summary>
+        private static void RefreshViewportForCapture(Document doc, IntPtr hwnd, int attempt)
+        {
+            var ed = doc.Editor;
+            ed.UpdateScreen();
+            NativeMethods.RedrawWindow(
+                hwnd, IntPtr.Zero, IntPtr.Zero,
+                NativeMethods.RdwInvalidate | NativeMethods.RdwAllChildren | NativeMethods.RdwUpdateNow);
+            NativeMethods.UpdateWindow(hwnd);
+            NativeMethods.TryFlushDwm();
+
+            // Regen 在硬件加速宿主中可能先返回，实际绘图由渲染线程继续完成。
+            // 首次只给少量等待；若还是纯色，后续重试逐次延长，避免每张图都无条件慢速。
+            Thread.Sleep(120 + attempt * 160);
+            ed.UpdateScreen();
+            NativeMethods.UpdateWindow(hwnd);
+            NativeMethods.TryFlushDwm();
+        }
+
+        private static bool LooksNearlyUniform(Bitmap bitmap)
+        {
+            var stepX = Math.Max(1, bitmap.Width / 160);
+            var stepY = Math.Max(1, bitmap.Height / 100);
+            var reference = bitmap.GetPixel(bitmap.Width / 2, bitmap.Height / 2);
+            var samples = 0;
+            var different = 0;
+            for (var y = 0; y < bitmap.Height; y += stepY)
+            {
+                for (var x = 0; x < bitmap.Width; x += stepX)
+                {
+                    var color = bitmap.GetPixel(x, y);
+                    samples++;
+                    if (Math.Abs(color.R - reference.R) + Math.Abs(color.G - reference.G) + Math.Abs(color.B - reference.B) > 24)
+                        different++;
                 }
             }
-            finally
-            {
-                NativeMethods.ReleaseDC(hwnd, hdcSource);
-            }
+            return different < Math.Max(12, samples / 500);
         }
 
         private static Bitmap Downscale(Bitmap source, int maxWidth)
         {
-            if (source.Width <= maxWidth) return source;
+            // 返回独立位图，避免调用方释放缩放结果时误将原始截图一起释放。
+            if (source.Width <= maxWidth) return new Bitmap(source);
             var scale = (double)maxWidth / source.Width;
             var height = Math.Max(1, (int)Math.Round(source.Height * scale));
             var target = new Bitmap(maxWidth, height, PixelFormat.Format24bppRgb);
@@ -173,12 +252,24 @@ namespace LAAnnotation
 
         private static class NativeMethods
         {
-            public const int SrcCopy = 0x00CC0020;
+            public const uint RdwInvalidate = 0x0001;
+            public const uint RdwAllChildren = 0x0080;
+            public const uint RdwUpdateNow = 0x0100;
+            public const uint PwClientOnly = 0x00000001;
+            public const uint PwRenderFullContent = 0x00000002;
 
-            [DllImport("user32.dll")] public static extern IntPtr GetDC(IntPtr hWnd);
-            [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hWnd, IntPtr hdc);
             [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr hWnd, out Rect rect);
-            [DllImport("gdi32.dll")] public static extern bool BitBlt(IntPtr hdcDest, int xDest, int yDest, int width, int height, IntPtr hdcSource, int xSource, int ySource, int rop);
+            [DllImport("user32.dll")] public static extern bool UpdateWindow(IntPtr hWnd);
+            [DllImport("user32.dll")] public static extern bool RedrawWindow(IntPtr hWnd, IntPtr updateRect, IntPtr updateRegion, uint flags);
+            [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdc, uint flags);
+            [DllImport("dwmapi.dll")] private static extern int DwmFlush();
+
+            public static void TryFlushDwm()
+            {
+                try { DwmFlush(); }
+                catch (DllNotFoundException) { }
+                catch (EntryPointNotFoundException) { }
+            }
 
             [StructLayout(LayoutKind.Sequential)]
             public struct Rect

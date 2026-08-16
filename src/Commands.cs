@@ -106,16 +106,26 @@ namespace LAAnnotation
         [CommandMethod("LA_PZ_EDIT", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void EditAnnotation()
         {
-            var doc = CadApplication.DocumentManager.MdiActiveDocument; if (doc == null) return;
-            var implied = doc.Editor.SelectImplied();
-            ObjectId id;
-            if (implied.Status == PromptStatus.OK && implied.Value.Count > 0) id = implied.Value.GetObjectIds()[0];
-            else
+            var doc = CadApplication.DocumentManager.MdiActiveDocument;
+            if (doc == null) { PluginEntry.RestoreQuickPropertiesMode(); return; }
+            try
             {
-                var options = new PromptEntityOptions("\n选择要编辑的 LA批注: ");
-                var result = doc.Editor.GetEntity(options); if (result.Status != PromptStatus.OK) return; id = result.ObjectId;
+                var implied = doc.Editor.SelectImplied();
+                ObjectId id;
+                if (implied.Status == PromptStatus.OK && implied.Value.Count > 0)
+                {
+                    id = implied.Value.GetObjectIds()[0];
+                    // 双击路径会在 Idle 中重建预选；取得 ID 后立即清除，避免恢复 QPMODE 时再弹快捷特性。
+                    doc.Editor.SetImpliedSelection(new ObjectId[0]);
+                }
+                else
+                {
+                    var options = new PromptEntityOptions("\n选择要编辑的 LA批注: ");
+                    var result = doc.Editor.GetEntity(options); if (result.Status != PromptStatus.OK) return; id = result.ObjectId;
+                }
+                EditById(doc, id);
             }
-            EditById(doc, id);
+            finally { PluginEntry.RestoreQuickPropertiesMode(); }
         }
 
         /// <summary>删除批注：删除整个实体组（云线+引线+文字+边框），支持 UNDO。</summary>

@@ -26,6 +26,9 @@ namespace LAAnnotation
         private static bool _idleAttached;
         private static Database _observedDatabase;
         private static bool _listRefreshPending;
+        /// <summary>双击编辑期间临时保存 CAD 的快捷特性模式，避免与插件编辑窗口同时弹出。</summary>
+        private static object _savedQuickPropertiesMode;
+        private static bool _quickPropertiesSuppressed;
 
         public void Initialize()
         {
@@ -48,6 +51,7 @@ namespace LAAnnotation
             CadApplication.DocumentManager.DocumentActivated -= OnDocumentActivated;
             ObserveDatabase(null);
             if (_idleAttached) CadApplication.Idle -= OnIdle;
+            RestoreQuickPropertiesMode();
         }
 
         private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
@@ -95,6 +99,10 @@ namespace LAAnnotation
                     var entity = tr.GetObject(id, OpenMode.ForRead, false) as Entity;
                     if (entity == null || !AnnotationService.TryReadFromEntity(tr, entity, out var ignored)) return;
                 }
+                // BeginDoubleClick 事件无法取消 CAD 的原生后续处理。
+                // 仅在命中 LA 批注时临时关闭 QPMODE，并清掉当前预选，防止快捷特性面板抢占前台。
+                SuppressQuickPropertiesMode();
+                doc.Editor.SetImpliedSelection(new ObjectId[0]);
                 _pendingDocument = doc; _pendingId = id;
                 if (!_idleAttached) { CadApplication.Idle += OnIdle; _idleAttached = true; }
             }
@@ -111,13 +119,46 @@ namespace LAAnnotation
                 catch(System.Exception ex){PluginLog.Error("AnnotationList.Refresh",ex);}
             }
             var doc = _pendingDocument; var id = _pendingId; _pendingDocument = null; _pendingId = ObjectId.Null;
-            if (doc == null || id.IsNull || doc.IsDisposed || CadApplication.DocumentManager.MdiActiveDocument != doc) return;
+            if (doc == null || id.IsNull || doc.IsDisposed || CadApplication.DocumentManager.MdiActiveDocument != doc)
+            {
+                RestoreQuickPropertiesMode();
+                return;
+            }
             try
             {
                 doc.Editor.SetImpliedSelection(new[] { id });
                 doc.SendStringToExecute("LA_PZ_EDIT ", true, false, false);
             }
-            catch (System.Exception ex) { PluginLog.Error("DoubleClick.Idle",ex); }
+            catch (System.Exception ex)
+            {
+                RestoreQuickPropertiesMode();
+                PluginLog.Error("DoubleClick.Idle",ex);
+            }
+        }
+
+        private static void SuppressQuickPropertiesMode()
+        {
+            if (_quickPropertiesSuppressed) return;
+            try
+            {
+                var mode = CadApplication.GetSystemVariable("QPMODE");
+                if (Convert.ToInt32(mode) == 0) return;
+                _savedQuickPropertiesMode = mode;
+                CadApplication.SetSystemVariable("QPMODE", 0);
+                _quickPropertiesSuppressed = true;
+            }
+            catch (System.Exception ex) { PluginLog.Error("DoubleClick.SuppressQuickProperties", ex); }
+        }
+
+        /// <summary>编辑命令取得实体后恢复用户原有的 QPMODE，不永久改写 CAD 偏好。</summary>
+        internal static void RestoreQuickPropertiesMode()
+        {
+            if (!_quickPropertiesSuppressed) return;
+            var mode = _savedQuickPropertiesMode;
+            _savedQuickPropertiesMode = null;
+            _quickPropertiesSuppressed = false;
+            try { CadApplication.SetSystemVariable("QPMODE", mode); }
+            catch (System.Exception ex) { PluginLog.Error("DoubleClick.RestoreQuickProperties", ex); }
         }
     }
 }

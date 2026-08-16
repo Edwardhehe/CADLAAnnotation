@@ -1,4 +1,4 @@
-# LA批注 v0.5.1
+# LA批注 v0.5.2
 
 同时支持 AutoCAD 与 ZWCAD 的本地批注插件，无需登录或联网。两种宿主共用同一套源码、DWG 数据格式、界面和命令。
 
@@ -8,13 +8,15 @@
 
 ### 1. 获取 DLL
 
+从 GitHub Releases 下载 `LAAnnotation-v0.5.2.zip` 并完整解压，再按 CAD 宿主选择 DLL：
+
 | CAD 宿主 | DLL |
 |---|---|
-| AutoCAD 2015~2024 | `bin/v0.5.1/AutoCAD/LAAnnotation.AutoCAD.dll` |
-| AutoCAD 2025~2027 | `bin/v0.5.1/AutoCAD2025/LAAnnotation.AutoCAD2025.dll` |
-| 中望 ZWCAD 2025~2026 | `bin/v0.5.1/ZWCAD/LAAnnotation.ZWCAD.dll` |
+| AutoCAD 2015~2024 | `AutoCAD/LAAnnotation.AutoCAD.dll` |
+| AutoCAD 2025~2027 | `AutoCAD2025/LAAnnotation.AutoCAD2025.dll` |
+| 中望 ZWCAD 2025~2026 | `ZWCAD/LAAnnotation.ZWCAD.dll` |
 
-**注意**：三个 DLL 不可混用，请严格按 CAD 宿主和版本选择。
+**注意**：三个 DLL 不可混用，请严格按 CAD 宿主和版本选择；DLL 同目录内的依赖文件也必须保留。
 
 ### 2. 加载插件
 
@@ -144,7 +146,7 @@ NETLOAD
 
 ## 杂项
 
-- **双击编辑**：双击批注的云线、引线、文字或边框即可编辑。若与 CAD 原生双击冲突，使用 `LA_PZ_EDIT`
+- **双击编辑**：双击批注的云线、引线、文字或边框即可编辑；插件会临时抑制 CAD 快捷特性并在编辑结束后恢复用户原设置。若宿主仍存在原生双击冲突，可使用 `LA_PZ_EDIT`
 - **日志**：`%APPDATA%\LAAnnotation\Logs\LAAnnotation.log`
 - **数据存储**：批注数据和编号记录在 DWG 文件的 Group 扩展字典中，COPY 后 UUID 暂不自动重新编号
 
