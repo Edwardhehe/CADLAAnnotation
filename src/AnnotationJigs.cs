@@ -184,7 +184,8 @@ namespace LAAnnotation
             _ucsToWcs = AnnotationService.GetUcsMatrix(doc);
             _wcsToUcs = _ucsToWcs.Inverse();
         }
-        protected override SamplerStatus Sampler(JigPrompts prompts){var o=new JigPromptPointOptions("\n指定批注框位置: "){Cursor=CursorType.RubberBand};var r=prompts.AcquirePoint(o);if(r.Status!=PromptStatus.OK)return SamplerStatus.Cancel;if(r.Value.DistanceTo(_current)<1e-8)return SamplerStatus.NoChange;_current=r.Value;return SamplerStatus.OK;}
+        // 放置阶段已由 WorldDraw 绘制云线/框/引出线，勿用 RubberBand，否则会从原点额外拉出一条对角虚线。
+        protected override SamplerStatus Sampler(JigPrompts prompts){var o=new JigPromptPointOptions("\n指定批注框位置: "){Cursor=CursorType.Crosshair};var r=prompts.AcquirePoint(o);if(r.Status!=PromptStatus.OK)return SamplerStatus.Cancel;if(r.Value.DistanceTo(_current)<1e-8)return SamplerStatus.NoChange;_current=r.Value;return SamplerStatus.OK;}
         protected override bool WorldDraw(WorldDraw draw)
         {
             var localText=_current.TransformBy(_wcsToUcs);var clouds=new List<CadPolyline>();var anchors=new List<Point2d>();
@@ -445,12 +446,13 @@ namespace LAAnnotation
 
         protected override SamplerStatus Sampler(JigPrompts prompts)
         {
+            // 移动预览已自绘文字框与引出线，改用十字光标避免 CAD 再画一条橡皮筋虚线。
             var options = new JigPromptPointOptions(
                 "\n指定批注文字框新位置: ")
             {
                 UseBasePoint = true,
                 BasePoint = _basePoint,
-                Cursor = CursorType.RubberBand
+                Cursor = CursorType.Crosshair
             };
             var result = prompts.AcquirePoint(options);
             if (result.Status != PromptStatus.OK)

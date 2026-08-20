@@ -1,6 +1,7 @@
-using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 #if ZWCAD
 using CadApplication = ZwSoft.ZwCAD.ApplicationServices.Core.Application;
 #else
@@ -49,12 +50,48 @@ namespace LAAnnotation.Views
             CountText.Text = $"共 {list.Count} 条批注";
         }
 
+        /// <summary>双击列表行：缩放到对应批注并高亮选中。</summary>
         private void List_DoubleClick(object sender, MouseButtonEventArgs e)
         {
-            if (!(AnnotationList.SelectedItem is AnnotationService.AnnotationInfo info)) return;
+            var info = ResolveClickedInfo(e.OriginalSource as DependencyObject)
+                ?? AnnotationList.SelectedItem as AnnotationService.AnnotationInfo;
+            if (info == null)
+            {
+                return;
+            }
+
             var doc = CadApplication.DocumentManager.MdiActiveDocument;
-            if (doc == null) return;
-            if (info.FirstEntityId.IsValid) AnnotationService.ZoomToAnnotation(doc, info.FirstEntityId);
+            if (doc == null)
+            {
+                return;
+            }
+
+            if (info.FirstEntityId.IsNull || !info.FirstEntityId.IsValid || info.FirstEntityId.IsErased)
+            {
+                doc.Editor.WriteMessage("\n定位失败：批注实体已不存在，请刷新列表。");
+                return;
+            }
+
+            if (!AnnotationService.ZoomToAnnotation(doc, info.FirstEntityId))
+            {
+                doc.Editor.WriteMessage($"\n定位批注 {info.Number} 失败。");
+            }
+        }
+
+        /// <summary>从双击命中的可视化树向上找到对应的列表项数据。</summary>
+        private static AnnotationService.AnnotationInfo ResolveClickedInfo(DependencyObject source)
+        {
+            while (source != null)
+            {
+                if (source is ListViewItem item)
+                {
+                    return item.DataContext as AnnotationService.AnnotationInfo;
+                }
+
+                source = VisualTreeHelper.GetParent(source);
+            }
+
+            return null;
         }
 
         private void Delete_Click(object sender, RoutedEventArgs e)

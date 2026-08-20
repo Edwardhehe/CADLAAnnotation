@@ -926,16 +926,34 @@ namespace LAAnnotation
             return result.OrderBy(x => x.Number, StringComparer.OrdinalIgnoreCase).ToList();
         }
 
-        /// <summary>缩放视图到批注实体范围。</summary>
-        public static void ZoomToAnnotation(Document doc, ObjectId entityId)
+        /// <summary>
+        /// 缩放视图到批注实体（及同编组全部实体）范围。
+        /// 可从无模式 WPF 面板调用，内部会 LockDocument。
+        /// </summary>
+        /// <param name="doc">当前文档。</param>
+        /// <param name="entityId">批注组内任一实体 ID。</param>
+        /// <returns>是否成功定位。</returns>
+        public static bool ZoomToAnnotation(Document doc, ObjectId entityId)
         {
+            if (doc == null || doc.IsDisposed || entityId.IsNull || !entityId.IsValid || entityId.IsErased)
+            {
+                return false;
+            }
+
             try
             {
+                using (doc.LockDocument())
                 using (var tr = doc.Database.TransactionManager.StartTransaction())
                 {
                     var entity = tr.GetObject(entityId, OpenMode.ForRead) as Entity;
-                    if (entity == null) return;
+                    if (entity == null)
+                    {
+                        return false;
+                    }
+
                     var ext = entity.GeometricExtents;
+                    var selectIds = new List<ObjectId> { entityId };
+
                     // 若该实体属于某个编组，扩展到编组中全部实体
                     if (TryGetId(entity, out var id))
                     {
@@ -944,35 +962,72 @@ namespace LAAnnotation
                         if (groups.Contains(groupName))
                         {
                             var group = (Group)tr.GetObject(groups.GetAt(groupName), OpenMode.ForRead);
+                            selectIds.Clear();
                             foreach (ObjectId oid in group.GetAllEntityIds())
                             {
-                                if (!oid.IsValid || oid.IsErased) continue;
+                                if (!oid.IsValid || oid.IsErased)
+                                {
+                                    continue;
+                                }
+
                                 var e = tr.GetObject(oid, OpenMode.ForRead) as Entity;
-                                if (e != null) { ext.AddPoint(e.GeometricExtents.MinPoint); ext.AddPoint(e.GeometricExtents.MaxPoint); }
+                                if (e == null)
+                                {
+                                    continue;
+                                }
+
+                                selectIds.Add(oid);
+                                ext.AddPoint(e.GeometricExtents.MinPoint);
+                                ext.AddPoint(e.GeometricExtents.MaxPoint);
                             }
                         }
                     }
+
                     // 实体范围是 WCS；视图 CenterPoint/Width/Height 使用 DCS，必须先转换。
-                    using (var view = doc.Editor.GetCurrentView())
+                    var ed = doc.Editor;
+                    using (var view = ed.GetCurrentView())
                     {
-                        var wcsToDcs=Matrix3d.PlaneToWorld(view.ViewDirection);
-                        wcsToDcs=Matrix3d.Displacement(view.Target-Point3d.Origin)*wcsToDcs;
-                        wcsToDcs=Matrix3d.Rotation(-view.ViewTwist,view.ViewDirection,view.Target)*wcsToDcs;
-                        wcsToDcs=wcsToDcs.Inverse();
-                        var min=ext.MinPoint;var max=ext.MaxPoint;
-                        var dcsCorners=new[]{
-                            new Point3d(min.X,min.Y,min.Z),new Point3d(max.X,min.Y,min.Z),new Point3d(max.X,max.Y,min.Z),new Point3d(min.X,max.Y,min.Z),
-                            new Point3d(min.X,min.Y,max.Z),new Point3d(max.X,min.Y,max.Z),new Point3d(max.X,max.Y,max.Z),new Point3d(min.X,max.Y,max.Z)
-                        }.Select(point=>point.TransformBy(wcsToDcs)).ToArray();
-                        var minX=dcsCorners.Min(point=>point.X);var maxX=dcsCorners.Max(point=>point.X);var minY=dcsCorners.Min(point=>point.Y);var maxY=dcsCorners.Max(point=>point.Y);
-                        var width=Math.Max(maxX-minX,1);var height=Math.Max(maxY-minY,1);var margin=1.2;
-                        view.CenterPoint=new Point2d((minX+maxX)/2,(minY+maxY)/2);
-                        view.Width=width*margin;view.Height=height*margin;
-                        doc.Editor.SetCurrentView(view);
+                        var wcsToDcs = Matrix3d.PlaneToWorld(view.ViewDirection);
+                        wcsToDcs = Matrix3d.Displacement(view.Target - Point3d.Origin) * wcsToDcs;
+                        wcsToDcs = Matrix3d.Rotation(-view.ViewTwist, view.ViewDirection, view.Target) * wcsToDcs;
+                        wcsToDcs = wcsToDcs.Inverse();
+                        var min = ext.MinPoint;
+                        var max = ext.MaxPoint;
+                        var dcsCorners = new[]
+                        {
+                            new Point3d(min.X, min.Y, min.Z), new Point3d(max.X, min.Y, min.Z),
+                            new Point3d(max.X, max.Y, min.Z), new Point3d(min.X, max.Y, min.Z),
+                            new Point3d(min.X, min.Y, max.Z), new Point3d(max.X, min.Y, max.Z),
+                            new Point3d(max.X, max.Y, max.Z), new Point3d(min.X, max.Y, max.Z)
+                        }.Select(point => point.TransformBy(wcsToDcs)).ToArray();
+                        var minX = dcsCorners.Min(point => point.X);
+                        var maxX = dcsCorners.Max(point => point.X);
+                        var minY = dcsCorners.Min(point => point.Y);
+                        var maxY = dcsCorners.Max(point => point.Y);
+                        var width = Math.Max(maxX - minX, 1);
+                        var height = Math.Max(maxY - minY, 1);
+                        const double margin = 1.2;
+                        view.CenterPoint = new Point2d((minX + maxX) / 2, (minY + maxY) / 2);
+                        view.Width = width * margin;
+                        view.Height = height * margin;
+                        ed.SetCurrentView(view);
                     }
+
+                    if (selectIds.Count > 0)
+                    {
+                        ed.SetImpliedSelection(selectIds.ToArray());
+                    }
+
+                    ed.UpdateScreen();
+                    tr.Commit();
+                    return true;
                 }
             }
-            catch { }
+            catch (System.Exception ex)
+            {
+                PluginLog.Error("ZoomToAnnotation", ex);
+                return false;
+            }
         }
 
         private static void WriteMaster(Group group, Transaction tr, AnnotationData data)
