@@ -2,8 +2,8 @@
         x:ClassModifier="internal"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="LA 批注面板" Width="280" Height="400"
-        MinWidth="260" MinHeight="360"
+        Title="LA 批注面板" Width="288" Height="420"
+        MinWidth="268" MinHeight="360"
         ResizeMode="CanResize"
         Topmost="True" ShowInTaskbar="False"
         WindowStyle="ToolWindow"
@@ -13,64 +13,77 @@
     </Window.Resources>
 
     <DockPanel>
-        <!-- 底部按钮 -->
-        <Border DockPanel.Dock="Bottom" Padding="8,6" Background="{DynamicResource SurfaceBrush}"
+        <!-- 底部操作栏 -->
+        <Border DockPanel.Dock="Bottom" Padding="10,8" Background="{DynamicResource SurfaceBrush}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
             <Grid>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
                 <CheckBox x:Name="ContinuousCheck" Grid.Column="0" Content="连续批注" VerticalAlignment="Center"/>
-                <Button x:Name="StartButton" Grid.Column="1" Content="开始批注" Style="{DynamicResource PrimaryButton}" Click="Start_Click" Height="28" FontSize="12"/>
+                <Button x:Name="StartButton" Grid.Column="1" Content="开始批注"
+                        Style="{DynamicResource PrimaryButton}" Click="Start_Click" Margin="8,0,0,0"/>
             </Grid>
         </Border>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10,6">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12,8">
             <StackPanel>
                 <!-- 批注类型 -->
-                <TextBlock Text="批注类型" Style="{StaticResource SectionHeader}" Margin="0,6,0,4"/>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                    <RadioButton x:Name="SingleModeRadio" Content="单独批注" IsChecked="True" GroupName="Mode" FontSize="12" Margin="0,0,10,0"/>
-                    <RadioButton x:Name="MultiModeRadio" Content="多对一批注" GroupName="Mode" FontSize="12"/>
+                <TextBlock Text="批注类型" Style="{StaticResource SectionHeader}" Margin="0,2,0,4"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <RadioButton x:Name="SingleModeRadio" Content="单独批注" IsChecked="True" GroupName="Mode"/>
+                    <RadioButton x:Name="MultiModeRadio" Content="多对一批注" GroupName="Mode" Margin="0,3,0,3"/>
                 </StackPanel>
 
                 <!-- 批注形式 -->
                 <TextBlock Text="批注形式" Style="{StaticResource SectionHeader}" Margin="0,6,0,4"/>
-                <UniformGrid Columns="2" Margin="0,0,0,6">
-                    <RadioButton x:Name="ShapeRectRadio" Content="矩形" IsChecked="True" GroupName="Shape" FontSize="12" Margin="0,2"/>
-                    <RadioButton x:Name="ShapePlineRadio" Content="PL 线" GroupName="Shape" FontSize="12" Margin="0,2"/>
-                    <RadioButton x:Name="ShapeCircleRadio" Content="圆形" GroupName="Shape" FontSize="12" Margin="0,2"/>
+                <UniformGrid Columns="2" Margin="0,0,0,4">
+                    <RadioButton x:Name="ShapeRectRadio" Content="矩形" IsChecked="True" GroupName="Shape"/>
+                    <RadioButton x:Name="ShapePlineRadio" Content="PL 线" GroupName="Shape"/>
+                    <RadioButton x:Name="ShapeCircleRadio" Content="圆形" GroupName="Shape"/>
                 </UniformGrid>
 
-                <CheckBox x:Name="CloudOnlyCheck" Content="仅绘云线（无文字/引线）" FontSize="12" Margin="0,4,0,2"/>
+                <CheckBox x:Name="CloudOnlyCheck" Content="仅绘云线（无文字/引线）"/>
 
                 <Rectangle Style="{StaticResource SectionSeparator}"/>
 
                 <!-- 待应用设置 -->
-                <TextBlock Text="批注设置（点击开始时生效）" Style="{StaticResource SectionHeader}" Margin="0,6,0,4"/>
+                <TextBlock Text="批注设置（点击开始时生效）" Style="{StaticResource SectionHeader}" Margin="0,4,0,6"/>
                 <Grid>
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="52"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="56"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="专业" Style="{StaticResource FieldLabel}" FontSize="12" TextAlignment="Left"/>
-                    <ComboBox x:Name="DisciplineCombo" Grid.Row="0" Grid.Column="1" FontSize="12" MinHeight="26" Margin="0,1" IsEditable="True"/>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="专业" Style="{StaticResource FieldLabelLeft}"/>
+                    <ComboBox x:Name="DisciplineCombo" Grid.Row="0" Grid.Column="1" IsEditable="True"/>
 
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="批注人" Style="{StaticResource FieldLabel}" FontSize="12" TextAlignment="Left"/>
-                    <TextBox x:Name="AuthorText" Grid.Row="1" Grid.Column="1" FontSize="12" MinHeight="26" Padding="6,2"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="批注人" Style="{StaticResource FieldLabelLeft}"/>
+                    <TextBox x:Name="AuthorText" Grid.Row="1" Grid.Column="1"/>
 
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="外形" Style="{StaticResource FieldLabel}" FontSize="12" TextAlignment="Left"/>
-                    <ComboBox x:Name="ShapeCombo" Grid.Row="2" Grid.Column="1" FontSize="12" MinHeight="26" Margin="0,1"/>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="外形" Style="{StaticResource FieldLabelLeft}"/>
+                    <ComboBox x:Name="ShapeCombo" Grid.Row="2" Grid.Column="1"/>
 
-                    <TextBlock Grid.Row="3" Grid.Column="0" Text="云线样式" Style="{StaticResource FieldLabel}" FontSize="12" TextAlignment="Left"/>
-                    <ComboBox x:Name="CloudStyleCombo" Grid.Row="3" Grid.Column="1" FontSize="12" MinHeight="26" Margin="0,1"/>
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="云线样式" Style="{StaticResource FieldLabelLeft}"/>
+                    <ComboBox x:Name="CloudStyleCombo" Grid.Row="3" Grid.Column="1"/>
 
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="角色" Style="{StaticResource FieldLabel}" FontSize="12" TextAlignment="Left"/>
-                    <ComboBox x:Name="RoleCombo" Grid.Row="4" Grid.Column="1" FontSize="12" MinHeight="26" Margin="0,1" IsEditable="True"/>
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="角色" Style="{StaticResource FieldLabelLeft}"/>
+                    <ComboBox x:Name="RoleCombo" Grid.Row="4" Grid.Column="1" IsEditable="True"/>
                 </Grid>
 
-                <CheckBox x:Name="AutoNumberCheck" Content="自动编号" FontSize="12" Margin="0,4,0,0"/>
-                <CheckBox x:Name="DoubleClickEditCheck" Content="双击编辑" FontSize="12" Margin="0,2,0,0"/>
+                <CheckBox x:Name="AutoNumberCheck" Content="自动编号" Margin="0,6,0,0"/>
+                <CheckBox x:Name="DoubleClickEditCheck" Content="双击编辑"/>
 
                 <Button Content="完整设置…" Style="{StaticResource SecondaryButton}" Click="Settings_Click"
-                        Height="26" FontSize="12" Margin="0,8,0,0" HorizontalAlignment="Right" Width="80"/>
+                        Margin="0,10,0,0" HorizontalAlignment="Right" MinWidth="88"/>
             </StackPanel>
         </ScrollViewer>
     </DockPanel>

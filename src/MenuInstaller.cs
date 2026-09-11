@@ -63,6 +63,8 @@ namespace LAAnnotation
                 AddCommandMenuItem(menu, index++, "批注设置", "LA_PZ_SETTINGS");
                 AddCommandMenuItem(menu, index++, "设置自动加载", "LA_PZ_AUTOLOAD");
                 AddCommandMenuItem(menu, index++, "重新加载菜单", "LA_PZ_MENU");
+                menu.InvokeMethod("AddSeparator", index++);
+                AddCommandMenuItem(menu, index++, "关于", "LA_PZ_ABOUT");
 
                 // 已经在菜单栏上的弹出菜单不能重复插入，否则部分 CAD 宿主会抛出 COM 反射异常。
                 if (!IsMenuOnMenuBar(menu))

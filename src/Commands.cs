@@ -287,6 +287,13 @@ namespace LAAnnotation
             doc?.Editor.WriteMessage("\n" + message);
         }
 
+        /// <summary>打开「关于 LA批注」对话框。</summary>
+        [CommandMethod("LA_PZ_ABOUT", CommandFlags.Modal)]
+        public void About()
+        {
+            CadDialog.ShowModal(new AboutWindow());
+        }
+
         internal static bool EditById(Document doc, ObjectId id)
         {
             AnnotationData data;

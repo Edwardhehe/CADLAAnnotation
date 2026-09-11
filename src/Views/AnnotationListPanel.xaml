@@ -2,8 +2,8 @@
         x:ClassModifier="internal"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="批注列表" Width="590" Height="400"
-        MinWidth="360" MinHeight="240"
+        Title="批注列表" Width="620" Height="420"
+        MinWidth="400" MinHeight="260"
         ResizeMode="CanResize"
         Topmost="True" ShowInTaskbar="False"
         WindowStyle="ToolWindow"
@@ -14,31 +14,36 @@
 
     <DockPanel>
         <!-- 底部状态栏 -->
-        <Border DockPanel.Dock="Bottom" Padding="8,4" Background="{DynamicResource SurfaceBrush}"
+        <Border DockPanel.Dock="Bottom" Padding="10,8" Background="{DynamicResource SurfaceBrush}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
             <Grid>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <TextBlock x:Name="CountText" Grid.Column="0" Text="共 0 条" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <Button Grid.Column="2" Content="刷新" Style="{DynamicResource SecondaryButton}" Click="Refresh_Click" Height="24" FontSize="11" Width="56"/>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="CountText" Grid.Column="0" Text="共 0 条" Style="{StaticResource StatusText}"/>
+                <Button Grid.Column="1" Content="刷新" Style="{DynamicResource SecondaryButton}"
+                        Click="Refresh_Click" MinWidth="64" Margin="0"/>
             </Grid>
         </Border>
 
-        <ListView x:Name="AnnotationList" SelectionMode="Single" BorderThickness="0"
-                  MouseDoubleClick="List_DoubleClick" FontSize="12">
+        <ListView x:Name="AnnotationList" SelectionMode="Single"
+                  MouseDoubleClick="List_DoubleClick"
+                  BorderThickness="0" Margin="0">
             <ListView.ContextMenu>
-                <ContextMenu>
+                <ContextMenu FontSize="12">
                     <MenuItem Header="删除" Click="Delete_Click"/>
                 </ContextMenu>
             </ListView.ContextMenu>
             <ListView.View>
                 <GridView>
-                    <GridViewColumn Header="编号" Width="75" DisplayMemberBinding="{Binding Number}"/>
-                    <GridViewColumn Header="专业" Width="50" DisplayMemberBinding="{Binding Discipline}"/>
-                    <GridViewColumn Header="状态" Width="55" DisplayMemberBinding="{Binding Status}"/>
-                    <GridViewColumn Header="批注人" Width="60" DisplayMemberBinding="{Binding Author}"/>
-                    <GridViewColumn Header="角色" Width="60" DisplayMemberBinding="{Binding Role}"/>
-                    <GridViewColumn Header="日期" Width="80" DisplayMemberBinding="{Binding Date}"/>
-                    <GridViewColumn Header="内容" Width="180" DisplayMemberBinding="{Binding Content}"/>
+                    <GridViewColumn Header="编号" Width="78" DisplayMemberBinding="{Binding Number}"/>
+                    <GridViewColumn Header="专业" Width="52" DisplayMemberBinding="{Binding Discipline}"/>
+                    <GridViewColumn Header="状态" Width="58" DisplayMemberBinding="{Binding Status}"/>
+                    <GridViewColumn Header="批注人" Width="64" DisplayMemberBinding="{Binding Author}"/>
+                    <GridViewColumn Header="角色" Width="64" DisplayMemberBinding="{Binding Role}"/>
+                    <GridViewColumn Header="日期" Width="88" DisplayMemberBinding="{Binding Date}"/>
+                    <GridViewColumn Header="内容" Width="200" DisplayMemberBinding="{Binding Content}"/>
                 </GridView>
             </ListView.View>
         </ListView>
