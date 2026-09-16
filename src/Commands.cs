@@ -634,30 +634,59 @@ namespace GMAnnotation
         }
 
         /// <summary>切换当前 CAD 宿主的启动自动加载。</summary>
-        [CommandMethod("GM_PZ_AUTOLOAD", CommandFlags.Modal)]
-        public void ToggleAutoload()
+                [CommandMethod("GM_PZ_INSTALL_AUTOLOAD", CommandFlags.Modal)]
+        public void InstallAutoload()
         {
             var doc = CadApplication.DocumentManager.MdiActiveDocument;
             try
             {
-                if (AutoloadManager.IsInstalled(out var registeredPath))
-                {
-                    var removed = AutoloadManager.Uninstall();
-                    doc?.Editor.WriteMessage(
-                        $"\n已关闭 GM批注自动加载，清理 {removed} 个注册表项。" +
-                        $" 原加载路径: {registeredPath}");
-                    return;
-                }
-
                 var roots = AutoloadManager.Install();
                 doc?.Editor.WriteMessage(
-                    $"\n已开启 GM批注自动加载，共设置 {roots.Count} 个注册表位置。" +
+                    $"\n已安装 GM批注自动加载（当前 CAD），共 {roots.Count} 处。" +
                     $" DLL: {AutoloadManager.CurrentDllPath}");
             }
             catch (System.Exception ex)
             {
-                doc?.Editor.WriteMessage("\n设置自动加载失败: " + ex.Message);
-                PluginLog.Error("Autoload.Toggle", ex);
+                doc?.Editor.WriteMessage("\n安装自动加载失败: " + ex.Message);
+                PluginLog.Error("Autoload.Install", ex);
+            }
+        }
+
+        [CommandMethod("GM_PZ_UNINSTALL_AUTOLOAD", CommandFlags.Modal)]
+        public void UninstallAutoload()
+        {
+            var doc = CadApplication.DocumentManager.MdiActiveDocument;
+            try
+            {
+                if (!AutoloadManager.IsInstalled(out var registeredPath))
+                {
+                    doc?.Editor.WriteMessage("\n当前 CAD 尚未安装 GM批注自动加载。");
+                    return;
+                }
+
+                var removed = AutoloadManager.Uninstall();
+                doc?.Editor.WriteMessage(
+                    $"\n已卸载 GM批注自动加载，清理 {removed} 个注册表项。" +
+                    $" 原加载路径: {registeredPath}");
+            }
+            catch (System.Exception ex)
+            {
+                doc?.Editor.WriteMessage("\n卸载自动加载失败: " + ex.Message);
+                PluginLog.Error("Autoload.Uninstall", ex);
+            }
+        }
+
+        /// <summary>兼容旧菜单：在安装与卸载之间切换。</summary>
+        [CommandMethod("GM_PZ_AUTOLOAD", CommandFlags.Modal)]
+        public void ToggleAutoload()
+        {
+            if (AutoloadManager.IsInstalled(out _))
+            {
+                UninstallAutoload();
+            }
+            else
+            {
+                InstallAutoload();
             }
         }
 

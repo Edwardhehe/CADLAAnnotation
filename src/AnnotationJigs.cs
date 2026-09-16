@@ -200,15 +200,20 @@ namespace GMAnnotation
                     var a=_firsts[i].TransformBy(_wcsToUcs);var b=_seconds[i].TransformBy(_wcsToUcs);var min=RegionPreviewJig.ToMin(a,b);var max=RegionPreviewJig.ToMax(a,b);var settings=_kind==PlacementGeometryKind.MultiRegion?AnnotationService.ResolveEffectiveSettings(_doc,_source,new AnnotationData(),Math.Sqrt(Math.Pow(max.X-min.X,2)+Math.Pow(max.Y-min.Y,2))):_settings;var cloud=AnnotationService.BuildCloud(min,max,settings);cloud.Elevation=a.Z;clouds.Add(cloud);anchors.Add(AnnotationService.ResolveRegionLeaderAnchor(cloud,min,max,settings,localText));
                 }
 
-                var boxW = _settings.FixedWidth
+                // 预览外框与正式创建同一套估算，避免放置时框偏小、落图后才「撑开」的观感落差。
+                var previewData = new AnnotationData
+                {
+                    Content = "批注内容",
+                    DrawingNo = "图号",
+                    Status = "待处理",
+                    Date = DateTime.Now.ToString("yyyy-MM-dd"),
+                    Discipline = "专业",
+                    Author = "批注人"
+                };
+                var requestedWidth = _settings.FixedWidth
                     ? _settings.FixedWidthValue
                     : Math.Max(_settings.TextHeight * 18, 55);
-                // 预览框高度：首行（日期/专业/批注人，同一行）+ 批注正文（预留两行）+ 图号/状态两行次行高
-                var boxH = Math.Max(
-                    _settings.TextHeight * 6,
-                    _settings.HeaderHeight +
-                    _settings.TextHeight * 2 +
-                    _settings.SecondLineHeight * 2);
+                AnnotationService.MeasureTextBox(_doc, previewData, _settings, requestedWidth, out var boxW, out var boxH);
                 using (var box = AnnotationService.BuildBox(localText, boxW, boxH))
                 {
                     var boxCorners = new[]

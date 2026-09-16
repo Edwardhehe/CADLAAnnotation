@@ -5,22 +5,25 @@ using System.Linq;
 using System.Reflection;
 using Microsoft.Win32;
 using WinRegistry = Microsoft.Win32.Registry;
-#if !ZWCAD
+#if ZWCAD
+using ZwSoft.ZwCAD.DatabaseServices;
+#else
 using Autodesk.AutoCAD.DatabaseServices;
 #endif
 
 namespace GMAnnotation
 {
-    /// <summary>通过当前用户注册表切换当前 CAD 宿主的启动自动加载。</summary>
+    /// <summary>
+    /// 自动加载管理器（对齐「批量打印」/ IFoxCAD）：
+    /// 只写入当前正在运行的 CAD 的 <c>UserRegistryProductRootKey\Applications</c>，
+    /// 不扫其它年份版本。Applications 不存在时 CreateSubKey 创建。
+    /// 卸载时顺带清理旧名 LAAnnotation，避免改名后双加载。
+    /// </summary>
     internal static class AutoloadManager
     {
         private const string AppKeyName = "GMAnnotation";
-        /// <summary>改名前（LA批注）写入的注册表项名，卸载时一并清理，避免新旧插件同时自动加载。</summary>
         private const string LegacyAppKeyName = "LAAnnotation";
         private const string AppDescription = "GM批注插件";
-#if ZWCAD
-        private const string ProductRoot = @"Software\ZWSOFT\ZWCAD";
-#endif
 
         public static string CurrentDllPath =>
             Assembly.GetExecutingAssembly().Location;
@@ -28,165 +31,161 @@ namespace GMAnnotation
         public static bool IsInstalled(out string dllPath)
         {
             dllPath = string.Empty;
-            foreach (var applicationsRoot in GetApplicationRoots())
+            var applicationsRoot = GetCurrentCadApplicationsRoot(createIfMissing: false);
+            if (applicationsRoot == null)
             {
-                using (var key = WinRegistry.CurrentUser.OpenSubKey(
-                    applicationsRoot + "\\" + AppKeyName))
-                {
-                    var loader = key?.GetValue("LOADER")?.ToString();
-                    if (!string.IsNullOrWhiteSpace(loader))
-                    {
-                        dllPath = loader;
-                        return true;
-                    }
-                }
+                return false;
             }
 
-            return false;
+            using (var key = WinRegistry.CurrentUser.OpenSubKey(
+                applicationsRoot + "\\" + AppKeyName))
+            {
+                var loader = key?.GetValue("LOADER")?.ToString();
+                if (string.IsNullOrWhiteSpace(loader))
+                {
+                    return false;
+                }
+
+                dllPath = loader;
+                return true;
+            }
         }
 
-        public static IReadOnlyList<string> Install()
+        public static IReadOnlyList<string> Install(string dllPath = null)
         {
-            var dllPath = Path.GetFullPath(CurrentDllPath);
-            var roots = GetApplicationRoots().ToList();
-            if (roots.Count == 0)
+            dllPath = string.IsNullOrWhiteSpace(dllPath)
+                ? Path.GetFullPath(CurrentDllPath)
+                : Path.GetFullPath(dllPath);
+            if (!File.Exists(dllPath))
             {
-                throw new InvalidOperationException(
+                throw new FileNotFoundException("当前插件 DLL 不存在，无法安装自动加载。", dllPath);
+            }
+
+            var applicationsRoot = GetCurrentCadApplicationsRoot(createIfMissing: true)
+                ?? throw new InvalidOperationException(
                     "未找到当前 CAD 的自动加载注册表位置。请先正常启动一次当前 CAD。");
-            }
 
-            foreach (var applicationsRoot in roots)
+            if (!WriteAutoloadKey(applicationsRoot, dllPath))
             {
-                using (var key = WinRegistry.CurrentUser.CreateSubKey(
-                    applicationsRoot + "\\" + AppKeyName))
-                {
-                    if (key == null)
-                    {
-                        continue;
-                    }
-
-                    key.SetValue(
-                        "DESCRIPTION",
-                        AppDescription,
-                        RegistryValueKind.String);
-                    key.SetValue(
-                        "LOADCTRLS",
-                        2,
-                        RegistryValueKind.DWord);
-                    key.SetValue(
-                        "LOADER",
-                        dllPath,
-                        RegistryValueKind.String);
-                    key.SetValue(
-                        "MANAGED",
-                        1,
-                        RegistryValueKind.DWord);
-                }
+                throw new InvalidOperationException("无法写入当前 CAD 的自动加载注册表项。");
             }
 
-            return roots;
+            // 清理同目录下的旧 LA 键，避免双加载
+            TryDeleteKey(applicationsRoot, LegacyAppKeyName);
+
+            return new[] { applicationsRoot };
         }
 
         public static int Uninstall()
         {
-            var removed = 0;
-            foreach (var applicationsRoot in GetApplicationRoots())
+            var applicationsRoot = GetCurrentCadApplicationsRoot(createIfMissing: false);
+            if (applicationsRoot == null)
             {
-                using (var parent = WinRegistry.CurrentUser.OpenSubKey(
-                    applicationsRoot,
-                    writable: true))
-                {
-                    if (parent == null)
-                    {
-                        continue;
-                    }
+                return 0;
+            }
 
-                    try
-                    {
-                        foreach (var keyName in new[] { AppKeyName, LegacyAppKeyName })
-                        {
-                            if (parent.GetSubKeyNames().Any(name =>
-                                string.Equals(
-                                    name,
-                                    keyName,
-                                    StringComparison.OrdinalIgnoreCase)))
-                            {
-                                parent.DeleteSubKeyTree(
-                                    keyName,
-                                    throwOnMissingSubKey: false);
-                                removed++;
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        PluginLog.Error("Autoload.Uninstall", ex);
-                    }
+            var removed = 0;
+            foreach (var keyName in new[] { AppKeyName, LegacyAppKeyName })
+            {
+                if (TryDeleteKey(applicationsRoot, keyName))
+                {
+                    removed++;
                 }
             }
 
             return removed;
         }
 
-        private static IEnumerable<string> GetApplicationRoots()
+        private static bool TryDeleteKey(string applicationsRoot, string keyName)
         {
-#if ZWCAD
-            using (var root = WinRegistry.CurrentUser.OpenSubKey(ProductRoot))
+            using (var parent = WinRegistry.CurrentUser.OpenSubKey(
+                applicationsRoot,
+                writable: true))
             {
-                if (root == null)
+                if (parent == null)
                 {
-                    yield break;
+                    return false;
                 }
 
-                foreach (var version in root.GetSubKeyNames()
-                    .OrderByDescending(
-                        value => value,
-                        StringComparer.OrdinalIgnoreCase))
+                try
                 {
-                    using (var versionKey = root.OpenSubKey(version))
+                    if (!parent.GetSubKeyNames().Any(name =>
+                        string.Equals(name, keyName, StringComparison.OrdinalIgnoreCase)))
                     {
-                        if (versionKey == null)
-                        {
-                            continue;
-                        }
-
-                        foreach (var locale in versionKey.GetSubKeyNames()
-                            .OrderBy(
-                                value => value,
-                                StringComparer.OrdinalIgnoreCase))
-                        {
-                            var applicationsPath = ProductRoot + "\\" +
-                                version + "\\" + locale + "\\Applications";
-                            using (var applications =
-                                WinRegistry.CurrentUser.OpenSubKey(applicationsPath))
-                            {
-                                if (applications != null)
-                                {
-                                    yield return applicationsPath;
-                                }
-                            }
-                        }
+                        return false;
                     }
+
+                    parent.DeleteSubKeyTree(keyName, throwOnMissingSubKey: false);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    PluginLog.Error("Autoload.DeleteKey", ex);
+                    return false;
                 }
             }
-#else
-            var productRoot = HostApplicationServices.Current
-                .UserRegistryProductRootKey;
+        }
+
+        private static bool WriteAutoloadKey(string applicationsRoot, string dllPath)
+        {
+            using (var key = WinRegistry.CurrentUser.CreateSubKey(
+                applicationsRoot + "\\" + AppKeyName))
+            {
+                if (key == null)
+                {
+                    return false;
+                }
+
+                key.SetValue("DESCRIPTION", AppDescription, RegistryValueKind.String);
+                key.SetValue("LOADCTRLS", 2, RegistryValueKind.DWord);
+                key.SetValue("LOADER", dllPath, RegistryValueKind.String);
+                key.SetValue("MANAGED", 1, RegistryValueKind.DWord);
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// 当前正在运行的 CAD 的 Applications 路径（IFoxCAD GetAcAppKey 写法）。
+        /// </summary>
+        private static string GetCurrentCadApplicationsRoot(bool createIfMissing)
+        {
+            var productRoot = HostApplicationServices.Current?.UserRegistryProductRootKey;
             if (string.IsNullOrWhiteSpace(productRoot))
             {
-                yield break;
+                return null;
+            }
+
+            productRoot = NormalizeHkcuRelativePath(productRoot);
+            if (string.IsNullOrWhiteSpace(productRoot))
+            {
+                return null;
             }
 
             var applicationsPath = productRoot + "\\Applications";
-            using (var applications =
-                WinRegistry.CurrentUser.OpenSubKey(applicationsPath))
+            if (createIfMissing)
             {
-                if (applications != null)
+                using (var created = WinRegistry.CurrentUser.CreateSubKey(applicationsPath))
                 {
-                    yield return applicationsPath;
+                    return created != null ? applicationsPath : null;
                 }
             }
-#endif
+
+            using (var existing = WinRegistry.CurrentUser.OpenSubKey(applicationsPath))
+            {
+                return existing != null ? applicationsPath : null;
+            }
+        }
+
+        private static string NormalizeHkcuRelativePath(string path)
+        {
+            var normalized = path.Replace('/', '\\').Trim('\\');
+            const string hkcuPrefix = @"HKEY_CURRENT_USER\";
+            if (normalized.StartsWith(hkcuPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = normalized.Substring(hkcuPrefix.Length).Trim('\\');
+            }
+
+            return normalized;
         }
     }
 }

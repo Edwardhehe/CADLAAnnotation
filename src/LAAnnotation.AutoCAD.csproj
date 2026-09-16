@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk.WindowsDesktop" ToolsVersion="Current">
   <PropertyGroup>
     <TargetFramework>net45</TargetFramework>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>$(RepoRoot)bin-acad\</OutputPath>
     <OutputType>Library</OutputType>
     <RootNamespace>GMAnnotation</RootNamespace>
     <AssemblyName>GMAnnotation.AutoCAD</AssemblyName>
@@ -13,9 +15,6 @@
          源码用这个符号切到 6 参构造，见 ToolbarInstaller.cs 的图标绘制。
          注意不能拿 AUTOCAD 当判据：AutoCAD2025 的 net8 工程同样定义 AUTOCAD，要的是带像素密度的重载。 -->
     <DefineConstants>AUTOCAD;WPF_NO_PIXELSPERDIP</DefineConstants>
-    <FileUpgradeFlags>40</FileUpgradeFlags>
-    <UpgradeBackupLocation>D:\00YPL内部环境V1.0\08-插件整理\打印\LA批量打印-平替代MSteel批打印\LA批注\CADLAAnnotation-main源码\src\Backup\</UpgradeBackupLocation>
-    <OldToolsVersion>2.0</OldToolsVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="AutoCAD.NET" Version="20.0.0">

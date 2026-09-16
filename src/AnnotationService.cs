@@ -201,13 +201,13 @@ namespace GMAnnotation
                 var cloudPts=localPoints.Select(p=>new Point2d(p.X,p.Y)).ToList();
                 var cloud=BuildPolygonCloud(cloudPts,settings);cloud.Elevation=localPoints[0].Z;
                 // 文字 + 边框
-                var margin=settings.TextHeight*0.5;
-                var innerTextLocation=new Point3d(localText.X+margin,localText.Y+margin,localText.Z);
                 var requestedWidth=settings.FixedWidth?settings.FixedWidthValue:Math.Max(55.0,settings.TextHeight*18.0);
                 requestedWidth=Math.Max(requestedWidth,MeasureHeaderWidth(doc.Database,tr,data,settings)); // 首行（日期/专业/批注人）不折行
-                var text=new MText{Location=innerTextLocation,TextHeight=settings.TextHeight,Width=requestedWidth,Contents=FormatText(data,settings),Attachment=AttachmentPoint.BottomLeft};
+                var margin=TextBoxMargin(settings);
+                var text=new MText{Location=new Point3d(localText.X+margin,localText.Y+margin,localText.Z),TextHeight=settings.TextHeight,Width=requestedWidth,Contents=FormatText(data,settings),Attachment=AttachmentPoint.BottomLeft};
                 ApplyTextStyle(doc.Database,tr,text,settings.TextStyleName);
-                var width=Math.Max(text.ActualWidth,settings.TextHeight*4)+margin*2;var height=Math.Max(text.ActualHeight,settings.TextHeight*2)+margin*2;
+                MeasureTextBoxFromMText(text,data,settings,out var width,out var height,out margin);
+                text.Location=new Point3d(localText.X+margin,localText.Y+margin,localText.Z);
                 var boxEntity=BuildBox(localText,width,height);boxEntity.Elevation=localText.Z;
                 var nearestCloudPoint=cloud.GetClosestPointTo(localText,false);var nearestPt=new Point2d(nearestCloudPoint.X,nearestCloudPoint.Y);
                 var boxCorners=new[]{new Point2d(localText.X,localText.Y),new Point2d(localText.X+width,localText.Y),new Point2d(localText.X+width,localText.Y+height),new Point2d(localText.X,localText.Y+height)};
@@ -262,10 +262,13 @@ namespace GMAnnotation
                     var cloud=BuildCloud(min,max,regionSettings);cloud.Elevation=first.Z;cloud.TransformBy(ucsToWcs);OrientCloudBulgesForView(doc,cloud);Add(space,tr,cloud,ids,regionSettings,data.Id,"cloud",regionSettings.CloudColor,data);
                 }
 
-                var margin=settings.TextHeight*0.5;var requestedWidth=settings.FixedWidth?settings.FixedWidthValue:Math.Max(55.0,settings.TextHeight*18.0);
+                var requestedWidth=settings.FixedWidth?settings.FixedWidthValue:Math.Max(55.0,settings.TextHeight*18.0);
                 requestedWidth=Math.Max(requestedWidth,MeasureHeaderWidth(doc.Database,tr,data,settings)); // 首行（日期/专业/批注人）不折行
+                var margin=TextBoxMargin(settings);
                 var text=new MText{Location=new Point3d(localText.X+margin,localText.Y+margin,localText.Z),TextHeight=settings.TextHeight,Width=requestedWidth,Contents=FormatText(data,settings),Attachment=AttachmentPoint.BottomLeft};ApplyTextStyle(doc.Database,tr,text,settings.TextStyleName);
-                var widthBox=Math.Max(text.ActualWidth,settings.TextHeight*4)+margin*2;var heightBox=Math.Max(text.ActualHeight,settings.TextHeight*2)+margin*2;var boxEntity=BuildBox(localText,widthBox,heightBox);boxEntity.Elevation=localText.Z;
+                MeasureTextBoxFromMText(text,data,settings,out var widthBox,out var heightBox,out margin);
+                text.Location=new Point3d(localText.X+margin,localText.Y+margin,localText.Z);
+                var boxEntity=BuildBox(localText,widthBox,heightBox);boxEntity.Elevation=localText.Z;
                 var boxCorners=new[]{new Point2d(localText.X,localText.Y),new Point2d(localText.X+widthBox,localText.Y),new Point2d(localText.X+widthBox,localText.Y+heightBox),new Point2d(localText.X,localText.Y+heightBox)};var leaders=new List<Polyline>();
                 for(var k=0;k<localCloudCorners.Count;k++){var cloudCorner=localCloudCorners[k].OrderBy(c=>c.GetDistanceTo(new Point2d(localText.X,localText.Y))).First();var boxCorner=boxCorners.OrderBy(c=>c.GetDistanceTo(cloudCorner)).First();var leader=new Polyline();leader.AddVertexAt(0,cloudCorner,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=localText.Z;leader.TransformBy(ucsToWcs);Add(space,tr,leader,ids,cloudSettings[k],data.Id,"leader",cloudSettings[k].LeaderColor,data);leaders.Add(leader);}
                 text.TransformBy(ucsToWcs);boxEntity.TransformBy(ucsToWcs);Add(space,tr,text,ids,settings,data.Id,"text",TextColorForStatus(settings,data.Status),data);Add(space,tr,boxEntity,ids,settings,data.Id,"box",settings.SameColors?settings.CloudColor:settings.BoxColor,data);
@@ -610,11 +613,14 @@ namespace GMAnnotation
                 var ucsToWcs=GetUcsMatrix(doc);var wcsToUcs=ucsToWcs.Inverse();var first=firstPoint.TransformBy(wcsToUcs);var second=secondPoint.TransformBy(wcsToUcs);var localText=textLocation.TransformBy(wcsToUcs);
                 var min=new Point2d(Math.Min(first.X,second.X),Math.Min(first.Y,second.Y));var max=new Point2d(Math.Max(first.X,second.X),Math.Max(first.Y,second.Y));
                 var cloud=BuildCloud(min,max,settings);cloud.Elevation=first.Z;
-                var requestedWidth=settings.FixedWidth?settings.FixedWidthValue:Math.Max(55.0,settings.TextHeight*18.0);var margin=settings.TextHeight*0.5;
+                var requestedWidth=settings.FixedWidth?settings.FixedWidthValue:Math.Max(55.0,settings.TextHeight*18.0);
                 requestedWidth=Math.Max(requestedWidth,MeasureHeaderWidth(doc.Database,tr,data,settings)); // 首行（日期/专业/批注人）不折行
+                var margin=TextBoxMargin(settings);
                 var text=new MText{Location=new Point3d(localText.X+margin,localText.Y+margin,localText.Z),TextHeight=settings.TextHeight,Width=requestedWidth,Contents=FormatText(data,settings),Attachment=AttachmentPoint.BottomLeft};
                 ApplyTextStyle(doc.Database,tr,text,settings.TextStyleName);
-                var boxW=Math.Max(text.ActualWidth,settings.TextHeight*4)+margin*2;var boxH=Math.Max(text.ActualHeight,settings.TextHeight*2)+margin*2;var boxEntity=BuildBox(localText,boxW,boxH);boxEntity.Elevation=localText.Z;
+                MeasureTextBoxFromMText(text,data,settings,out var boxW,out var boxH,out margin);
+                text.Location=new Point3d(localText.X+margin,localText.Y+margin,localText.Z);
+                var boxEntity=BuildBox(localText,boxW,boxH);boxEntity.Elevation=localText.Z;
                 var cloudCorner=ResolveRegionLeaderAnchor(cloud,min,max,settings,localText);var boxCorners=new[]{new Point2d(localText.X,localText.Y),new Point2d(localText.X+boxW,localText.Y),new Point2d(localText.X+boxW,localText.Y+boxH),new Point2d(localText.X,localText.Y+boxH)};var boxCorner=boxCorners.OrderBy(c=>c.GetDistanceTo(cloudCorner)).First();
                 var leader=new Polyline();leader.AddVertexAt(0,cloudCorner,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=localText.Z;
                 cloud.TransformBy(ucsToWcs);OrientCloudBulgesForView(doc,cloud);text.TransformBy(ucsToWcs);boxEntity.TransformBy(ucsToWcs);leader.TransformBy(ucsToWcs);
@@ -704,8 +710,9 @@ namespace GMAnnotation
                 }
                 if(changedText!=null&&box!=null&&box.NumberOfVertices>=4)
                 {
-                    var margin=changedText.TextHeight/2;var origin=box.GetPoint2dAt(0);var xVector=box.GetPoint2dAt(1)-origin;var yVector=box.GetPoint2dAt(3)-origin;
-                    var xLength=Math.Max(xVector.Length,1e-9);var yLength=Math.Max(yVector.Length,1e-9);var xAxis=xVector/xLength;var yAxis=yVector/yLength;var width=Math.Max(changedText.ActualWidth,changedText.TextHeight*4)+margin*2;var height=Math.Max(changedText.ActualHeight,changedText.TextHeight*2)+margin*2;
+                    var origin=box.GetPoint2dAt(0);var xVector=box.GetPoint2dAt(1)-origin;var yVector=box.GetPoint2dAt(3)-origin;
+                    var xLength=Math.Max(xVector.Length,1e-9);var yLength=Math.Max(yVector.Length,1e-9);var xAxis=xVector/xLength;var yAxis=yVector/yLength;
+                    MeasureTextBoxFromMText(changedText,data,existingSettings,out var width,out var height,out var margin);
                     // 文字框保持「顶边」不动、向下伸缩：批注的惯例是云线在上、文字框在下，
                     // 原来固定左下角向上生长，内容行数一变多（套用新版式 / 追加回复）框顶就会顶进云线里。
                     var newOrigin=origin+yAxis*(yLength-height);
@@ -2694,49 +2701,112 @@ namespace GMAnnotation
         }
         internal static Polyline BuildBox(Point3d p, double w, double h) { var x=new Polyline();x.AddVertexAt(0,new Point2d(p.X,p.Y),0,0,0);x.AddVertexAt(1,new Point2d(p.X+w,p.Y),0,0,0);x.AddVertexAt(2,new Point2d(p.X+w,p.Y+h),0,0,0);x.AddVertexAt(3,new Point2d(p.X,p.Y+h),0,0,0);x.Closed=true;return x; }
         /// <summary>
-        /// 量出批注文字框的实际宽高，取值方式与 <see cref="Create"/> 内完全一致
-        /// （MText 实际尺寸 + 上下左右各半个字高边距）。
-        /// 供导入等"程序化排布"场景在创建前预留位置：文字框以左下角为锚点**向上生长**，
-        /// 不先量高度就随手放锚点，框顶会伸进云线里（导出再导入就会看到文字压在云线上）。
-        /// requestedWidth 必须与 Create 用的文字宽度一致，否则换行行数不同、量出的高度会偏小。
+        /// 边距：取首行/正文/次行字高最大值的一半，避免字高不一致时上下左右贴边、内容溢出外框。
         /// </summary>
-        internal static void MeasureTextBox(Document doc,AnnotationData data,AnnotationSettings settings,double requestedWidth,out double width,out double height)
+        internal static double TextBoxMargin(AnnotationSettings settings)
         {
-            var margin=settings.TextHeight*0.5;
-            var minWidth=settings.TextHeight*4.0;
-            width=Math.Max(requestedWidth,minWidth)+margin*2.0;
-            height=EstimateBoxHeight(data,settings)+margin*2.0;
+            var h = Math.Max(settings.TextHeight, Math.Max(settings.HeaderHeight, settings.SecondLineHeight));
+            return Math.Max(0.05, h * 0.5);
+        }
+
+        /// <summary>
+        /// 量出批注文字框宽高（外框必须包住全部批注信息）。
+        /// 取「MText 实测」与「按版式估算」的较大值，再加四周边距；
+        /// ActualHeight 在未入库/部分字体下会偏小或为 0，单靠实测会裁切首行或末行。
+        /// </summary>
+        internal static void MeasureTextBox(Document doc, AnnotationData data, AnnotationSettings settings, double requestedWidth, out double width, out double height)
+        {
+            var margin = TextBoxMargin(settings);
+            var minWidth = settings.TextHeight * 4.0;
+            width = Math.Max(requestedWidth, minWidth) + margin * 2.0;
+            height = EstimateBoxHeight(data, settings) + margin * 2.0;
             try
             {
-                using(var probe=new MText{Location=Point3d.Origin,TextHeight=settings.TextHeight,Width=requestedWidth,Contents=FormatText(data,settings),Attachment=AttachmentPoint.BottomLeft})
+                using (var probe = new MText
                 {
-                    using(var tr=doc.Database.TransactionManager.StartTransaction())
+                    Location = Point3d.Origin,
+                    TextHeight = settings.TextHeight,
+                    Width = requestedWidth,
+                    Contents = FormatText(data, settings),
+                    Attachment = AttachmentPoint.BottomLeft
+                })
+                {
+                    using (var tr = doc.Database.TransactionManager.StartTransaction())
                     {
-                        ApplyTextStyle(doc.Database,tr,probe,settings.TextStyleName);
-                        // 首行（日期/专业/批注人）不折行：宽度不足会多折一行，量出的高度随之偏大。
-                        var headerNeed=MeasureHeaderWidth(doc.Database,tr,data,settings);
-                        if(headerNeed>requestedWidth){requestedWidth=headerNeed;probe.Width=requestedWidth;}
-                        tr.Abort(); // 只读探测，不写入数据库
+                        ApplyTextStyle(doc.Database, tr, probe, settings.TextStyleName);
+                        var headerNeed = MeasureHeaderWidth(doc.Database, tr, data, settings);
+                        if (headerNeed > requestedWidth)
+                        {
+                            requestedWidth = headerNeed;
+                            probe.Width = requestedWidth;
+                        }
+                        tr.Abort();
                     }
-                    width=Math.Max(probe.ActualWidth,minWidth)+margin*2.0;
-                    var measured=probe.ActualHeight;
-                    if(measured>0)height=Math.Max(measured,settings.TextHeight*2.0)+margin*2.0;
+
+                    width = Math.Max(Math.Max(probe.ActualWidth, requestedWidth), minWidth) + margin * 2.0;
+                    var measured = probe.ActualHeight;
+                    var estimated = EstimateBoxHeight(data, settings);
+                    var contentH = measured > 1e-6 ? Math.Max(measured, estimated) : estimated;
+                    height = Math.Max(contentH, settings.TextHeight * 2.0) + margin * 2.0;
                 }
             }
-            catch(System.Exception ex){PluginLog.Warning("MeasureTextBox",ex.Message);}
+            catch (System.Exception ex)
+            {
+                PluginLog.Warning("MeasureTextBox", ex.Message);
+            }
         }
-        /// <summary>量不到 MText 实际高度时的兜底估算：显示行数 × 行高 × MText 默认行距系数 1.7。</summary>
-        private static double EstimateBoxHeight(AnnotationData data,AnnotationSettings settings)
+
+        /// <summary>
+        /// 已有 MText（创建/更新事务内）时计算外框尺寸：实测与版式估算取大，保证包住全部信息。
+        /// </summary>
+        internal static void MeasureTextBoxFromMText(MText text, AnnotationData data, AnnotationSettings settings, out double width, out double height, out double margin)
         {
-            var lineHeight=Math.Max(settings.TextHeight,Math.Max(settings.HeaderHeight,settings.SecondLineHeight));
-            var lines=0;
-            // 首行固定承载「日期 / 专业 / 批注人」，日期不再单独占行。
-            if(settings.ShowDate||settings.ShowDiscipline||settings.ShowAuthor||settings.ShowRole)lines++;
-            var content=(data.Content??"").Replace("\r\n","\n");
-            lines+=Math.Max(1,content.Split('\n').Length);
-            if(settings.ShowDrawingNo)lines++;
-            if(settings.ShowStatus)lines++;
-            return Math.Max(settings.TextHeight*2.0,lines*lineHeight*1.7);
+            margin = TextBoxMargin(settings);
+            var minWidth = Math.Max(text.TextHeight, settings.TextHeight) * 4.0;
+            var estimated = EstimateBoxHeight(data, settings);
+            var measuredW = 0.0;
+            var measuredH = 0.0;
+            try { measuredW = text.ActualWidth; } catch { }
+            try { measuredH = text.ActualHeight; } catch { }
+            width = Math.Max(Math.Max(measuredW, text.Width), minWidth) + margin * 2.0;
+            var contentH = measuredH > 1e-6 ? Math.Max(measuredH, estimated) : estimated;
+            height = Math.Max(contentH, settings.TextHeight * 2.0) + margin * 2.0;
+        }
+
+        /// <summary>
+        /// 量不到 MText 实际高度时的兜底估算：按首行/正文/图号/状态各自字高累加，
+        /// 再乘 MText 默认行距系数 1.7，避免实测偏小时外框裁切内容。
+        /// </summary>
+        private static double EstimateBoxHeight(AnnotationData data, AnnotationSettings settings)
+        {
+            var total = 0.0;
+            var lines = 0;
+            if (settings.ShowDate || settings.ShowDiscipline || settings.ShowAuthor || settings.ShowRole)
+            {
+                total += Math.Max(0.1, settings.HeaderHeight);
+                lines++;
+            }
+
+            var content = (data.Content ?? "").Replace("\r\n", "\n");
+            var contentLines = Math.Max(1, content.Split(new[] { '\n' }, StringSplitOptions.None).Length);
+            total += Math.Max(0.1, settings.TextHeight) * contentLines;
+            lines += contentLines;
+
+            if (settings.ShowDrawingNo)
+            {
+                total += Math.Max(0.1, settings.SecondLineHeight);
+                lines++;
+            }
+
+            if (settings.ShowStatus)
+            {
+                total += Math.Max(0.1, settings.SecondLineHeight);
+                lines++;
+            }
+
+            // 行距：MText AtLeast 默认约 1.66~1.7；多行时按总高 * 系数更稳
+            var spaced = total * (lines <= 1 ? 1.0 : 1.7);
+            return Math.Max(settings.TextHeight * 2.0, spaced);
         }
         /// <summary>构建云线多段线，支持矩形/菱形/椭圆三种外形，开启 CloudAutoFit 时自适应弧段数。</summary>
         internal static Polyline BuildCloud(Point2d min, Point2d max, AnnotationSettings settings)

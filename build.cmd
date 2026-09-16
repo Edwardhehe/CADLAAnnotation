@@ -199,8 +199,8 @@ if "%FAILED%"=="0" if "%DEPLOY%"=="1" (
         rem  names, so it is skipped automatically.
         for /d %%D in ("%ROOT%..\v0.5*") do (
             set "HIT=0"
-            if exist "%%~fD\net45\GMAnnotation.AutoCAD.dll" set "HIT=1"
-            if exist "%%~fD\net8.0-windows\GMAnnotation.AutoCAD2025.dll" set "HIT=1"
+            if exist "%%~fD\GMAnnotation.AutoCAD.dll" set "HIT=1"
+            if exist "%%~fD\GMAnnotation.AutoCAD2025.dll" set "HIT=1"
             if "!HIT!"=="1" >>"!LIST!" echo %%~fD
         )
     )
@@ -210,18 +210,18 @@ if "%FAILED%"=="0" if "%DEPLOY%"=="1" (
         if not exist "%%T" mkdir "%%T"
         if not exist "%%T\net45" mkdir "%%T\net45"
         if not exist "%%T\net8.0-windows" mkdir "%%T\net8.0-windows"
-        if exist "%SRC%\bin\Release\net45\GMAnnotation.AutoCAD.dll" (
-            copy /Y "%SRC%\bin\Release\net45\GMAnnotation.AutoCAD.dll" "%%T\net45\" >nul
-            if exist "%SRC%\bin\Release\net45\GMAnnotation.AutoCAD.pdb" copy /Y "%SRC%\bin\Release\net45\GMAnnotation.AutoCAD.pdb" "%%T\net45\" >nul
-            if exist "%SRC%\bin\Release\net45\System.ValueTuple.dll" copy /Y "%SRC%\bin\Release\net45\System.ValueTuple.dll" "%%T\net45\" >nul
-            echo   net45  -^> %%T\net45\GMAnnotation.AutoCAD.dll
+        if exist "%ROOT%bin-acad\GMAnnotation.AutoCAD.dll" (
+            copy /Y "%ROOT%bin-acad\GMAnnotation.AutoCAD.dll" "%%T\net45\" >nul
+            if exist "%ROOT%bin-acad\GMAnnotation.AutoCAD.pdb" copy /Y "%ROOT%bin-acad\GMAnnotation.AutoCAD.pdb" "%%T\net45\" >nul
+            if exist "%ROOT%bin-acad\System.ValueTuple.dll" copy /Y "%ROOT%bin-acad\System.ValueTuple.dll" "%%T\net45\" >nul
+            echo   net45  -^> %%T\GMAnnotation.AutoCAD.dll
         )
-        if exist "%SRC%\bin\Release\net8.0-windows\GMAnnotation.AutoCAD2025.dll" (
-            copy /Y "%SRC%\bin\Release\net8.0-windows\GMAnnotation.AutoCAD2025.dll" "%%T\net8.0-windows\" >nul
-            if exist "%SRC%\bin\Release\net8.0-windows\GMAnnotation.AutoCAD2025.pdb" copy /Y "%SRC%\bin\Release\net8.0-windows\GMAnnotation.AutoCAD2025.pdb" "%%T\net8.0-windows\" >nul
-            if exist "%SRC%\bin\Release\net8.0-windows\GMAnnotation.AutoCAD2025.deps.json" copy /Y "%SRC%\bin\Release\net8.0-windows\GMAnnotation.AutoCAD2025.deps.json" "%%T\net8.0-windows\" >nul
-            if exist "%SRC%\bin\Release\net8.0-windows\System.Drawing.Common.dll" copy /Y "%SRC%\bin\Release\net8.0-windows\System.Drawing.Common.dll" "%%T\net8.0-windows\" >nul
-            echo   net8   -^> %%T\net8.0-windows\GMAnnotation.AutoCAD2025.dll
+        if exist "%ROOT%bin-acad2025-2027\GMAnnotation.AutoCAD2025.dll" (
+            copy /Y "%ROOT%bin-acad2025-2027\GMAnnotation.AutoCAD2025.dll" "%%T\net8.0-windows\" >nul
+            if exist "%ROOT%bin-acad2025-2027\GMAnnotation.AutoCAD2025.pdb" copy /Y "%ROOT%bin-acad2025-2027\GMAnnotation.AutoCAD2025.pdb" "%%T\net8.0-windows\" >nul
+            if exist "%ROOT%bin-acad2025-2027\GMAnnotation.AutoCAD2025.deps.json" copy /Y "%ROOT%bin-acad2025-2027\GMAnnotation.AutoCAD2025.deps.json" "%%T\net8.0-windows\" >nul
+            if exist "%ROOT%bin-acad2025-2027\System.Drawing.Common.dll" copy /Y "%ROOT%bin-acad2025-2027\System.Drawing.Common.dll" "%%T\net8.0-windows\" >nul
+            echo   net8   -^> %%T\GMAnnotation.AutoCAD2025.dll
         )
     )
     del "!LIST!" >nul 2>nul
@@ -258,9 +258,9 @@ if "%FAILED%"=="1" (
     echo Full build log: %LOG%
     echo.
     echo Output DLLs:
-    if exist "%SRC%\bin\Release\net8.0-windows\GMAnnotation.AutoCAD2025.dll" echo   %SRC%\bin\Release\net8.0-windows\GMAnnotation.AutoCAD2025.dll
-    if exist "%SRC%\bin\Release\net45\GMAnnotation.AutoCAD.dll" echo   %SRC%\bin\Release\net45\GMAnnotation.AutoCAD.dll
-    if exist "%SRC%\bin\Release\net472\GMAnnotation.ZWCAD.dll" echo   %SRC%\bin\Release\net472\GMAnnotation.ZWCAD.dll
+    if exist "%ROOT%bin-acad2025-2027\GMAnnotation.AutoCAD2025.dll" echo   %ROOT%bin-acad2025-2027\GMAnnotation.AutoCAD2025.dll
+    if exist "%ROOT%bin-acad\GMAnnotation.AutoCAD.dll" echo   %ROOT%bin-acad\GMAnnotation.AutoCAD.dll
+    if exist "%ROOT%bin\GMAnnotation.ZWCAD.dll" echo   %ROOT%bin\GMAnnotation.ZWCAD.dll
     echo.
     echo Load the DLL in CAD with NETLOAD, then run GM_PZ_MENU to rebuild the menu.
     echo.

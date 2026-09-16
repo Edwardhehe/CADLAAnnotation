@@ -1,4 +1,4 @@
-﻿# IDE & Editor
+# IDE & Editor
 .vs/
 *.suo
 *.user
@@ -16,3 +16,6 @@ obj/
 DEEPSEEK_WORKERS.md
 tools/
 build.log
+bin-acad/
+bin-acad2025-2027/
+_build_check/

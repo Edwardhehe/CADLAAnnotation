@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>$(RepoRoot)bin\</OutputPath>
     <OutputType>Library</OutputType>
     <RootNamespace>GMAnnotation</RootNamespace>
     <AssemblyName>GMAnnotation.ZWCAD</AssemblyName>

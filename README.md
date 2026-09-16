@@ -1,4 +1,4 @@
-﻿# GM批注 v1.0.0
+# GM批注 v1.0.0
 
 同时支持 AutoCAD 与 ZWCAD 的本地批注插件，无需登录或联网。两种宿主共用同一套源码、DWG 数据格式、界面和命令。
 
@@ -12,9 +12,9 @@
 
 | CAD 宿主 | DLL |
 |---|---|
-| AutoCAD 2015~2024 | `AutoCAD/GMAnnotation.AutoCAD.dll` |
-| AutoCAD 2025~2027 | `AutoCAD2025/GMAnnotation.AutoCAD2025.dll` |
-| 中望 ZWCAD 2025~2026 | `ZWCAD/GMAnnotation.ZWCAD.dll` |
+| AutoCAD 2015~2024 | `bin-acad/GMAnnotation.AutoCAD.dll` |
+| AutoCAD 2025~2027 | `bin-acad2025-2027/GMAnnotation.AutoCAD2025.dll` |
+| 中望 ZWCAD 2025~2026 | `bin/GMAnnotation.ZWCAD.dll` |
 
 **注意**：三个 DLL 不可混用，请严格按 CAD 宿主和版本选择；DLL 同目录内的依赖文件也必须保留。
 
@@ -26,9 +26,9 @@ NETLOAD
 ```
 在弹出的文件对话框中选中对应的 DLL。
 
-### 3. 设置自动加载（可选）
+### 3. 安装自动加载（可选）
 
-首次 NETLOAD 后，在菜单栏 **GM批注 → 设置自动加载** 点击一次即可。之后每次启动该 CAD，插件会自动加载。再次点击该菜单项可关闭自动加载。
+首次 NETLOAD 后，在菜单栏 **GM批注 → 安装自动加载** 点击一次即可。之后每次启动该 CAD，插件会自动加载。再次点击该菜单项可关闭自动加载。
 
 > 原理：在当前用户注册表中写入启动加载项。ZWCAD 与 AutoCAD 各自独立配置。
 
@@ -270,7 +270,7 @@ NETLOAD
 | `GM_PZ_REPAIR` | 修复复制/粘贴后脱离编组的批注 |
 | `GM_PZ_TOOLBAR` | 显示/隐藏 CAD 原生工具栏「GM批注」（不存在时创建，重复执行按当前版本重建按钮） |
 | `GM_PZ_SETTINGS` | 打开完整设置窗口 |
-| `GM_PZ_AUTOLOAD` | 切换当前 CAD 的启动自动加载 |
+| `GM_PZ_INSTALL_AUTOLOAD / GM_PZ_UNINSTALL_AUTOLOAD` | 切换当前 CAD 的启动自动加载 |
 | `GM_PZ_MENU` | 重建顶部"GM批注"菜单 |
 
 ---

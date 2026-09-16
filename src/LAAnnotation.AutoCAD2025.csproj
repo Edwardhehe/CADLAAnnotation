@@ -2,6 +2,8 @@
   <!-- AutoCAD 2025~2027（.NET 8）构建：与 net45 的 AutoCAD 2015~2024 工程共用全部源码，仅宿主引用不同。 -->
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>$(RepoRoot)bin-acad2025-2027\</OutputPath>
     <OutputType>Library</OutputType>
     <RootNamespace>GMAnnotation</RootNamespace>
     <AssemblyName>GMAnnotation.AutoCAD2025</AssemblyName>
@@ -9,7 +11,7 @@
     <LangVersion>latest</LangVersion>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <UseWPF>true</UseWPF>
-    <DefineConstants>AUTOCAD</DefineConstants>
+    <DefineConstants>AUTOCAD;ACAD_CORE</DefineConstants>
     <!-- CAD 通过 NETLOAD 加载类库时不会执行 dotnet publish；构建目录必须直接带齐截图功能的运行依赖。 -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <!-- 插件只运行于 Windows 上的 AutoCAD 宿主，注册表 CA1416 平台告警无需提示。 -->

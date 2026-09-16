@@ -8,6 +8,9 @@ using System.Windows.Media.Imaging;
 #if ZWCAD
 using UiApplication = ZwSoft.ZwCAD.ApplicationServices.Application;
 using CadApplication = ZwSoft.ZwCAD.ApplicationServices.Core.Application;
+#elif ACAD_CORE
+using UiApplication = Autodesk.AutoCAD.ApplicationServices.Core.Application;
+using CadApplication = Autodesk.AutoCAD.ApplicationServices.Core.Application;
 #else
 using UiApplication = Autodesk.AutoCAD.ApplicationServices.Application;
 using CadApplication = Autodesk.AutoCAD.ApplicationServices.Core.Application;
@@ -234,12 +237,34 @@ namespace GMAnnotation
 
         /// <summary>把图标目录加进 CAD 支持路径（Preferences → Files → SupportPath），已存在则不重复加。
         /// 只在"用完整路径设图标"失败后才会走到这里，属于兜底路径；改动会写进当前 CAD 配置，日志里有记录。</summary>
+
+        private static object ResolveAcadApplication()
+        {
+#if ZWCAD
+            try { return UiApplication.ZcadApplication; } catch { return null; }
+#else
+            var applicationTypeNames = new[]
+            {
+                "Autodesk.AutoCAD.ApplicationServices.Application, AcMgd",
+                "Autodesk.AutoCAD.ApplicationServices.Core.Application, AcCoreMgd"
+            };
+            foreach (var typeName in applicationTypeNames)
+            {
+                var type = Type.GetType(typeName, throwOnError: false);
+                if (type == null) continue;
+                var prop = type.GetProperty("AcadApplication", BindingFlags.Public | BindingFlags.Static);
+                var value = prop?.GetValue(null, null);
+                if (value != null) return value;
+            }
+            return null;
+#endif
+        }
         private static bool EnsureSupportPath(string folder)
         {
             if (string.IsNullOrWhiteSpace(folder)) return false;
             try
             {
-                var app = UiApplication.AcadApplication;
+                var app = ResolveAcadApplication();
                 if (app == null) return false;
                 var files = app.GetProperty("Preferences").GetProperty("Files");
                 var current = Convert.ToString(files.GetProperty("SupportPath")) ?? "";

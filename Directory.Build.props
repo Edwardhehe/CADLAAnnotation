@@ -1,5 +1,7 @@
 <Project>
   <PropertyGroup>
+    <!-- Repo root (this file). Platform projects put Release DLLs under bin / bin-acad / bin-acad2025-2027. -->
+    <RepoRoot>$(MSBuildThisFileDirectory)</RepoRoot>
     <BaseIntermediateOutputPath>obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
     <MSBuildProjectExtensionsPath>obj\$(MSBuildProjectName)\</MSBuildProjectExtensionsPath>
     <DefaultItemExcludes>$(DefaultItemExcludes);obj\**;bin\**</DefaultItemExcludes>

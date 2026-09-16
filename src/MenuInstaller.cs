@@ -2,51 +2,161 @@ using System;
 using System.Reflection;
 #if ZWCAD
 using UiApplication = ZwSoft.ZwCAD.ApplicationServices.Application;
+using CadApplication = ZwSoft.ZwCAD.ApplicationServices.Core.Application;
+#elif ACAD_CORE
+using UiApplication = Autodesk.AutoCAD.ApplicationServices.Core.Application;
+using CadApplication = Autodesk.AutoCAD.ApplicationServices.Core.Application;
 #else
 using UiApplication = Autodesk.AutoCAD.ApplicationServices.Application;
+using CadApplication = Autodesk.AutoCAD.ApplicationServices.Core.Application;
 #endif
 
 namespace GMAnnotation
 {
-    /// <summary>通过反射操作 CAD 菜单栏，创建"GM批注"下拉菜单及其子项。</summary>
+    /// <summary>
+    /// CAD 菜单安装器（对齐「批量打印」CadMenuInstaller）：
+    /// COM 反射操作菜单；重复加载时复用同名菜单并原地重建菜单项；
+    /// 已在菜单栏上的弹出菜单不重复 InsertInMenuBar。
+    /// </summary>
     internal static class MenuInstaller
     {
-        /// <summary>
-        /// 批注菜单名称。
-        /// </summary>
-        /// <remarks>
-        /// CAD 宿主在同一个菜单组中不允许存在同名弹出菜单。链式动态加载或重复 NETLOAD 时，
-        /// 如果再次直接调用 Add 创建同名菜单，会触发"菜单组中存在弹出菜单"的 COM 异常。
-        /// </remarks>
         private const string MenuName = "GM批注";
+#if ZWCAD
+        private const string PreferredMenuGroupName = "ZWCAD";
+#else
+        private const string PreferredMenuGroupName = "ACAD";
+#endif
+
+
+        private static bool _retryAttached;
 
         /// <summary>
-        /// 添加或刷新批注菜单。
+        /// 加载时创建/刷新菜单；若宿主界面尚未就绪则挂一次 Idle 重试。
+        /// NETLOAD / 启动自动加载时都会走这里，无需再手动执行 GM_PZ_MENU。
         /// </summary>
-        /// <remarks>
-        /// 该方法支持重复调用：如果菜单已经存在，则复用已有菜单并重建菜单项；
-        /// 如果菜单尚不存在，则创建新菜单。这样可以避免插件链式加载时重复创建同名菜单导致宿主报错。
-        /// </remarks>
+        public static bool EnsureWithRetry()
+        {
+            if (Ensure(out var message))
+            {
+                PluginLog.Info("Menu", message);
+                return true;
+            }
+
+            PluginLog.Warning("Menu", message ?? "菜单首次安装失败，将在 Idle 时重试。");
+            if (_retryAttached)
+            {
+                return false;
+            }
+
+            try
+            {
+                CadApplication.Idle += OnRetryIdle;
+                _retryAttached = true;
+            }
+            catch (Exception ex)
+            {
+                _retryAttached = false;
+                PluginLog.Error("Menu.Retry", ex);
+            }
+
+            return false;
+        }
+
+        /// <summary>卸载插件时摘掉 Idle 重试回调。</summary>
+        public static void Detach()
+        {
+            if (!_retryAttached)
+            {
+                return;
+            }
+
+            _retryAttached = false;
+            try
+            {
+                CadApplication.Idle -= OnRetryIdle;
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error("Menu.Detach", ex);
+            }
+        }
+
+        private static void OnRetryIdle(object sender, EventArgs e)
+        {
+            Detach();
+            if (Ensure(out var message))
+            {
+                PluginLog.Info("Menu.Retry", message);
+                try
+                {
+                    var doc = CadApplication.DocumentManager.MdiActiveDocument;
+                    doc?.Editor.WriteMessage("\n" + message);
+                }
+                catch
+                {
+                }
+            }
+            else
+            {
+                PluginLog.Warning("Menu.Retry", message ?? "菜单 Idle 重试仍失败。");
+            }
+        }
         public static bool Ensure(out string message)
         {
             try
             {
-                var appType = typeof(UiApplication);
-                var menuBar = GetStatic(appType, "MenuBar");
-                var menuGroups = GetStatic(appType, "MenuGroups");
-                if (menuBar == null || menuGroups == null) { message = "当前 CAD 未公开菜单栏接口。"; return false; }
+                ShowMenuBar();
 
-#if ZWCAD
-                var menus = menuGroups.InvokeMethod("Item", 0).GetProperty("Menus");
+                object menuBar;
+                object menuGroups;
+#if ACAD_CORE
+                // AutoCAD 2025+ Core：MenuBar / MenuGroups 走 COM 反射
+                var acadApplication = GetAcadApplication();
+                menuBar = acadApplication == null ? null : GetComProperty(acadApplication, "MenuBar");
+                menuGroups = acadApplication == null ? null : GetComProperty(acadApplication, "MenuGroups");
 #else
-                var menus = menuGroups.InvokeMethod("Item", "Acad").GetProperty("Menus");
+                var appType = typeof(UiApplication);
+                menuBar = GetStatic(appType, "MenuBar");
+                menuGroups = GetStatic(appType, "MenuGroups");
 #endif
-                var menu = GetOrCreateMenu(menus);
-
-                // 重复加载时复用旧菜单，因此先清空旧菜单项，再按当前代码重新构建完整菜单。
-                while (Convert.ToInt32(menu.GetProperty("Count")) > 0)
+                if (menuBar == null || menuGroups == null)
                 {
-                    menu.InvokeMethod("Item", 0).InvokeMethod("Delete");
+                    message = "当前 CAD 未公开菜单栏接口。";
+                    return false;
+                }
+
+                var menuGroup = InvokeItem(menuGroups, PreferredMenuGroupName)
+                    ?? InvokeItem(menuGroups, 0);
+                if (menuGroup == null)
+                {
+                    message = "未取得默认菜单组。";
+                    return false;
+                }
+
+                var menus = GetComProperty(menuGroup, "Menus");
+                if (menus == null)
+                {
+                    message = "未取得菜单集合。";
+                    return false;
+                }
+
+                var menu = GetOrCreateMenu(menus);
+                if (menu == null)
+                {
+                    message = "菜单创建失败。";
+                    return false;
+                }
+
+                var oldCount = Convert.ToInt32(GetComProperty(menu, "Count") ?? 0);
+                for (var i = 0; i < oldCount; i++)
+                {
+                    var first = TryInvoke(menu, "Item", 0);
+                    if (first == null)
+                    {
+                        break;
+                    }
+
+                    TryInvoke(first, "Delete");
                 }
 
                 var index = 0;
@@ -73,32 +183,48 @@ namespace GMAnnotation
                 AddCommandMenuItem(menu, index++, "导入批注", "GM_PZ_IMPORT");
                 AddCommandMenuItem(menu, index++, "修复批注", "GM_PZ_REPAIR");
                 AddCommandMenuItem(menu, index++, "工具栏", "GM_PZ_TOOLBAR");
-                menu.InvokeMethod("AddSeparator", index++);
+                TryInvoke(menu, "AddSeparator", index++);
                 AddCommandMenuItem(menu, index++, "批注设置", "GM_PZ_SETTINGS");
-                AddCommandMenuItem(menu, index++, "设置自动加载", "GM_PZ_AUTOLOAD");
+                AddCommandMenuItem(menu, index++, "安装自动加载", "GM_PZ_INSTALL_AUTOLOAD");
+                AddCommandMenuItem(menu, index++, "卸载自动加载", "GM_PZ_UNINSTALL_AUTOLOAD");
                 AddCommandMenuItem(menu, index++, "重新加载菜单", "GM_PZ_MENU");
-                menu.InvokeMethod("AddSeparator", index++);
+                TryInvoke(menu, "AddSeparator", index++);
                 AddCommandMenuItem(menu, index++, "关于", "GM_PZ_ABOUT");
 
-                // 已经在菜单栏上的弹出菜单不能重复插入，否则部分 CAD 宿主会抛出 COM 反射异常。
                 if (!IsMenuOnMenuBar(menu))
                 {
-                    menu.InvokeMethod("InsertInMenuBar", Convert.ToInt32(menuBar.GetProperty("Count")) + 1);
+                    var menuBarCount = Convert.ToInt32(GetComProperty(menuBar, "Count") ?? 0);
+                    TryInvoke(menu, "InsertInMenuBar", menuBarCount + 1);
                 }
-                message = "GM批注菜单已创建或刷新。"; return true;
+
+                if (!IsMenuOnMenuBar(menu))
+                {
+                    message = "GM批注菜单已创建，但未能插入菜单栏。";
+                    return false;
+                }
+
+                message = "GM批注菜单已创建或刷新。";
+                return true;
             }
             catch (Exception ex)
             {
                 PluginLog.Error("Menu", ex);
-                message = "菜单创建失败: " + ex.Message; return false;
+                message = "菜单创建失败: " + ex.Message;
+                return false;
             }
         }
 
-        /// <summary>
-        /// 获取已经存在的批注菜单；如果不存在，则创建后再返回。
-        /// </summary>
-        /// <param name="menus">CAD 宿主菜单集合 COM 对象。</param>
-        /// <returns>批注弹出菜单 COM 对象。</returns>
+        private static void ShowMenuBar()
+        {
+            try
+            {
+                UiApplication.SetSystemVariable("MENUBAR", 1);
+            }
+            catch
+            {
+            }
+        }
+
         private static object GetOrCreateMenu(object menus)
         {
             var menu = TryGetMenu(menus);
@@ -107,102 +233,143 @@ namespace GMAnnotation
                 return menu;
             }
 
-            // 只有确认不存在同名菜单时才调用 Add，避免"菜单组中存在弹出菜单"异常。
-            menus.InvokeMethod("Add", MenuName);
-
-            return menus.InvokeMethod("Item", MenuName);
+            return TryInvoke(menus, "Add", MenuName);
         }
 
-        /// <summary>
-        /// 尝试从菜单集合中按名称查找批注菜单。
-        /// </summary>
-        /// <param name="menus">CAD 宿主菜单集合 COM 对象。</param>
-        /// <returns>找到时返回菜单 COM 对象；找不到或宿主 COM 查询失败时返回 <c>null</c>。</returns>
         private static object TryGetMenu(object menus)
         {
             try
             {
-                return menus.InvokeMethod("Item", MenuName);
+                return menus.GetType().InvokeMember(
+                    "Item",
+                    BindingFlags.InvokeMethod,
+                    null,
+                    menus,
+                    new object[] { MenuName });
             }
             catch (TargetInvocationException)
             {
-                // COM 反射调用会把宿主内部异常包装为 TargetInvocationException；
-                // 对于按名称查询菜单的场景，查询失败等价于"菜单不存在"。
                 return null;
             }
             catch (ArgumentException)
             {
-                // 部分宿主在 Item(name) 找不到对象时直接抛 ArgumentException。
                 return null;
             }
         }
 
-        /// <summary>
-        /// 判断菜单是否已经插入到 CAD 菜单栏。
-        /// </summary>
-        /// <param name="menu">批注弹出菜单 COM 对象。</param>
-        /// <returns>如果已经显示在菜单栏上则返回 <c>true</c>；否则返回 <c>false</c>。</returns>
         private static bool IsMenuOnMenuBar(object menu)
         {
             try
             {
-                return Convert.ToBoolean(menu.GetProperty("OnMenuBar"));
+                return Convert.ToBoolean(
+                    menu.GetType().InvokeMember(
+                        "OnMenuBar",
+                        BindingFlags.GetProperty,
+                        null,
+                        menu,
+                        null));
             }
             catch (TargetInvocationException)
             {
-                // OnMenuBar 在部分宿主或特定菜单状态下可能不可读；读取失败时按未插入处理。
                 return false;
             }
             catch (ArgumentException)
             {
-                // 兼容 COM 属性不存在或宿主返回参数异常的情况。
                 return false;
             }
         }
 
         private static void AddCommandMenuItem(object menu, int index, string displayName, string commandName)
         {
-            menu.InvokeMethod("AddMenuItem", index, displayName, CreateMenuMacro(commandName));
+            TryInvoke(menu, "AddMenuItem", index, displayName, CreateMenuMacro(commandName));
         }
 
-        /// <summary>菜单/工具栏宏：前缀为两个 Ctrl+C 连按两次取消当前命令，_ 前缀保证命令名在本地化宿主中仍然有效。
-        /// 工具栏（<see cref="ToolbarInstaller"/>）复用同一个宏格式。</summary>
         internal static string CreateMenuMacro(string commandName)
         {
             return new string((char)3, 2) + "_" + commandName + " ";
         }
 
-        /// <summary>读取宿主的静态属性（COM 根对象）；由 <see cref="ToolbarInstaller"/> 复用。</summary>
         internal static object GetStatic(Type type, string name)
         {
             var property = type.GetProperty(name, BindingFlags.Public | BindingFlags.Static);
             return property?.GetValue(null, null);
         }
+
+#if ACAD_CORE
+        private static object GetAcadApplication()
+        {
+            var applicationTypeNames = new[]
+            {
+                "Autodesk.AutoCAD.ApplicationServices.Application, AcMgd",
+                "Autodesk.AutoCAD.ApplicationServices.Core.Application, AcCoreMgd"
+            };
+
+            foreach (var typeName in applicationTypeNames)
+            {
+                var type = Type.GetType(typeName, throwOnError: false);
+                if (type == null)
+                {
+                    continue;
+                }
+
+                var acadApplication = GetStatic(type, "AcadApplication");
+                if (acadApplication != null)
+                {
+                    return acadApplication;
+                }
+            }
+
+            return null;
+        }
+#endif
+
+        private static object GetComProperty(object target, string name)
+        {
+            try
+            {
+                return target.GetType().InvokeMember(
+                    name,
+                    BindingFlags.GetProperty,
+                    null,
+                    target,
+                    null);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static object InvokeItem(object collection, object key)
+        {
+            return TryInvoke(collection, "Item", key);
+        }
+
+        private static object TryInvoke(object target, string method, params object[] args)
+        {
+            try
+            {
+                return target.GetType().InvokeMember(
+                    method,
+                    BindingFlags.InvokeMethod,
+                    null,
+                    target,
+                    args);
+            }
+            catch
+            {
+                return null;
+            }
+        }
     }
 
-    /// <summary>
-    /// 反射工具
-    /// </summary>
     internal static class ReflectionTool
     {
-        /// <summary>
-        /// com接口获取对象属性值，类似VisualLisp的vlax-get-property函数
-        /// </summary>
-        /// <param name="obj">对象</param>
-        /// <param name="key">属性名称</param>
-        /// <returns>属性值</returns>
         public static object GetProperty(this object obj, string key)
         {
             return obj.GetType().InvokeMember(key, BindingFlags.GetProperty, null, obj, null);
         }
 
-        /// <summary>
-        /// com接口使用com方法，类似VisualLisp的vlax-invoke-method函数
-        /// </summary>
-        /// <param name="obj">对象</param>
-        /// <param name="method">方法名</param>
-        /// <param name="objArray">方法需要的参数</param>
-        /// <returns>方法的返回值</returns>
         public static object InvokeMethod(this object obj, string method, params object[] objArray)
         {
             return obj.GetType().InvokeMember(method, BindingFlags.InvokeMethod, null, obj, objArray);

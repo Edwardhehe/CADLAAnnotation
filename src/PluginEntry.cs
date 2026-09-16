@@ -40,20 +40,20 @@ namespace GMAnnotation
             CadApplication.BeginDoubleClick += OnBeginDoubleClick;
             CadApplication.DocumentManager.DocumentActivated += OnDocumentActivated;
             var doc = CadApplication.DocumentManager.MdiActiveDocument;
-            MenuInstaller.Ensure(out var menuMessage);
+            var menuReady = MenuInstaller.EnsureWithRetry();
             // 浮动快捷栏已取消：CAD 原生工具栏是单字按钮的唯一入口。加载时就建好并显示；
             // 建不出来会自动安排一次 Idle 重试，仍不行可用 GM_PZ_TOOLBAR 手动建/显隐。
             var toolbarReady = ToolbarInstaller.EnsureWithRetry();
             AnnotationService.SyncNextNumber(doc);
             ObserveDatabase(doc?.Database);
             doc?.Editor.WriteMessage(
-                "\nGM批注已加载。" + menuMessage +
+                "\nGM批注已加载。" + (menuReady ? " 菜单已就绪。" : " 菜单稍后自动挂上（或用 GM_PZ_MENU）。") +
                 (toolbarReady ? " GM批注工具栏已就绪。" : " GM批注工具栏未就绪（将自动重试，或用 GM_PZ_TOOLBAR）。") +
                 " 命令: GM_PZ_DRAW / GM_PZ_NOTE / GM_PZ_EDIT / GM_PZ_MOVE /" +
                 " GM_PZ_DELETE / GM_PZ_HIDE / GM_PZ_SHOW / GM_PZ_MERGE / GM_PZ_FILTER / GM_PZ_REFRESH / GM_PZ_CLOUD / GM_PZ_LIST /" +
                 " GM_PZ_SUMMARY / GM_PZ_LEGEND / GM_PZ_WORD / GM_PZ_HISTORY / GM_PZ_KB /" +
                 " GM_PZ_EXPORT / GM_PZ_IMPORT / GM_PZ_REPAIR /" +
-                " GM_PZ_TOOLBAR / GM_PZ_SETTINGS / GM_PZ_AUTOLOAD / GM_PZ_MENU / GM_PZ_ABOUT");
+                " GM_PZ_TOOLBAR / GM_PZ_SETTINGS / GM_PZ_INSTALL_AUTOLOAD / GM_PZ_UNINSTALL_AUTOLOAD / GM_PZ_AUTOLOAD / GM_PZ_MENU / GM_PZ_ABOUT");
         }
 
         public void Terminate()
@@ -62,6 +62,7 @@ namespace GMAnnotation
             CadApplication.DocumentManager.DocumentActivated -= OnDocumentActivated;
             ObserveDatabase(null);
             if (_idleAttached) CadApplication.Idle -= OnIdle;
+            MenuInstaller.Detach();
             ToolbarInstaller.Detach();
             RestoreQuickPropertiesMode();
         }
