@@ -19,7 +19,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 #endif
 
-namespace LAAnnotation
+namespace GMAnnotation
 {
     /// <summary>一条待导出的批注：业务文字 + 每条云线（多对一有多条）的 WCS 范围。</summary>
     internal sealed class AnnotationWordEntry
@@ -327,7 +327,7 @@ namespace LAAnnotation
                         }
                     }
 
-                    package.PackageProperties.Title = "LA批注导出";
+                    package.PackageProperties.Title = "GM批注导出";
 
                     using (var stream = documentPart.GetStream())
                     {

@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Runtime.InteropServices;
 #if ZWCAD
 using ZwSoft.ZwCAD.Runtime;
@@ -6,13 +6,13 @@ using ZwSoft.ZwCAD.Runtime;
 using Autodesk.AutoCAD.Runtime;
 #endif
 
-[assembly: AssemblyTitle("LA批注")]
+[assembly: AssemblyTitle("GM批注")]
 [assembly: AssemblyDescription("AutoCAD and ZWCAD drawing annotation plug-in")]
-[assembly: AssemblyCompany("LA")]
-[assembly: AssemblyProduct("LA批注")]
-[assembly: AssemblyVersion("0.5.2.0")]
-[assembly: AssemblyFileVersion("0.5.2.0")]
-[assembly: AssemblyInformationalVersion("0.5.2")]
+[assembly: AssemblyCompany("GM")]
+[assembly: AssemblyProduct("GM批注")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyInformationalVersion("1.0.0")]
 [assembly: ComVisible(false)]
-[assembly: ExtensionApplication(typeof(LAAnnotation.PluginEntry))]
-[assembly: CommandClass(typeof(LAAnnotation.Commands))]
+[assembly: ExtensionApplication(typeof(GMAnnotation.PluginEntry))]
+[assembly: CommandClass(typeof(GMAnnotation.Commands))]

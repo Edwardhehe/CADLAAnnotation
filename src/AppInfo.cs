@@ -1,7 +1,7 @@
 using System;
 using System.Reflection;
 
-namespace LAAnnotation
+namespace GMAnnotation
 {
     /// <summary>
     /// 产品与联系信息常量（关于框等 UI 共用，避免散落硬编码）。
@@ -9,7 +9,7 @@ namespace LAAnnotation
     internal static class AppInfo
     {
         /// <summary>产品显示名。</summary>
-        public const string ProductName = "LA批注";
+        public const string ProductName = "GM批注";
 
         /// <summary>设计者署名。</summary>
         public const string Designer = "爱德华hehe";

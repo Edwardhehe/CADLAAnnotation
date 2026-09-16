@@ -8,7 +8,7 @@ using CadApplication = ZwSoft.ZwCAD.ApplicationServices.Core.Application;
 using CadApplication = Autodesk.AutoCAD.ApplicationServices.Core.Application;
 #endif
 
-namespace LAAnnotation.Views
+namespace GMAnnotation.Views
 {
     /// <summary>批注列表面板：左侧停靠，展示当前 DWG 中所有批注，双击定位。</summary>
     internal partial class AnnotationListPanel : Window
@@ -111,7 +111,7 @@ namespace LAAnnotation.Views
 
             var result = MessageBox.Show(
                 $"确定要删除批注 {info.Number} 吗？",
-                "LA批注",
+                "GM批注",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
             if (result != MessageBoxResult.Yes)
@@ -129,7 +129,7 @@ namespace LAAnnotation.Views
                 else
                 {
                     doc.Editor.WriteMessage(
-                        $"\nLA批注 {info.Number} 已删除。");
+                        $"\nGM批注 {info.Number} 已删除。");
                 }
             }
             catch (System.Exception ex)

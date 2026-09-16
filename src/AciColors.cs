@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Windows.Media;
 
-namespace LAAnnotation
+namespace GMAnnotation
 {
     /// <summary>ACI（AutoCAD Color Index）颜色项，用于下拉菜单展示。</summary>
     public sealed class AciColorItem

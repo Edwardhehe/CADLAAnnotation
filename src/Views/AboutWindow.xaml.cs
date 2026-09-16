@@ -1,10 +1,10 @@
 using System;
 using System.Windows;
 
-namespace LAAnnotation.Views
+namespace GMAnnotation.Views
 {
     /// <summary>
-    /// 「关于 LA批注」对话框：展示产品名、程序集版本与固定联系信息。
+    /// 「关于 GM批注」对话框：展示产品名、程序集版本与固定联系信息。
     /// </summary>
     internal partial class AboutWindow : Window
     {

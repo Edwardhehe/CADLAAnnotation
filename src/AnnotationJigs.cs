@@ -19,7 +19,7 @@ using Autodesk.AutoCAD.GraphicsInterface;
 using CadPolyline = Autodesk.AutoCAD.DatabaseServices.Polyline;
 #endif
 
-namespace LAAnnotation
+namespace GMAnnotation
 {
     internal static class RegionPreviewDrawing
     {
@@ -203,12 +203,12 @@ namespace LAAnnotation
                 var boxW = _settings.FixedWidth
                     ? _settings.FixedWidthValue
                     : Math.Max(_settings.TextHeight * 18, 55);
+                // 预览框高度：首行（日期/专业/批注人，同一行）+ 批注正文（预留两行）+ 图号/状态两行次行高
                 var boxH = Math.Max(
-                    _settings.TextHeight * 5,
+                    _settings.TextHeight * 6,
                     _settings.HeaderHeight +
-                    _settings.TextHeight +
-                    _settings.SecondLineHeight +
-                    _settings.TextHeight * 2);
+                    _settings.TextHeight * 2 +
+                    _settings.SecondLineHeight * 2);
                 using (var box = AnnotationService.BuildBox(localText, boxW, boxH))
                 {
                     var boxCorners = new[]

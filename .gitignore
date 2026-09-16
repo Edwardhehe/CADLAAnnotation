@@ -1,4 +1,4 @@
-# IDE & Editor
+﻿# IDE & Editor
 .vs/
 *.suo
 *.user
@@ -12,5 +12,7 @@ obj/
 .deepseek/
 .codex/
 .agents/
+.sisyphus/
 DEEPSEEK_WORKERS.md
 tools/
+build.log

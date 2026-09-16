@@ -1,4 +1,4 @@
-<Window x:Class="LAAnnotation.Views.AnnotationListPanel"
+<Window x:Class="GMAnnotation.Views.AnnotationListPanel"
         x:ClassModifier="internal"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -30,6 +30,19 @@
         <ListView x:Name="AnnotationList" SelectionMode="Single"
                   MouseDoubleClick="List_DoubleClick"
                   BorderThickness="0" Margin="0">
+            <!-- 状态着色：已完成=绿色、已回复=黄色（颜色取深色，浅底与选中蓝底都能看清） -->
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Status}" Value="已完成">
+                            <Setter Property="Foreground" Value="#1E8E3E"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Status}" Value="已回复">
+                            <Setter Property="Foreground" Value="#D19A00"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ListView.ItemContainerStyle>
             <ListView.ContextMenu>
                 <ContextMenu FontSize="12">
                     <MenuItem Header="删除" Click="Delete_Click"/>

@@ -3,12 +3,12 @@ using System.Globalization;
 using System.IO;
 using System.Xml.Linq;
 
-namespace LAAnnotation
+namespace GMAnnotation
 {
-    /// <summary>设置持久化：将 AnnotationSettings 读写到 %AppData%/LAAnnotation/settings.xml。</summary>
+    /// <summary>设置持久化：将 AnnotationSettings 读写到 %AppData%/GMAnnotation/settings.xml。</summary>
     internal static class SettingsStore
     {
-        private static readonly string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LAAnnotation");
+        private static readonly string Folder = AppPaths.DataFolder;
         private static readonly string PathName = Path.Combine(Folder, "settings.xml");
 
         public static AnnotationSettings Load()
@@ -20,6 +20,8 @@ namespace LAAnnotation
                 var x = XElement.Load(PathName);
                 s.Shape = Get(x, "Shape", s.Shape); s.CloudStyle = Get(x, "CloudStyle", s.CloudStyle);
                 s.LayerName = Get(x, "LayerName", s.LayerName);
+                // 改名前版本的默认图层名为 "LA-批注"：升级后统一按新默认名 "GM-批注" 使用（用户自定义过的图层名不受影响）。
+                if (string.Equals(s.LayerName, "LA-批注", StringComparison.OrdinalIgnoreCase)) s.LayerName = "GM-批注";
                 s.TextStyleName = Get(x, "TextStyleName", s.TextStyleName);
                 s.ColorIndex = ParseShort(Get(x, "ColorIndex", s.ColorIndex.ToString()), s.ColorIndex);
                 s.CloudColor = ParseShort(Get(x,"CloudColor","6"),6); s.LeaderColor=ParseShort(Get(x,"LeaderColor","6"),6); s.TextColor=ParseShort(Get(x,"TextColor","6"),6);s.BoxColor=ParseShort(Get(x,"BoxColor","6"),6); s.ReplyColor=ParseShort(Get(x,"ReplyColor","6"),6);s.ScreenshotBackgroundColor=ParseShort(Get(x,"ScreenshotBackgroundColor","7"),7);s.PassColor=ParseShort(Get(x,"PassColor","6"),6);s.CheckColor=ParseShort(Get(x,"CheckColor","6"),6);s.ScreenshotBackgroundOnceReply=ParseBool(Get(x,"ScreenshotBackgroundOnceReply","false"),false);
@@ -34,7 +36,9 @@ namespace LAAnnotation
                 s.NextNumber = ParseInt(Get(x, "NextNumber", "1"), 1);
                 s.AutoCloseOrtho=ParseBool(Get(x,"AutoCloseOrtho","true"),true);s.AutoCloseSnap=ParseBool(Get(x,"AutoCloseSnap","true"),true);s.ViewTopIsNorth=ParseBool(Get(x,"ViewTopIsNorth","true"),true);s.DoubleClickEdit=ParseBool(Get(x,"DoubleClickEdit","true"),true);s.ContinuousAnnotation=ParseBool(Get(x,"ContinuousAnnotation","true"),true);s.CloudOnly=ParseBool(Get(x,"CloudOnly","false"),false);s.SameColors=ParseBool(Get(x,"SameColors","true"),true);s.LayerAppendDate=ParseBool(Get(x,"LayerAppendDate","true"),true);s.LayerAppendName=ParseBool(Get(x,"LayerAppendName","false"),false);s.DateBeforeName=ParseBool(Get(x,"DateBeforeName","true"),true);s.Connector=Get(x,"Connector","-");s.Plottable=ParseBool(Get(x,"Plottable","false"),false);s.CheckHeight=ParseDouble(Get(x,"CheckHeight","8"),8);
                 s.AutoTextViewPercent=ParseDouble(Get(x,"AutoTextViewPercent","5"),5);
-                s.ShowNumber=ParseBool(Get(x,"ShowNumber","true"),true);s.ShowDiscipline=ParseBool(Get(x,"ShowDiscipline","true"),true);s.ShowAuthor=ParseBool(Get(x,"ShowAuthor","true"),true);s.ShowRole=ParseBool(Get(x,"ShowRole","true"),true);s.ShowDate=ParseBool(Get(x,"ShowDate","true"),true);s.ShowStatus=ParseBool(Get(x,"ShowStatus","true"),true);
+                s.ShowDiscipline=ParseBool(Get(x,"ShowDiscipline","true"),true);s.ShowAuthor=ParseBool(Get(x,"ShowAuthor","true"),true);s.ShowRole=ParseBool(Get(x,"ShowRole","true"),true);s.ShowDate=ParseBool(Get(x,"ShowDate","true"),true);s.ShowStatus=ParseBool(Get(x,"ShowStatus","true"),true);s.ShowDrawingNo=ParseBool(Get(x,"ShowDrawingNo","true"),true);
+                s.ArchiveOnCreate=ParseBool(Get(x,"ArchiveOnCreate","true"),true);
+                s.ContentSuggest=ParseBool(Get(x,"ContentSuggest","true"),true);
             }
             catch (Exception ex) { PluginLog.Error("Settings.Load",ex); }
             return s;
@@ -54,7 +58,8 @@ namespace LAAnnotation
                 new XElement("DefaultAuthor", s.DefaultAuthor), new XElement("DefaultDiscipline", s.DefaultDiscipline),
                 new XElement("DefaultRole",s.DefaultRole),new XElement("AutoNumber", s.AutoNumber), new XElement("NextNumber", s.NextNumber),
                 new XElement("AutoCloseOrtho",s.AutoCloseOrtho),new XElement("AutoCloseSnap",s.AutoCloseSnap),new XElement("ViewTopIsNorth",s.ViewTopIsNorth),new XElement("DoubleClickEdit",s.DoubleClickEdit),new XElement("ContinuousAnnotation",s.ContinuousAnnotation),new XElement("CloudOnly",s.CloudOnly),new XElement("SameColors",s.SameColors),new XElement("LayerAppendDate",s.LayerAppendDate),new XElement("LayerAppendName",s.LayerAppendName),new XElement("DateBeforeName",s.DateBeforeName),new XElement("Connector",s.Connector),new XElement("Plottable",s.Plottable),new XElement("CheckHeight",s.CheckHeight.ToString(CultureInfo.InvariantCulture)),new XElement("AutoTextViewPercent",s.AutoTextViewPercent.ToString(CultureInfo.InvariantCulture)),
-                new XElement("ShowNumber",s.ShowNumber),new XElement("ShowDiscipline",s.ShowDiscipline),new XElement("ShowAuthor",s.ShowAuthor),new XElement("ShowRole",s.ShowRole),new XElement("ShowDate",s.ShowDate),new XElement("ShowStatus",s.ShowStatus)).Save(PathName);
+                new XElement("ShowDiscipline",s.ShowDiscipline),new XElement("ShowAuthor",s.ShowAuthor),new XElement("ShowRole",s.ShowRole),new XElement("ShowDate",s.ShowDate),new XElement("ShowStatus",s.ShowStatus),new XElement("ShowDrawingNo",s.ShowDrawingNo),
+                new XElement("ArchiveOnCreate",s.ArchiveOnCreate),new XElement("ContentSuggest",s.ContentSuggest)).Save(PathName);
         }
 
         private static string Get(XElement x, string n, string f) => (string)x.Element(n) ?? f;

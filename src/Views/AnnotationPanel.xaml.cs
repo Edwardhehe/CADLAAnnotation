@@ -17,7 +17,7 @@ using Autodesk.AutoCAD.Geometry;
 using CadApplication = Autodesk.AutoCAD.ApplicationServices.Core.Application;
 #endif
 
-namespace LAAnnotation.Views
+namespace GMAnnotation.Views
 {
     /// <summary>浮动批注面板：选择批注类型、形式和设置，点击开始时统一生效，支持连续批注。</summary>
     internal partial class AnnotationPanel : Window
@@ -43,10 +43,10 @@ namespace LAAnnotation.Views
             InitializeComponent();
             _s = SettingsStore.Load();
             // 下拉数据源
-            DisciplineCombo.ItemsSource = new[] { "建筑", "结构", "给排水", "暖通", "电气", "道路", "桥梁", "隧道", "交通", "管线", "绿化", "景观", "岩土", "其他" };
+            DisciplineCombo.ItemsSource = AnnotationOptions.Disciplines;
             ShapeCombo.ItemsSource = new[] { "矩形", "菱形", "椭圆" };
             CloudStyleCombo.ItemsSource = new[] { "等宽", "渐变" };
-            RoleCombo.ItemsSource = new[] { "批注人", "校审人", "回复人" };
+            RoleCombo.ItemsSource = AnnotationOptions.Roles;
             // 加载当前设置值
             RefreshControls();
             // 面板修改只保留为待应用值；点击“开始批注”时才统一写入设置。
@@ -212,7 +212,7 @@ namespace LAAnnotation.Views
                 _pendingSinceUtc = DateTime.UtcNow;
                 StartButton.IsEnabled = !_isRunning;
                 StartButton.Content = "等待 CAD…（可重试）";
-                doc.SendStringToExecute("LA_PZ_RUN ", true, false, false);
+                doc.SendStringToExecute("GM_PZ_RUN ", true, false, false);
             }
             catch (Exception ex)
             {
@@ -330,7 +330,7 @@ namespace LAAnnotation.Views
             if (settings.AutoNumber)
             {
                 settings.NextNumber = AnnotationService.GetNextNumber(doc);
-                data.Number = "LA-" + settings.NextNumber.ToString("D3");
+                data.Number = "GM-" + settings.NextNumber.ToString("D3");
             }
 
             switch (shape)
@@ -365,8 +365,7 @@ namespace LAAnnotation.Views
             // 完整 PL 批注：先确认占位框和引线位置，再填写内容并直接落图。
             if (effective.FontAutoFit) doc.Editor.WriteMessage($"\n云线范围: {w:0.#}×{h:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}");
             var placementResult=AnnotationService.PromptPlacement(doc,effective,_runSettings,null,null,points,points[points.Count-1],PlacementGeometryKind.Polygon);if(!AcceptInteraction(doc,placementResult))return;var textPointWcs=placementResult.Point;
-            var form = new AnnotationWindow(data, false);
-            if (CadDialog.ShowModal(form) != true){doc.Editor.WriteMessage("\n已在填写内容阶段取消 PL 批注。");return;}
+            if (!CadDialog.ShowAnnotation(data, false)){doc.Editor.WriteMessage("\n已在填写内容阶段取消 PL 批注。");return;}
             AnnotationService.CreatePlineCloud(doc, data, effective, points, textPointWcs);
             FinalizeAnnotation(doc, data);
             CheckContinuous(doc);
@@ -396,8 +395,7 @@ namespace LAAnnotation.Views
             var beffective = AnnotationService.ResolveEffectiveSettings(doc, _runSettings, data, bdiagonal, true);
             if (beffective.FontAutoFit) doc.Editor.WriteMessage($"\n云线对角线: {bdiagonal:0.#}  字高: {beffective.TextHeight:0.###}  云线半径: {beffective.CloudRadius:0.###}");
             var placementResult=AnnotationService.PromptPlacement(doc,beffective,_runSettings,new[]{f},new[]{s},null,s,PlacementGeometryKind.Region);if(!AcceptInteraction(doc,placementResult))return;var textPt=placementResult.Point;
-            var form = new AnnotationWindow(data, false);
-            if (CadDialog.ShowModal(form) != true){doc.Editor.WriteMessage("\n已在填写内容阶段取消单区域批注。");return;}
+            if (!CadDialog.ShowAnnotation(data, false)){doc.Editor.WriteMessage("\n已在填写内容阶段取消单区域批注。");return;}
             AnnotationService.Create(doc, data, beffective, f, s, textPt);
             FinalizeAnnotation(doc, data);
             CheckContinuous(doc);
@@ -420,7 +418,7 @@ namespace LAAnnotation.Views
             if (settings.AutoNumber)
             {
                 settings.NextNumber = AnnotationService.GetNextNumber(doc);
-                data.Number = "LA-" + settings.NextNumber.ToString("D3");
+                data.Number = "GM-" + settings.NextNumber.ToString("D3");
             }
 
             var preview = _runSettings.Clone();
@@ -507,8 +505,7 @@ namespace LAAnnotation.Views
                 }
 
                 var textPointWcs = placementResult.Point;
-                var form = new AnnotationWindow(data, false);
-                if (CadDialog.ShowModal(form) != true)
+                if (!CadDialog.ShowAnnotation(data, false))
                 {
                     doc.Editor.WriteMessage(
                         "\n已在填写内容阶段取消多对一批注。");
@@ -600,7 +597,7 @@ namespace LAAnnotation.Views
                 SettingsStore.Save(_s);
             }
 
-            doc.Editor.WriteMessage("\nLA批注已创建: " + data.Number);
+            doc.Editor.WriteMessage("\nGM批注已创建: " + data.Number);
             AnnotationListPanel.RefreshIfOpen();
         }
 

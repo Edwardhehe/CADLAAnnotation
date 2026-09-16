@@ -1,7 +1,7 @@
 using System;
 using System.Windows;
 
-namespace LAAnnotation.Views
+namespace GMAnnotation.Views
 {
     internal static class WindowSizing
     {

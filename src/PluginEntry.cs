@@ -13,7 +13,7 @@ using Autodesk.AutoCAD.Runtime;
 using CadApplication = Autodesk.AutoCAD.ApplicationServices.Core.Application;
 #endif
 
-namespace LAAnnotation
+namespace GMAnnotation
 {
     /// <summary>插件入口：注册双击编辑、安装菜单、输出加载信息。</summary>
     public sealed class PluginEntry : IExtensionApplication
@@ -32,17 +32,28 @@ namespace LAAnnotation
 
         public void Initialize()
         {
+            // 启动即写日志：构建时间 + DLL 实际加载路径。排查"改了没生效"时，
+            // 看日志最新一条的构建时间就知道 CAD 里跑的是哪个版本（NETLOAD 无法替换运行中的同名程序集）。
+            var asm = typeof(PluginEntry).Assembly;
+            var buildTime = System.IO.File.GetLastWriteTime(asm.Location);
+            PluginLog.Info("Initialize", "构建于 " + buildTime.ToString("yyyy-MM-dd HH:mm:ss") + "，加载自 " + asm.Location);
             CadApplication.BeginDoubleClick += OnBeginDoubleClick;
             CadApplication.DocumentManager.DocumentActivated += OnDocumentActivated;
             var doc = CadApplication.DocumentManager.MdiActiveDocument;
             MenuInstaller.Ensure(out var menuMessage);
+            // 浮动快捷栏已取消：CAD 原生工具栏是单字按钮的唯一入口。加载时就建好并显示；
+            // 建不出来会自动安排一次 Idle 重试，仍不行可用 GM_PZ_TOOLBAR 手动建/显隐。
+            var toolbarReady = ToolbarInstaller.EnsureWithRetry();
             AnnotationService.SyncNextNumber(doc);
             ObserveDatabase(doc?.Database);
             doc?.Editor.WriteMessage(
-                "\nLA批注已加载。" + menuMessage +
-                " 命令: LA_PZ_NOTE / LA_PZ_EDIT / LA_PZ_MOVE /" +
-                " LA_PZ_DELETE / LA_PZ_CLOUD / LA_PZ_LIST /" +
-                " LA_PZ_SUMMARY / LA_PZ_WORD / LA_PZ_SETTINGS / LA_PZ_AUTOLOAD / LA_PZ_MENU / LA_PZ_ABOUT");
+                "\nGM批注已加载。" + menuMessage +
+                (toolbarReady ? " GM批注工具栏已就绪。" : " GM批注工具栏未就绪（将自动重试，或用 GM_PZ_TOOLBAR）。") +
+                " 命令: GM_PZ_DRAW / GM_PZ_NOTE / GM_PZ_EDIT / GM_PZ_MOVE /" +
+                " GM_PZ_DELETE / GM_PZ_HIDE / GM_PZ_SHOW / GM_PZ_MERGE / GM_PZ_FILTER / GM_PZ_REFRESH / GM_PZ_CLOUD / GM_PZ_LIST /" +
+                " GM_PZ_SUMMARY / GM_PZ_LEGEND / GM_PZ_WORD / GM_PZ_HISTORY / GM_PZ_KB /" +
+                " GM_PZ_EXPORT / GM_PZ_IMPORT / GM_PZ_REPAIR /" +
+                " GM_PZ_TOOLBAR / GM_PZ_SETTINGS / GM_PZ_AUTOLOAD / GM_PZ_MENU / GM_PZ_ABOUT");
         }
 
         public void Terminate()
@@ -51,6 +62,7 @@ namespace LAAnnotation
             CadApplication.DocumentManager.DocumentActivated -= OnDocumentActivated;
             ObserveDatabase(null);
             if (_idleAttached) CadApplication.Idle -= OnIdle;
+            ToolbarInstaller.Detach();
             RestoreQuickPropertiesMode();
         }
 
@@ -60,8 +72,8 @@ namespace LAAnnotation
             {
                 AnnotationService.SyncNextNumber(e.Document);
                 ObserveDatabase(e.Document?.Database);
-                LAAnnotation.Views.AnnotationPanel.HandleDocumentActivated(e.Document);
-                LAAnnotation.Views.AnnotationListPanel.RefreshIfOpen();
+                GMAnnotation.Views.AnnotationPanel.HandleDocumentActivated(e.Document);
+                GMAnnotation.Views.AnnotationListPanel.RefreshIfOpen();
             }
             catch (System.Exception ex) { PluginLog.Error("Document.Activated", ex); }
         }
@@ -85,7 +97,7 @@ namespace LAAnnotation
             catch(System.Exception ex){PluginLog.Error("AnnotationList.ObjectErased",ex);}
         }
 
-        /// <summary>双击事件：检测选中实体是否为 LA 批注，若是则在 Idle 时触发编辑命令（避免事件上下文中直接执行命令）。</summary>
+        /// <summary>双击事件：检测选中实体是否为 GM 批注，若是则在 Idle 时触发编辑命令（避免事件上下文中直接执行命令）。</summary>
         private static void OnBeginDoubleClick(object sender, BeginDoubleClickEventArgs e)
         {
             try
@@ -100,7 +112,7 @@ namespace LAAnnotation
                     if (entity == null || !AnnotationService.TryReadFromEntity(tr, entity, out var ignored)) return;
                 }
                 // BeginDoubleClick 事件无法取消 CAD 的原生后续处理。
-                // 仅在命中 LA 批注时临时关闭 QPMODE，并清掉当前预选，防止快捷特性面板抢占前台。
+                // 仅在命中 GM 批注时临时关闭 QPMODE，并清掉当前预选，防止快捷特性面板抢占前台。
                 SuppressQuickPropertiesMode();
                 doc.Editor.SetImpliedSelection(new ObjectId[0]);
                 _pendingDocument = doc; _pendingId = id;
@@ -115,7 +127,7 @@ namespace LAAnnotation
             if(_listRefreshPending)
             {
                 _listRefreshPending=false;
-                try{LAAnnotation.Views.AnnotationListPanel.RefreshIfOpen();}
+                try{GMAnnotation.Views.AnnotationListPanel.RefreshIfOpen();}
                 catch(System.Exception ex){PluginLog.Error("AnnotationList.Refresh",ex);}
             }
             var doc = _pendingDocument; var id = _pendingId; _pendingDocument = null; _pendingId = ObjectId.Null;
@@ -127,7 +139,7 @@ namespace LAAnnotation
             try
             {
                 doc.Editor.SetImpliedSelection(new[] { id });
-                doc.SendStringToExecute("LA_PZ_EDIT ", true, false, false);
+                doc.SendStringToExecute("GM_PZ_EDIT ", true, false, false);
             }
             catch (System.Exception ex)
             {

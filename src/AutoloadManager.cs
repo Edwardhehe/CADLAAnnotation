@@ -9,13 +9,15 @@ using WinRegistry = Microsoft.Win32.Registry;
 using Autodesk.AutoCAD.DatabaseServices;
 #endif
 
-namespace LAAnnotation
+namespace GMAnnotation
 {
     /// <summary>通过当前用户注册表切换当前 CAD 宿主的启动自动加载。</summary>
     internal static class AutoloadManager
     {
-        private const string AppKeyName = "LAAnnotation";
-        private const string AppDescription = "LA批注插件";
+        private const string AppKeyName = "GMAnnotation";
+        /// <summary>改名前（LA批注）写入的注册表项名，卸载时一并清理，避免新旧插件同时自动加载。</summary>
+        private const string LegacyAppKeyName = "LAAnnotation";
+        private const string AppDescription = "GM批注插件";
 #if ZWCAD
         private const string ProductRoot = @"Software\ZWSOFT\ZWCAD";
 #endif
@@ -101,16 +103,19 @@ namespace LAAnnotation
 
                     try
                     {
-                        if (parent.GetSubKeyNames().Any(name =>
-                            string.Equals(
-                                name,
-                                AppKeyName,
-                                StringComparison.OrdinalIgnoreCase)))
+                        foreach (var keyName in new[] { AppKeyName, LegacyAppKeyName })
                         {
-                            parent.DeleteSubKeyTree(
-                                AppKeyName,
-                                throwOnMissingSubKey: false);
-                            removed++;
+                            if (parent.GetSubKeyNames().Any(name =>
+                                string.Equals(
+                                    name,
+                                    keyName,
+                                    StringComparison.OrdinalIgnoreCase)))
+                            {
+                                parent.DeleteSubKeyTree(
+                                    keyName,
+                                    throwOnMissingSubKey: false);
+                                removed++;
+                            }
                         }
                     }
                     catch (Exception ex)

@@ -6,9 +6,9 @@ using UiApplication = ZwSoft.ZwCAD.ApplicationServices.Application;
 using UiApplication = Autodesk.AutoCAD.ApplicationServices.Application;
 #endif
 
-namespace LAAnnotation
+namespace GMAnnotation
 {
-    /// <summary>通过反射操作 CAD 菜单栏，创建"LA批注"下拉菜单及其子项。</summary>
+    /// <summary>通过反射操作 CAD 菜单栏，创建"GM批注"下拉菜单及其子项。</summary>
     internal static class MenuInstaller
     {
         /// <summary>
@@ -18,7 +18,7 @@ namespace LAAnnotation
         /// CAD 宿主在同一个菜单组中不允许存在同名弹出菜单。链式动态加载或重复 NETLOAD 时，
         /// 如果再次直接调用 Add 创建同名菜单，会触发"菜单组中存在弹出菜单"的 COM 异常。
         /// </remarks>
-        private const string MenuName = "LA批注";
+        private const string MenuName = "GM批注";
 
         /// <summary>
         /// 添加或刷新批注菜单。
@@ -50,28 +50,42 @@ namespace LAAnnotation
                 }
 
                 var index = 0;
-                AddCommandMenuItem(menu, index++, "绘制批注", "LA_PZ_NOTE");
-                AddCommandMenuItem(menu, index++, "编辑批注", "LA_PZ_EDIT");
-                AddCommandMenuItem(menu, index++, "移动批注", "LA_PZ_MOVE");
-                AddCommandMenuItem(menu, index++, "删除批注", "LA_PZ_DELETE");
-                AddCommandMenuItem(menu, index++, "单绘云线", "LA_PZ_CLOUD");
-                AddCommandMenuItem(menu, index++, "增补云线", "LA_PZ_ADDCLOUD");
-                AddCommandMenuItem(menu, index++, "批注列表", "LA_PZ_LIST");
-                AddCommandMenuItem(menu, index++, "批注汇总", "LA_PZ_SUMMARY");
-                AddCommandMenuItem(menu, index++, "导出Word", "LA_PZ_WORD");
+                AddCommandMenuItem(menu, index++, "绘制批注（面板）", "GM_PZ_NOTE");
+                AddCommandMenuItem(menu, index++, "绘制批注", "GM_PZ_DRAW");
+                AddCommandMenuItem(menu, index++, "编辑批注", "GM_PZ_EDIT");
+                AddCommandMenuItem(menu, index++, "移动批注", "GM_PZ_MOVE");
+                AddCommandMenuItem(menu, index++, "删除批注", "GM_PZ_DELETE");
+                AddCommandMenuItem(menu, index++, "隐藏批注", "GM_PZ_HIDE");
+                AddCommandMenuItem(menu, index++, "显示批注", "GM_PZ_SHOW");
+                AddCommandMenuItem(menu, index++, "合并批注", "GM_PZ_MERGE");
+                AddCommandMenuItem(menu, index++, "过滤批注", "GM_PZ_FILTER");
+                AddCommandMenuItem(menu, index++, "格式刷", "GM_PZ_FORMAT");
+                AddCommandMenuItem(menu, index++, "刷新批注文字", "GM_PZ_REFRESH");
+                AddCommandMenuItem(menu, index++, "单绘云线", "GM_PZ_CLOUD");
+                AddCommandMenuItem(menu, index++, "增补云线", "GM_PZ_ADDCLOUD");
+                AddCommandMenuItem(menu, index++, "批注列表", "GM_PZ_LIST");
+                AddCommandMenuItem(menu, index++, "批注汇总", "GM_PZ_SUMMARY");
+                AddCommandMenuItem(menu, index++, "批注清单", "GM_PZ_LEGEND");
+                AddCommandMenuItem(menu, index++, "批注历史", "GM_PZ_HISTORY");
+                AddCommandMenuItem(menu, index++, "知识库", "GM_PZ_KB");
+                AddCommandMenuItem(menu, index++, "导出Word", "GM_PZ_WORD");
+                AddCommandMenuItem(menu, index++, "导出批注", "GM_PZ_EXPORT");
+                AddCommandMenuItem(menu, index++, "导入批注", "GM_PZ_IMPORT");
+                AddCommandMenuItem(menu, index++, "修复批注", "GM_PZ_REPAIR");
+                AddCommandMenuItem(menu, index++, "工具栏", "GM_PZ_TOOLBAR");
                 menu.InvokeMethod("AddSeparator", index++);
-                AddCommandMenuItem(menu, index++, "批注设置", "LA_PZ_SETTINGS");
-                AddCommandMenuItem(menu, index++, "设置自动加载", "LA_PZ_AUTOLOAD");
-                AddCommandMenuItem(menu, index++, "重新加载菜单", "LA_PZ_MENU");
+                AddCommandMenuItem(menu, index++, "批注设置", "GM_PZ_SETTINGS");
+                AddCommandMenuItem(menu, index++, "设置自动加载", "GM_PZ_AUTOLOAD");
+                AddCommandMenuItem(menu, index++, "重新加载菜单", "GM_PZ_MENU");
                 menu.InvokeMethod("AddSeparator", index++);
-                AddCommandMenuItem(menu, index++, "关于", "LA_PZ_ABOUT");
+                AddCommandMenuItem(menu, index++, "关于", "GM_PZ_ABOUT");
 
                 // 已经在菜单栏上的弹出菜单不能重复插入，否则部分 CAD 宿主会抛出 COM 反射异常。
                 if (!IsMenuOnMenuBar(menu))
                 {
                     menu.InvokeMethod("InsertInMenuBar", Convert.ToInt32(menuBar.GetProperty("Count")) + 1);
                 }
-                message = "LA批注菜单已创建或刷新。"; return true;
+                message = "GM批注菜单已创建或刷新。"; return true;
             }
             catch (Exception ex)
             {
@@ -151,13 +165,15 @@ namespace LAAnnotation
             menu.InvokeMethod("AddMenuItem", index, displayName, CreateMenuMacro(commandName));
         }
 
-        private static string CreateMenuMacro(string commandName)
+        /// <summary>菜单/工具栏宏：前缀为两个 Ctrl+C 连按两次取消当前命令，_ 前缀保证命令名在本地化宿主中仍然有效。
+        /// 工具栏（<see cref="ToolbarInstaller"/>）复用同一个宏格式。</summary>
+        internal static string CreateMenuMacro(string commandName)
         {
-            // 前缀为两个 Ctrl+C 连按两次取消当前命令，_ 前缀保证命令名在本地化宿主中仍然有效。
             return new string((char)3, 2) + "_" + commandName + " ";
         }
 
-        private static object GetStatic(Type type, string name)
+        /// <summary>读取宿主的静态属性（COM 根对象）；由 <see cref="ToolbarInstaller"/> 复用。</summary>
+        internal static object GetStatic(Type type, string name)
         {
             var property = type.GetProperty(name, BindingFlags.Public | BindingFlags.Static);
             return property?.GetValue(null, null);

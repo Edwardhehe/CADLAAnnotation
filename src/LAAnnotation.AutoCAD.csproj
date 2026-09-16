@@ -1,20 +1,31 @@
-<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop" ToolsVersion="Current">
   <PropertyGroup>
     <TargetFramework>net45</TargetFramework>
     <OutputType>Library</OutputType>
-    <RootNamespace>LAAnnotation</RootNamespace>
-    <AssemblyName>LAAnnotation.AutoCAD</AssemblyName>
+    <RootNamespace>GMAnnotation</RootNamespace>
+    <AssemblyName>GMAnnotation.AutoCAD</AssemblyName>
     <PlatformTarget>x64</PlatformTarget>
     <LangVersion>latest</LangVersion>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <UseWPF>true</UseWPF>
-    <DefineConstants>AUTOCAD</DefineConstants>
+    <!-- WPF_NO_PIXELSPERDIP：net45 的 FormattedText 没有 pixelsPerDip 重载（4.6.2 才加入），
+         它的第 7 个参数是 NumberSubstitution —— 传数字会直接编译失败 CS1503。
+         源码用这个符号切到 6 参构造，见 ToolbarInstaller.cs 的图标绘制。
+         注意不能拿 AUTOCAD 当判据：AutoCAD2025 的 net8 工程同样定义 AUTOCAD，要的是带像素密度的重载。 -->
+    <DefineConstants>AUTOCAD;WPF_NO_PIXELSPERDIP</DefineConstants>
+    <FileUpgradeFlags>40</FileUpgradeFlags>
+    <UpgradeBackupLocation>D:\00YPL内部环境V1.0\08-插件整理\打印\LA批量打印-平替代MSteel批打印\LA批注\CADLAAnnotation-main源码\src\Backup\</UpgradeBackupLocation>
+    <OldToolsVersion>2.0</OldToolsVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="AutoCAD.NET" Version="20.0.0">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
+    <!-- 只装 .NET SDK（未装 Visual Studio）的机器上没有 .NET Framework 4.5 参考程序集，
+         直接 dotnet build 会报 MSB3644「找不到参考程序集」。
+         引入官方参考程序集包后无需 targeting pack 即可编译，PrivateAssets=all 保证不影响产物。 -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Drawing" />
