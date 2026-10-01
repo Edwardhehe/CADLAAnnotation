@@ -307,30 +307,38 @@ namespace GMAnnotation
             }
         }
 
-        /// <summary>编辑批注：优先使用已选实体，否则让用户点选。</summary>
+        /// <summary>编辑批注：双击传来的目标优先，其次已选实体，否则让用户点选。</summary>
         [CommandMethod("GM_PZ_EDIT", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void EditAnnotation()
         {
             var doc = CadApplication.DocumentManager.MdiActiveDocument;
-            if (doc == null) { PluginEntry.RestoreQuickPropertiesMode(); return; }
+            if (doc == null) { PluginEntry.EndEditCommand(); return; }
+            PluginEntry.BeginEditCommand();
             try
             {
-                var implied = doc.Editor.SelectImplied();
                 ObjectId id;
-                if (implied.Status == PromptStatus.OK && implied.Value.Count > 0)
+                if (PluginEntry.TryTakeDoubleClickTarget(doc, out id))
                 {
-                    id = implied.Value.GetObjectIds()[0];
-                    // 双击路径会在 Idle 中重建预选；取得 ID 后立即清除，避免恢复 QPMODE 时再弹快捷特性。
-                    doc.Editor.SetImpliedSelection(new ObjectId[0]);
+                    // 双击路径：目标经静态字段传入（命令前的 ^C^C 已清空预选），这里再清一次残留预选，避免恢复 QPMODE 时再弹快捷特性。
+                    try { doc.Editor.SetImpliedSelection(new ObjectId[0]); } catch { /* 清除预选失败不影响编辑 */ }
                 }
                 else
                 {
-                    var options = new PromptEntityOptions("\n选择要编辑的 GM批注: ");
-                    var result = doc.Editor.GetEntity(options); if (result.Status != PromptStatus.OK) return; id = result.ObjectId;
+                    var implied = doc.Editor.SelectImplied();
+                    if (implied.Status == PromptStatus.OK && implied.Value.Count > 0)
+                    {
+                        id = implied.Value.GetObjectIds()[0];
+                        doc.Editor.SetImpliedSelection(new ObjectId[0]);
+                    }
+                    else
+                    {
+                        var options = new PromptEntityOptions("\n选择要编辑的 GM批注: ");
+                        var result = doc.Editor.GetEntity(options); if (result.Status != PromptStatus.OK) return; id = result.ObjectId;
+                    }
                 }
                 EditById(doc, id);
             }
-            finally { PluginEntry.RestoreQuickPropertiesMode(); }
+            finally { PluginEntry.EndEditCommand(); }
         }
 
         /// <summary>导出批注：预选了批注则只导出所选，否则导出全图，输出为 CSV（Excel 可直接编辑）。</summary>
