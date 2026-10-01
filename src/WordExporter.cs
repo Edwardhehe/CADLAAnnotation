@@ -21,21 +21,51 @@ using Autodesk.AutoCAD.Geometry;
 
 namespace GMAnnotation
 {
-    /// <summary>一条待导出的批注：业务文字 + 每条云线（多对一有多条）的 WCS 范围。</summary>
+    /// <summary>一条云线的截图区域：WCS 范围 + 所在空间（模型空间 / 某布局的图纸空间）。</summary>
+    internal sealed class AnnotationWordCloud
+    {
+        public Extents3d Extents { get; set; }
+        /// <summary>云线所属的块表记录（模型空间或布局块表记录）。</summary>
+        public ObjectId SpaceId { get; set; }
+        public bool IsModel { get; set; }
+        /// <summary>所在布局名（模型空间为 "Model"）；取不到时为 null，此时无法截图。</summary>
+        public string LayoutName { get; set; }
+    }
+
+    /// <summary>一条待导出的批注：业务文字 + 每条云线（多对一有多条）的截图区域。</summary>
     internal sealed class AnnotationWordEntry
     {
         public string Number { get; set; }
         public string Date { get; set; }
         public string Content { get; set; }
-        public List<Extents3d> CloudExtents { get; set; } = new List<Extents3d>();
+        public List<AnnotationWordCloud> Clouds { get; set; } = new List<AnnotationWordCloud>();
+    }
+
+    /// <summary>一处云线的截图结果：成功时为 PNG，失败时为写入 Word 的失败原因。</summary>
+    internal sealed class WordCapture
+    {
+        public byte[] Png { get; set; }
+        public string FailureReason { get; set; }
+        public bool Succeeded => Png != null && Png.Length > 0;
+        public static WordCapture Failed(string reason) => new WordCapture { FailureReason = reason };
     }
 
     /// <summary>
-    /// 批注导出 Word：逐条把视图缩放到云线范围并抓取绘图窗口位图，
+    /// 批注导出 Word：按批注所在空间分组，切到该空间（模型标签 / 布局图纸空间）后逐条缩放到云线范围并抓取绘图窗口位图，
     /// 再按"时间 / 云线截图 / 批注文字"三行格式手工打包生成 docx（不依赖 Office）。
+    /// 不进入、不修改任何布局视口的视图；导出结束先恢复原布局与 CVPORT，再恢复原视图。
     /// </summary>
     internal static class WordExporter
     {
+        private sealed class CaptureJob
+        {
+            public int EntryIndex;
+            public int CloudIndex;
+            public AnnotationWordEntry Entry;
+            public AnnotationWordCloud Cloud;
+            public string SpaceKey => Cloud.IsModel ? "\u0001Model" : (Cloud.LayoutName ?? "");
+        }
+
         public static void Export(Document doc, List<AnnotationWordEntry> entries)
         {
             var ed = doc.Editor;
@@ -55,46 +85,113 @@ namespace GMAnnotation
             };
             if (dialog.ShowDialog() != true) return;
 
-            // 截图前记住当前视图，导出完成后恢复。
+            var captures = entries.Select(entry => entry.Clouds.Select(_ => (WordCapture)null).ToList()).ToList();
+            var jobs = new List<CaptureJob>();
+            for (var i = 0; i < entries.Count; i++)
+                for (var j = 0; j < entries[i].Clouds.Count; j++)
+                    jobs.Add(new CaptureJob { EntryIndex = i, CloudIndex = j, Entry = entries[i], Cloud = entries[i].Clouds[j] });
+
+            // 截图前记住现场（布局 / TILEMODE / CVPORT / 视图），导出完成后恢复。
+            var originalState = CadSpaces.Capture();
             ViewTableRecord originalView = null;
             using (var view = ed.GetCurrentView()) originalView = (ViewTableRecord)view.Clone();
+            PluginLog.Info("WordExport", $"开始导出 {entries.Count} 条批注、{jobs.Count} 处云线；现场：{originalState}");
 
-            var imagesPerEntry = new List<List<byte[]>>();
+            var done = 0;
+            var failed = 0;
             try
             {
-                for (var i = 0; i < entries.Count; i++)
+                // 按空间分组：当前所在空间排在最前，减少布局切换；组内保持批注编号顺序。
+                var groups = jobs.GroupBy(job => job.SpaceKey, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(group => IsCurrentSpace(group.First().Cloud) ? 0 : 1)
+                    .ToList();
+                foreach (var group in groups)
                 {
-                    ed.WriteMessage($"\r正在截图 {i + 1}/{entries.Count}    ");
-                    var images = new List<byte[]>();
-                    imagesPerEntry.Add(images);
-                    foreach (var extents in entries[i].CloudExtents)
+                    var cloud = group.First().Cloud;
+                    var spaceName = CadSpaces.DisplayName(cloud.IsModel, cloud.LayoutName);
+                    if (!cloud.IsModel && string.IsNullOrEmpty(cloud.LayoutName))
                     {
-                        try
+                        foreach (var job in group) { captures[job.EntryIndex][job.CloudIndex] = WordCapture.Failed("无法确定云线所在的空间"); failed++; done++; }
+                        PluginLog.Warning("WordExport", $"{group.Count()} 处云线无法确定所在空间（不在模型空间或布局中），已写入截图失败占位。");
+                        continue;
+                    }
+
+                    bool activated;
+                    try { activated = CadSpaces.Activate(doc, cloud.IsModel, cloud.LayoutName); }
+                    catch (System.Exception ex) { PluginLog.Error("WordExport.SwitchSpace", ex); activated = false; }
+                    if (!activated)
+                    {
+                        foreach (var job in group) { captures[job.EntryIndex][job.CloudIndex] = WordCapture.Failed("无法切换到「" + spaceName + "」"); failed++; done++; }
+                        PluginLog.Warning("WordExport", $"无法切换到「{spaceName}」，该空间 {group.Count()} 处云线已写入截图失败占位。");
+                        continue;
+                    }
+
+                    // 记住该空间自己的视图，组内截图完成后还原，不把别的空间留在缩放后的状态。
+                    ViewTableRecord spaceView = null;
+                    try { using (var view = ed.GetCurrentView()) spaceView = (ViewTableRecord)view.Clone(); }
+                    catch (System.Exception ex) { PluginLog.Warning("WordExport", "读取「" + spaceName + "」当前视图失败：" + ex.Message); }
+                    try
+                    {
+                        foreach (var job in group)
                         {
-                            ZoomToExtents(doc, extents);
-                            var png = CaptureWindowPng(doc);
-                            if (png != null && png.Length > 0) images.Add(png);
+                            done++;
+                            ed.WriteMessage($"\r正在截图 {done}/{jobs.Count}（{spaceName}）    ");
+                            var label = $"批注 {job.Entry.Number} 第 {job.CloudIndex + 1} 处云线（{spaceName}）";
+                            WordCapture capture;
+                            try
+                            {
+                                ZoomToExtents(doc, job.Cloud.Extents);
+                                capture = CaptureWindowPng(doc, label);
+                            }
+                            catch (System.Exception ex)
+                            {
+                                PluginLog.Error("WordExport.Capture", ex);
+                                capture = WordCapture.Failed(ex.Message);
+                            }
+                            if (!capture.Succeeded) failed++;
+                            captures[job.EntryIndex][job.CloudIndex] = capture;
                         }
-                        catch (System.Exception ex) { PluginLog.Error("WordExport.Capture", ex); }
+                    }
+                    finally
+                    {
+                        if (spaceView != null)
+                        {
+                            try { ed.SetCurrentView(spaceView); }
+                            catch (System.Exception ex) { PluginLog.Warning("WordExport", "还原「" + spaceName + "」视图失败：" + ex.Message); }
+                            spaceView.Dispose();
+                        }
                     }
                 }
             }
             finally
             {
+                // 先回到原布局并恢复 CVPORT（视图属于那个布局/视口），再恢复原视图。
+                var restored = false;
+                try { restored = CadSpaces.Restore(doc, originalState); }
+                catch (System.Exception ex) { PluginLog.Error("WordExport.RestoreSpace", ex); }
                 try
                 {
                     if (originalView != null)
                     {
-                        ed.SetCurrentView(originalView);
+                        if (restored || CadSpaces.IsState(originalState)) ed.SetCurrentView(originalView);
+                        else PluginLog.Warning("WordExport", $"未能完全恢复原空间（期望 {originalState}），为免改错其他空间的视图，未恢复原视图。");
                         ed.UpdateScreen();
                     }
-                    originalView?.Dispose();
                 }
-                catch { /* 恢复视图失败不影响导出结果 */ }
+                catch (System.Exception ex) { PluginLog.Warning("WordExport", "恢复原视图失败：" + ex.Message); }
+                originalView?.Dispose();
             }
 
-            DocxBuilder.Build(dialog.FileName, entries, imagesPerEntry);
+            DocxBuilder.Build(dialog.FileName, entries, captures);
             ed.WriteMessage($"\n已导出 {entries.Count} 条批注到: {dialog.FileName}");
+            if (failed > 0) ed.WriteMessage($"\n其中 {failed} 处云线截图失败，Word 中已写入「截图失败」占位，详见日志 {AppPaths.DataFolder}\\Logs\\GMAnnotation.log");
+            PluginLog.Info("WordExport", $"导出完成：{dialog.FileName}，云线 {jobs.Count} 处，截图失败 {failed} 处。");
+        }
+
+        private static bool IsCurrentSpace(AnnotationWordCloud cloud)
+        {
+            try { return CadSpaces.IsActive(cloud.IsModel, cloud.LayoutName); }
+            catch { return false; }
         }
 
         /// <summary>缩放当前视图到指定 WCS 范围（与 ZoomToAnnotation 相同的 DCS 变换）。</summary>
@@ -129,36 +226,43 @@ namespace GMAnnotation
         /// 抓取当前文档绘图窗口的客户区位图，返回 PNG 字节（宽度超过 1600px 时等比缩小）。
         /// 主路径使用 CAD 自带的 CapturePreviewImage，仅读取当前视图渲染结果；
         /// 后备路径也只请求 CAD 文档窗口自身重绘。两者都不允许抓取桌面像素，防止输入法或其他程序混入 Word。
+        /// 多次重试后画面仍接近纯色时判定失败（Word 中写入"截图失败"占位），不再把空白图写进文档。
         /// </summary>
-        private static byte[] CaptureWindowPng(Document doc)
+        private static WordCapture CaptureWindowPng(Document doc, string label)
         {
             var hwnd = doc.Window.Handle;
-            if (hwnd == IntPtr.Zero) return null;
-            byte[] lastCapture = null;
+            if (hwnd == IntPtr.Zero) return Fail(label, "取不到 CAD 文档窗口句柄");
             const int maxAttempts = 3;
             for (var attempt = 0; attempt < maxAttempts; attempt++)
             {
                 RefreshViewportForCapture(doc, hwnd, attempt);
-                if (!NativeMethods.GetClientRect(hwnd, out var rect)) return null;
+                if (!NativeMethods.GetClientRect(hwnd, out var rect)) return Fail(label, "读取 CAD 窗口尺寸失败");
                 var width = rect.Right - rect.Left; var height = rect.Bottom - rect.Top;
-                if (width < 10 || height < 10) return null;
+                if (width < 10 || height < 10) return Fail(label, $"CAD 绘图窗口过小（{width}×{height}）");
 
                 using (var bitmap = CaptureCadView(doc, hwnd, width, height))
                 {
-                    if (bitmap == null) return null;
-                    var nearlyUniform = LooksNearlyUniform(bitmap);
-                    using (var scaled = Downscale(bitmap, 1600))
-                    using (var stream = new MemoryStream())
+                    if (bitmap == null) return Fail(label, "CAD 未返回画面");
+                    if (!LooksNearlyUniform(bitmap))
                     {
-                        scaled.Save(stream, ImageFormat.Png);
-                        lastCapture = stream.ToArray();
+                        using (var scaled = Downscale(bitmap, 1600))
+                        using (var stream = new MemoryStream())
+                        {
+                            scaled.Save(stream, ImageFormat.Png);
+                            return new WordCapture { Png = stream.ToArray() };
+                        }
                     }
-                    if (!nearlyUniform) return lastCapture;
                 }
                 if (attempt < maxAttempts - 1)
-                    PluginLog.Warning("WordExport.Capture", $"第 {attempt + 1} 次截图接近纯色，等待 CAD 完成渲染后重试。");
+                    PluginLog.Warning("WordExport.Capture", $"{label}：第 {attempt + 1} 次截图接近纯色，等待 CAD 完成渲染后重试。");
             }
-            return lastCapture;
+            return Fail(label, $"重试 {maxAttempts} 次后画面仍接近纯色（该区域可能没有可见内容，或 CAD 未完成渲染）");
+        }
+
+        private static WordCapture Fail(string label, string reason)
+        {
+            PluginLog.Warning("WordExport.Capture", $"{label}：{reason}，Word 中写入「截图失败」占位。");
+            return WordCapture.Failed(reason);
         }
 
         private static Bitmap CaptureCadView(Document doc, IntPtr hwnd, int width, int height)
@@ -215,24 +319,52 @@ namespace GMAnnotation
             NativeMethods.TryFlushDwm();
         }
 
+        /// <summary>
+        /// 判断画面是否接近纯色：以粗网格采样的众数颜色为背景色，逐像素统计与背景差异明显的像素数。
+        /// 阈值取总像素的 1/2000（且不少于 50 个）：单像素宽的云线外框（约占画面周长）也能远超阈值，
+        /// 避免把"只有一圈细云线"的正常截图误判为失败。
+        /// </summary>
         private static bool LooksNearlyUniform(Bitmap bitmap)
         {
-            var stepX = Math.Max(1, bitmap.Width / 160);
-            var stepY = Math.Max(1, bitmap.Height / 100);
-            var reference = bitmap.GetPixel(bitmap.Width / 2, bitmap.Height / 2);
-            var samples = 0;
-            var different = 0;
-            for (var y = 0; y < bitmap.Height; y += stepY)
+            var width = bitmap.Width; var height = bitmap.Height;
+            if (width <= 0 || height <= 0) return true;
+            var data = bitmap.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            try
             {
-                for (var x = 0; x < bitmap.Width; x += stepX)
+                var row = new byte[width * 4];
+                var counts = new Dictionary<int, int>();
+                var stepX = Math.Max(1, width / 160);
+                var stepY = Math.Max(1, height / 100);
+                for (var y = 0; y < height; y += stepY)
                 {
-                    var color = bitmap.GetPixel(x, y);
-                    samples++;
-                    if (Math.Abs(color.R - reference.R) + Math.Abs(color.G - reference.G) + Math.Abs(color.B - reference.B) > 24)
-                        different++;
+                    Marshal.Copy(IntPtr.Add(data.Scan0, y * data.Stride), row, 0, row.Length);
+                    for (var x = 0; x < width; x += stepX)
+                    {
+                        var o = x * 4;
+                        var key = (row[o + 2] << 16) | (row[o + 1] << 8) | row[o];
+                        counts.TryGetValue(key, out var count);
+                        counts[key] = count + 1;
+                    }
                 }
+                var background = counts.OrderByDescending(pair => pair.Value).First().Key;
+                int br = (background >> 16) & 0xFF, bg = (background >> 8) & 0xFF, bb = background & 0xFF;
+
+                long different = 0;
+                long threshold = Math.Max(50L, (long)width * height / 2000);
+                for (var y = 0; y < height; y++)
+                {
+                    Marshal.Copy(IntPtr.Add(data.Scan0, y * data.Stride), row, 0, row.Length);
+                    for (var o = 0; o < row.Length; o += 4)
+                    {
+                        if (Math.Abs(row[o + 2] - br) + Math.Abs(row[o + 1] - bg) + Math.Abs(row[o] - bb) > 24)
+                        {
+                            if (++different >= threshold) return false;
+                        }
+                    }
+                }
+                return true;
             }
-            return different < Math.Max(12, samples / 500);
+            finally { bitmap.UnlockBits(data); }
         }
 
         private static Bitmap Downscale(Bitmap source, int maxWidth)
@@ -300,7 +432,7 @@ namespace GMAnnotation
             private const double MaxImageHeightEmu = 12.0 * EmuPerCm;
             private const double EmuPerPixel = 914400.0 / 96.0; // 按 96dpi 换算像素自然尺寸
 
-            public static void Build(string path, List<AnnotationWordEntry> entries, List<List<byte[]>> imagesPerEntry)
+            public static void Build(string path, List<AnnotationWordEntry> entries, List<List<WordCapture>> capturesPerEntry)
             {
                 using (var file = new FileStream(path, FileMode.Create))
                 using (var package = Package.Open(file, FileMode.Create))
@@ -309,7 +441,10 @@ namespace GMAnnotation
                     var documentPart = package.CreatePart(documentUri, DocumentContentType);
                     package.CreateRelationship(documentUri, TargetMode.Internal, DocumentRelationship);
 
-                    // 先写入全部图片部件并记录关系 ID，再生成 document.xml。
+                    // 先写入全部图片部件并记录关系 ID，再生成 document.xml。截图失败的云线不写图片，改写文字占位。
+                    var imagesPerEntry = capturesPerEntry
+                        .Select(captures => captures.Where(capture => capture != null && capture.Succeeded).Select(capture => capture.Png).ToList())
+                        .ToList();
                     var relationshipIds = new List<List<string>>();
                     var imageCounter = 0;
                     for (var i = 0; i < entries.Count; i++)
@@ -344,6 +479,14 @@ namespace GMAnnotation
                                 WriteTextParagraph(writer, entries[i].Date);
                                 if (relationshipIds[i].Count > 0)
                                     WriteImagesParagraph(writer, imagesPerEntry[i], relationshipIds[i], ref docPrId);
+                                var captures = capturesPerEntry[i];
+                                for (var k = 0; k < captures.Count; k++)
+                                {
+                                    var capture = captures[k];
+                                    if (capture != null && capture.Succeeded) continue;
+                                    var where = captures.Count > 1 ? "第 " + (k + 1) + " 处云线：" : "";
+                                    WriteTextParagraph(writer, "【截图失败】" + where + (capture?.FailureReason ?? "未截图"));
+                                }
                                 WriteTextParagraph(writer, entries[i].Content);
                                 WriteTextParagraph(writer, "");
                             }

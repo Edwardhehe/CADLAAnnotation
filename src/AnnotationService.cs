@@ -1628,10 +1628,21 @@ namespace GMAnnotation
             HashSet<string> filter=null;
             if(!exportAll)
             {
+                // 框选只能选到当前空间（模型 / 当前布局图纸空间 / 已激活视口内的模型空间）中的对象：先说明其他空间的批注情况。
+                var spaces=SummarizeAnnotationSpaces(doc,out var currentCount,out var currentName);
+                var elsewhere=spaces.Where(pair=>pair.Value>0).Select(pair=>"「"+pair.Key+"」"+pair.Value+" 条").ToList();
+                if(currentCount==0)
+                {
+                    ed.WriteMessage("\n当前空间「"+currentName+"」中没有 GM批注，框选只能选到当前空间内的对象。"+
+                        (elsewhere.Count>0?"批注位于："+string.Join("、",elsewhere)+"。请切换到对应的模型/布局后再框选（布局中查看模型空间批注时，可先双击进入视口），或改用 全部(A)。":""));
+                    return;
+                }
+                if(elsewhere.Count>0)
+                    ed.WriteMessage("\n提示：另有批注位于其他空间（"+string.Join("、",elsewhere)+"），框选只能选择当前空间「"+currentName+"」内的批注；需要一并导出请改用 全部(A)。");
                 var options=new PromptSelectionOptions{MessageForAdding="\n框选要导出的批注（窗口/窗交均可）: "};
                 var selectionFilter=new SelectionFilter(new[]{new TypedValue((int)DxfCode.ExtendedDataRegAppName,AnnotationCodec.AppName)});
                 var selection=ed.GetSelection(options,selectionFilter);
-                if(selection.Status!=PromptStatus.OK||selection.Value==null||selection.Value.Count==0){ed.WriteMessage("\n未选择任何批注。");return;}
+                if(selection.Status!=PromptStatus.OK||selection.Value==null||selection.Value.Count==0){ed.WriteMessage("\n未选择任何批注（框选只在当前空间「"+currentName+"」中生效）。");return;}
                 filter=new HashSet<string>(StringComparer.Ordinal);
                 using(var tr=doc.Database.TransactionManager.StartTransaction())
                 {
@@ -1650,7 +1661,7 @@ namespace GMAnnotation
             WordExporter.Export(doc,entries);
         }
 
-        /// <summary>收集导出条目：复用 GetAllAnnotations 保证与列表面板内容完全一致，再补充云线 WCS 范围。</summary>
+        /// <summary>收集导出条目：复用 GetAllAnnotations 保证与列表面板内容完全一致，再补充云线 WCS 范围及其所在空间（模型/布局）。</summary>
         private static List<AnnotationWordEntry> CollectWordEntries(Document doc,HashSet<string> filter)
         {
             // 直接复用批注列表面板的数据源，确保导出内容与面板完全统一。
@@ -1659,25 +1670,89 @@ namespace GMAnnotation
             using(var tr=doc.Database.TransactionManager.StartTransaction())
             {
                 var groups=(DBDictionary)tr.GetObject(doc.Database.GroupDictionaryId,OpenMode.ForRead);
+                var modelSpaceId=ModelSpaceIdOf(tr,doc.Database);
+                var layoutCache=new Dictionary<ObjectId,string>();
                 foreach(var info in allAnnotations)
                 {
                     if(filter!=null&&!filter.Contains(info.Id))continue;
                     var groupName=GroupPrefix+info.Id;
                     if(!groups.Contains(groupName))continue;
                     var group=(Group)tr.GetObject(groups.GetAt(groupName),OpenMode.ForRead);
-                    var clouds=new List<Extents3d>();
+                    var clouds=new List<AnnotationWordCloud>();
                     foreach(ObjectId member in group.GetAllEntityIds())
                     {
                         if(!member.IsValid||member.IsErased)continue;
                         var entity=tr.GetObject(member,OpenMode.ForRead,false) as Entity;
                         if(entity==null)continue;
                         if(!TryGetRole(entity,out var role)||role!="cloud")continue;
-                        try{clouds.Add(entity.GeometricExtents);}catch{/* 忽略无法计算范围的云线 */}
+                        Extents3d extents;
+                        try{extents=entity.GeometricExtents;}catch{PluginLog.Warning("WordExport","批注 "+info.Number+" 的一条云线无法计算范围，已跳过。");continue;}
+                        // 坐标是云线所在空间的 WCS：模型空间云线要在模型标签截图，图纸空间云线要在其布局的图纸空间截图。
+                        clouds.Add(new AnnotationWordCloud{Extents=extents,SpaceId=entity.OwnerId,IsModel=entity.OwnerId==modelSpaceId,LayoutName=LayoutNameOf(tr,entity,layoutCache)});
                     }
-                    entries.Add(new AnnotationWordEntry{Number=info.Number,Date=info.Date,Content=info.Content,CloudExtents=clouds});
+                    entries.Add(new AnnotationWordEntry{Number=info.Number,Date=info.Date,Content=info.Content,Clouds=clouds});
                 }
             }
             return entries; // GetAllAnnotations 已按编号排序
+        }
+
+        private static ObjectId ModelSpaceIdOf(Transaction tr,Database db)
+        {
+            var blockTable=(BlockTable)tr.GetObject(db.BlockTableId,OpenMode.ForRead);
+            return blockTable[BlockTableRecord.ModelSpace];
+        }
+
+        /// <summary>按空间统计批注条数（以批注首个有效成员所在空间为准）。返回"其他空间名 → 条数"，并给出当前空间的条数与名称。</summary>
+        private static Dictionary<string,int> SummarizeAnnotationSpaces(Document doc,out int currentCount,out string currentName)
+        {
+            var result=new Dictionary<string,int>(StringComparer.OrdinalIgnoreCase);
+            currentCount=0;currentName="?";
+            try
+            {
+                var annotations=GetAllAnnotations(doc);
+                using(var tr=doc.Database.TransactionManager.StartTransaction())
+                {
+                    var modelSpaceId=ModelSpaceIdOf(tr,doc.Database);
+                    var currentSpaceId=doc.Database.CurrentSpaceId;
+                    var layoutCache=new Dictionary<ObjectId,string>();
+                    if(tr.GetObject(currentSpaceId,OpenMode.ForRead,false) is BlockTableRecord currentSpace&&currentSpace.IsLayout&&!currentSpace.LayoutId.IsNull&&tr.GetObject(currentSpace.LayoutId,OpenMode.ForRead,false) is Layout currentLayout)
+                        currentName=CadSpaces.DisplayName(currentSpaceId==modelSpaceId,currentLayout.LayoutName);
+                    foreach(var info in annotations)
+                    {
+                        if(info.FirstEntityId.IsNull||!info.FirstEntityId.IsValid||info.FirstEntityId.IsErased)continue;
+                        if(!(tr.GetObject(info.FirstEntityId,OpenMode.ForRead,false) is Entity entity))continue;
+                        if(entity.OwnerId==currentSpaceId){currentCount++;continue;}
+                        var name=CadSpaces.DisplayName(entity.OwnerId==modelSpaceId,LayoutNameOf(tr,entity,layoutCache));
+                        result.TryGetValue(name,out var count);result[name]=count+1;
+                    }
+                    tr.Commit();
+                }
+            }
+            catch(System.Exception ex){PluginLog.Error("WordExport.SummarizeSpaces",ex);}
+            return result;
+        }
+
+        /// <summary>
+        /// 列表定位用：把视图切到实体所在空间——模型空间实体切到模型标签，图纸空间实体切到所属布局并激活图纸空间。
+        /// 不在布局视口里缩放（避免改坏视口比例）。调用方需已锁定文档。
+        /// </summary>
+        private static void ActivateSpaceOf(Document doc,ObjectId entityId)
+        {
+            bool isModel;string layoutName;
+            using(var tr=doc.Database.TransactionManager.StartTransaction())
+            {
+                var entity=tr.GetObject(entityId,OpenMode.ForRead,false) as Entity;
+                if(entity==null)return;
+                isModel=entity.OwnerId==ModelSpaceIdOf(tr,doc.Database);
+                layoutName=LayoutNameOf(tr,entity,new Dictionary<ObjectId,string>());
+                tr.Commit();
+            }
+            if(!isModel&&string.IsNullOrEmpty(layoutName))return;
+            if(CadSpaces.IsActive(isModel,layoutName))return;
+            if(CadSpaces.Activate(doc,isModel,layoutName))
+                doc.Editor.WriteMessage("\n已切换到批注所在空间「"+CadSpaces.DisplayName(isModel,layoutName)+"」。");
+            else
+                PluginLog.Warning("ZoomToAnnotation","未能切换到批注所在空间「"+CadSpaces.DisplayName(isModel,layoutName)+"」。");
         }
 
         /// <summary>轻量批注摘要，供列表面板展示。</summary>
@@ -1780,7 +1855,7 @@ namespace GMAnnotation
                     }
                 }
             }
-            catch { }
+            catch (System.Exception ex) { PluginLog.Error("GetAllAnnotations", ex); }
             return result.OrderBy(x => x.Number, StringComparer.OrdinalIgnoreCase).ToList();
         }
 
@@ -1797,6 +1872,10 @@ namespace GMAnnotation
             {
                 return false;
             }
+
+            // 先切到批注所在空间（模型标签 / 所属布局的图纸空间），再缩放；切换失败仍按当前空间尝试定位。
+            try { using (doc.LockDocument()) ActivateSpaceOf(doc, entityId); }
+            catch (System.Exception ex) { PluginLog.Warning("ZoomToAnnotation", "切换批注所在空间失败：" + ex.Message); }
 
             try
             {
