@@ -182,7 +182,7 @@ namespace GMAnnotation
                 AddCommandMenuItem(menu, index++, "导出批注", "GM_PZ_EXPORT");
                 AddCommandMenuItem(menu, index++, "导入批注", "GM_PZ_IMPORT");
                 AddCommandMenuItem(menu, index++, "修复批注", "GM_PZ_REPAIR");
-                AddCommandMenuItem(menu, index++, "工具栏", "GM_PZ_TOOLBAR");
+                AddCommandMenuItem(menu, index++, "显示/隐藏工具栏", "GM_PZ_TOOLBAR");
                 TryInvoke(menu, "AddSeparator", index++);
                 AddCommandMenuItem(menu, index++, "批注设置", "GM_PZ_SETTINGS");
                 AddCommandMenuItem(menu, index++, "安装自动加载", "GM_PZ_INSTALL_AUTOLOAD");

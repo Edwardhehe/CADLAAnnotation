@@ -47,7 +47,10 @@ namespace GMAnnotation
         public static void Save(AnnotationSettings s)
         {
             Directory.CreateDirectory(Folder);
-            new XElement("Settings",
+            // 工具栏显隐不属于 AnnotationSettings（由 ToolbarInstaller 单独读写）：整文件重写时原样保留该节点，
+            // 防止面板/设置窗口长时间持有的旧设置对象把用户刚关掉的工具栏状态覆盖回去。
+            var toolbarVisible = ReadElement(ToolbarVisibleKey);
+            var root = new XElement("Settings",
                 new XElement("Shape",s.Shape),new XElement("CloudStyle",s.CloudStyle),
                 new XElement("LayerName", s.LayerName), new XElement("ColorIndex", s.ColorIndex),
                 new XElement("TextStyleName",s.TextStyleName),new XElement("CloudColor",s.CloudColor),new XElement("LeaderColor",s.LeaderColor),new XElement("TextColor",s.TextColor),new XElement("BoxColor",s.BoxColor),new XElement("ReplyColor",s.ReplyColor),new XElement("ScreenshotBackgroundColor",s.ScreenshotBackgroundColor),new XElement("PassColor",s.PassColor),new XElement("CheckColor",s.CheckColor),new XElement("ScreenshotBackgroundOnceReply",s.ScreenshotBackgroundOnceReply),
@@ -59,7 +62,44 @@ namespace GMAnnotation
                 new XElement("DefaultRole",s.DefaultRole),new XElement("AutoNumber", s.AutoNumber), new XElement("NextNumber", s.NextNumber),
                 new XElement("AutoCloseOrtho",s.AutoCloseOrtho),new XElement("AutoCloseSnap",s.AutoCloseSnap),new XElement("ViewTopIsNorth",s.ViewTopIsNorth),new XElement("DoubleClickEdit",s.DoubleClickEdit),new XElement("ContinuousAnnotation",s.ContinuousAnnotation),new XElement("CloudOnly",s.CloudOnly),new XElement("SameColors",s.SameColors),new XElement("LayerAppendDate",s.LayerAppendDate),new XElement("LayerAppendName",s.LayerAppendName),new XElement("DateBeforeName",s.DateBeforeName),new XElement("Connector",s.Connector),new XElement("Plottable",s.Plottable),new XElement("CheckHeight",s.CheckHeight.ToString(CultureInfo.InvariantCulture)),new XElement("AutoTextViewPercent",s.AutoTextViewPercent.ToString(CultureInfo.InvariantCulture)),
                 new XElement("ShowDiscipline",s.ShowDiscipline),new XElement("ShowAuthor",s.ShowAuthor),new XElement("ShowRole",s.ShowRole),new XElement("ShowDate",s.ShowDate),new XElement("ShowStatus",s.ShowStatus),new XElement("ShowDrawingNo",s.ShowDrawingNo),
-                new XElement("ArchiveOnCreate",s.ArchiveOnCreate),new XElement("ContentSuggest",s.ContentSuggest)).Save(PathName);
+                new XElement("ArchiveOnCreate",s.ArchiveOnCreate),new XElement("ContentSuggest",s.ContentSuggest));
+            if (toolbarVisible != null) root.Add(new XElement(ToolbarVisibleKey, toolbarVisible));
+            root.Save(PathName);
+        }
+
+        // ============ 「GM批注」工具栏显隐（单独读写，不经 AnnotationSettings） ============
+
+        private const string ToolbarVisibleKey = "ToolbarVisible";
+
+        /// <summary>上次记录的工具栏显隐；没有记录（首次使用 / 老配置文件）时默认显示。</summary>
+        public static bool LoadToolbarVisible()
+        {
+            return ParseBool(ReadElement(ToolbarVisibleKey) ?? "true", true);
+        }
+
+        /// <summary>只更新 settings.xml 中的工具栏显隐节点，其余设置原样保留。</summary>
+        public static void SaveToolbarVisible(bool visible)
+        {
+            try
+            {
+                Directory.CreateDirectory(Folder);
+                XElement x = null;
+                if (File.Exists(PathName))
+                {
+                    try { x = XElement.Load(PathName); }
+                    catch (Exception ex) { PluginLog.Error("Settings.Toolbar.Load", ex); return; } // 文件损坏时不覆盖，避免丢掉其他设置
+                }
+                if (x == null) x = new XElement("Settings");
+                x.SetElementValue(ToolbarVisibleKey, visible);
+                x.Save(PathName);
+            }
+            catch (Exception ex) { PluginLog.Error("Settings.Toolbar.Save", ex); }
+        }
+
+        private static string ReadElement(string name)
+        {
+            try { return File.Exists(PathName) ? (string)XElement.Load(PathName).Element(name) : null; }
+            catch { return null; }
         }
 
         private static string Get(XElement x, string n, string f) => (string)x.Element(n) ?? f;
