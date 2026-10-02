@@ -49,7 +49,7 @@
                 <Rectangle Style="{StaticResource SectionSeparator}"/>
 
                 <!-- 待应用设置 -->
-                <TextBlock Text="批注设置（点击开始时生效）" Style="{StaticResource SectionHeader}" Margin="0,4,0,6"/>
+                <TextBlock Text="批注设置（开始批注时生效）" Style="{StaticResource SectionHeader}" Margin="0,4,0,6"/>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="56"/>

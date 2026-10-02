@@ -23,11 +23,12 @@ namespace GMAnnotation
     /// <summary>CAD 命令集合：绘制/编辑/删除批注、设置、重载菜单。</summary>
     public sealed class Commands
     {
-        /// <summary>打开浮动批注面板（面板内可选择类型/形式/设置，支持连续批注）。</summary>
+        /// <summary>绘制批注（面板）：打开浮动批注面板并<b>立即</b>按面板当前设置开始批注（无需再点"开始批注"）。
+        /// 面板已打开时只按其当前设置再开始一次；面板保持可用，可随时改设置后点"开始批注"或再次点菜单。</summary>
         [CommandMethod("GM_PZ_NOTE", CommandFlags.Modal)]
         public void CreateAnnotation()
         {
-            AnnotationPanel.ShowOrActivate();
+            AnnotationPanel.ShowAndStart();
         }
 
         /// <summary>面板排队使用的内部命令，让选点流程在 CAD 命令上下文中执行。</summary>

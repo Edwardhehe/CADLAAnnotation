@@ -19,10 +19,15 @@ using CadApplication = Autodesk.AutoCAD.ApplicationServices.Core.Application;
 
 namespace GMAnnotation.Views
 {
-    /// <summary>浮动批注面板：选择批注类型、形式和设置，点击开始时统一生效，支持连续批注。</summary>
+    /// <summary>浮动批注面板：选择批注类型、形式和设置，开始批注时统一生效，支持连续批注。
+    /// 从菜单"绘制批注（面板）"（GM_PZ_NOTE）打开时会立即按面板当前设置开始批注。</summary>
     internal partial class AnnotationPanel : Window
     {
         private static AnnotationPanel _instance;
+        /// <summary>本次 CAD 会话内记住上次使用的批注类型与形式（单选按钮不写入设置文件），
+        /// 面板关闭后再从菜单打开时仍按上次的选择直接开始。</summary>
+        private static bool _rememberedIsSingle = true;
+        private static string _rememberedShape = "矩形";
         private AnnotationSettings _s;
         private bool _isRunning;
         private bool _continuePending;
@@ -42,6 +47,10 @@ namespace GMAnnotation.Views
         {
             InitializeComponent();
             _s = SettingsStore.Load();
+            // 先恢复上次的类型/形式（在挂 Checked 事件之前，不覆盖"外形"下拉的已保存值）。
+            if (!_rememberedIsSingle) MultiModeRadio.IsChecked = true;
+            if (_rememberedShape == "pline") ShapePlineRadio.IsChecked = true;
+            else if (_rememberedShape == "圆形") ShapeCircleRadio.IsChecked = true;
             // 下拉数据源
             DisciplineCombo.ItemsSource = AnnotationOptions.Disciplines;
             ShapeCombo.ItemsSource = new[] { "矩形", "菱形", "椭圆" };
@@ -54,7 +63,7 @@ namespace GMAnnotation.Views
             ShapeCircleRadio.Checked += (_, __) => ShapeCombo.Text = "椭圆";
             SingleModeRadio.Checked += (_, __) => UpdateModeAvailability();
             MultiModeRadio.Checked += (_, __) => UpdateModeAvailability();
-            // 打开面板后先允许用户选择模式和参数，再由“开始批注”按钮进入 CAD 交互。
+            // 菜单打开面板时由 ShowAndStart 立即开始批注；之后可修改参数，再由“开始批注”按钮或再次点菜单进入 CAD 交互。
             Loaded += (_, __) => { Left = SystemParameters.WorkArea.Left + 20; Top = SystemParameters.WorkArea.Top + 20; };
             Closing += (_, __) => _instance = null;
             UpdateModeAvailability();
@@ -94,6 +103,45 @@ namespace GMAnnotation.Views
             if (_instance != null && _instance.IsLoaded) { _instance.Activate(); return; }
             _instance = new AnnotationPanel();
             _instance.Show();
+        }
+
+        /// <summary>
+        /// 菜单"绘制批注（面板）"入口：显示面板（已打开则保留）并立即按面板当前设置开始批注。
+        /// 运行在 GM_PZ_NOTE 命令上下文中，但真正的选点流程仍经 GM_PZ_RUN 排队执行（与"开始批注"按钮同一路径），
+        /// 保证 Editor 交互运行在独立的正式命令里，且 SendStringToExecute 会把焦点交回 CAD 绘图窗口。
+        /// </summary>
+        internal static void ShowAndStart()
+        {
+            var panel = _instance;
+            if (panel != null && panel.IsLoaded)
+            {
+                // 已打开：不重复创建、不抢焦点，只按当前设置再开始一次。
+                if (panel.WindowState == WindowState.Minimized) panel.WindowState = WindowState.Normal;
+                if (!panel.IsVisible) panel.Show();
+                panel.StartFromMenu();
+                return;
+            }
+
+            panel = new AnnotationPanel();
+            _instance = panel;
+            // 窗口加载完成（控件已就绪）后再开始，避免 GM_PZ_RUN 执行时面板尚未 IsLoaded 而被忽略。
+            RoutedEventHandler onLoaded = null;
+            onLoaded = (_, __) => { panel.Loaded -= onLoaded; panel.StartFromMenu(); };
+            panel.Loaded += onLoaded;
+            // 不激活面板：焦点留在 CAD 绘图窗口，开始选点后键盘输入（关键字/回车）直接进入命令行。
+            panel.ShowActivated = false;
+            panel.Show();
+        }
+
+        private void StartFromMenu()
+        {
+            if (_isRunning)
+            {
+                // 菜单宏带 ^C^C，正常情况下进行中的批注已被取消；仍在运行说明处于填写内容等模态阶段。
+                CadApplication.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\n批注正在进行中，请先完成或按 Esc 取消后再开始。");
+                return;
+            }
+            QueueAnnotationCommand(true, false);
         }
 
         private void Start_Click(object sender, RoutedEventArgs e) => QueueAnnotationCommand(true, false);
@@ -177,6 +225,8 @@ namespace GMAnnotation.Views
                     settings = _s.Clone();
                     isSingle = SingleModeRadio.IsChecked == true;
                     shape = SelectedShape();
+                    _rememberedIsSingle = isSingle;
+                    _rememberedShape = shape;
                 }
                 else
                 {
@@ -201,6 +251,14 @@ namespace GMAnnotation.Views
                     _queuedDocument == doc &&
                     (DateTime.UtcNow - _pendingSinceUtc).TotalSeconds < 2)
                 {
+                    // 已有尚未执行的开始请求：不重复排队 GM_PZ_RUN，避免连开两次；
+                    // 但面板主动发起时（按钮/菜单）用最新的面板设置替换排队中的设置。
+                    if (applyPanelSettings)
+                    {
+                        _queuedSettings = settings;
+                        _queuedIsSingle = isSingle;
+                        _queuedShape = shape;
+                    }
                     return;
                 }
 
