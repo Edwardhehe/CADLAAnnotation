@@ -59,19 +59,21 @@ namespace GMAnnotation
 
         private static bool _retryAttached;
 
-        // ---- 用户关闭/打开工具栏的检测 ----
-        // CAD 的 COM 工具栏对象没有"关闭"事件：工具栏就绪后挂一个 Idle 回调，每 2 秒读一次 Visible，
-        // 与上次已知值不同就写回 settings.xml（下次启动按此显隐）。插件卸载/CAD 退出时（Terminate）再查一次。
+        // ---- 启动时不自动显示 ----
+        // 每次加载插件（启动 CAD）时工具栏都只创建、不显示，不再按上次显隐记忆恢复；需要时用菜单「显示/隐藏工具栏」
+        // 或 GM_PZ_TOOLBAR_SHOW / GMPANEL 打开。CAD 自己可能在启动后期按工作空间/CUIx 把工具栏又显示出来，
+        // 所以加载后的一小段时间（StartupGuard）内每 2 秒检查一次：用户本次会话还没主动打开过就再隐藏回去；
+        // 守护期结束即摘掉 Idle 回调，之后不再读写工具栏显隐（也不再写 settings.xml）。
         private static readonly TimeSpan WatchInterval = TimeSpan.FromSeconds(2);
+        private static readonly TimeSpan StartupGuard = TimeSpan.FromSeconds(12);
         private static bool _watchAttached;
         private static DateTime _nextWatchUtc;
-        private static bool? _lastKnownVisible;
+        private static DateTime _guardUntilUtc;
         private static int _watchFailures;
+        /// <summary>本次会话用户是否已通过命令/菜单主动显示或隐藏过工具栏（之后启动守护不再干预）。</summary>
+        private static bool _userChoseThisSession;
         /// <summary>本次会话是否已把工具栏停靠过（启动时隐藏、之后首次打开时再停靠到顶部）。</summary>
         private static bool _dockedThisSession;
-
-        /// <summary>按上次记录应显示还是隐藏（供加载提示使用）。</summary>
-        public static bool SavedVisible => SettingsStore.LoadToolbarVisible();
 
         /// <summary>创建或刷新工具栏，并按上次记录的显隐状态显示或隐藏（工具栏总会被创建，隐藏时也在，GMPANEL 可随时打开）。失败时安排一次 Idle 重试（NETLOAD 时机过早、CAD 界面尚未就绪时很有用）。</summary>
         /// <returns>工具栏已就绪返回 <c>true</c>。</returns>
@@ -88,25 +90,21 @@ namespace GMAnnotation
             return false;
         }
 
-        /// <summary>卸载插件 / CAD 退出时：最后记录一次工具栏显隐，并摘掉 Idle 回调（工具栏本身保留在 CAD 界面，不随卸载消失）。</summary>
+        /// <summary>卸载插件 / CAD 退出时摘掉 Idle 回调（工具栏本身保留在 CAD 界面，不随卸载消失）。</summary>
         public static void Detach()
         {
-            if (_watchAttached)
-            {
-                CheckUserVisibility("卸载/退出");
-                _watchAttached = false;
-                try { CadApplication.Idle -= OnWatchIdle; }
-                catch (Exception ex) { PluginLog.Error("Toolbar.Detach", ex); }
-            }
+            StopWatching();
             if (!_retryAttached) return;
             _retryAttached = false;
             try { CadApplication.Idle -= OnRetryIdle; }
             catch (Exception ex) { PluginLog.Error("Toolbar.Detach", ex); }
         }
 
-        private static void StartWatching()
+        /// <summary>开始启动守护：之后约 12 秒内，用户没主动打开过工具栏时，若 CAD 又把它显示出来就再隐藏。</summary>
+        private static void StartStartupGuard()
         {
             _watchFailures = 0;
+            _guardUntilUtc = DateTime.UtcNow + StartupGuard;
             if (_watchAttached) return;
             try
             {
@@ -117,17 +115,25 @@ namespace GMAnnotation
             catch (Exception ex) { PluginLog.Error("Toolbar.Watch", ex); }
         }
 
+        private static void StopWatching()
+        {
+            if (!_watchAttached) return;
+            _watchAttached = false;
+            try { CadApplication.Idle -= OnWatchIdle; }
+            catch (Exception ex) { PluginLog.Error("Toolbar.Detach", ex); }
+        }
+
         private static void OnWatchIdle(object sender, EventArgs e)
         {
             var now = DateTime.UtcNow;
+            if (_userChoseThisSession || now >= _guardUntilUtc) { StopWatching(); return; }
             if (now < _nextWatchUtc) return;
             _nextWatchUtc = now + WatchInterval;
-            CheckUserVisibility("Idle");
+            EnforceHiddenAtStartup();
         }
 
-        /// <summary>读取工具栏当前 Visible，与上次已知值不同则记住（用户点了工具栏的 ×，或在 CAD 工具栏右键菜单里勾选/取消）。
-        /// CAD 主窗口最小化/不可见时跳过，避免把"随主窗口一起隐藏"误记成用户关闭。</summary>
-        private static void CheckUserVisibility(string source)
+        /// <summary>启动守护期内：工具栏被 CAD（工作空间/CUIx 恢复）显示出来、而用户本次还没主动打开过 → 再隐藏。只改 Visible，不写设置。</summary>
+        private static void EnforceHiddenAtStartup()
         {
             try
             {
@@ -135,21 +141,19 @@ namespace GMAnnotation
                 var toolbars = GetToolbarsCollection();
                 if (toolbars == null) return;
                 var toolbar = TryGetToolbar(toolbars);
-                if (toolbar == null) return; // 被 CUI 删除等情况：不改记录，下次启动按记录重建
-                var visible = Convert.ToBoolean(toolbar.GetProperty("Visible"));
+                if (toolbar == null) return;
                 _watchFailures = 0;
-                if (_lastKnownVisible == visible) return;
-                _lastKnownVisible = visible;
-                SettingsStore.SaveToolbarVisible(visible);
-                PluginLog.Info("Toolbar", "检测到 GM批注工具栏被" + (visible ? "打开" : "关闭") + "（" + source + "），已记住：下次启动" + (visible ? "显示" : "保持隐藏") + "。");
+                if (!Convert.ToBoolean(toolbar.GetProperty("Visible"))) return;
+                SetProperty(toolbar, "Visible", false);
+                PluginLog.Info("Toolbar", "启动后 CAD 恢复显示了 GM批注工具栏，已按「启动时不自动显示」重新隐藏。");
             }
             catch (Exception ex)
             {
-                // 连续失败 5 次（约 10 秒）就停止轮询，只记一次日志，避免刷屏。
+                // 连续失败 5 次就停止守护，只记一次日志，避免刷屏。
                 if (++_watchFailures == 5)
                 {
-                    PluginLog.Warning("Toolbar.Watch", "读取工具栏显隐连续失败，停止检测：" + Describe(ex));
-                    if (_watchAttached) { _watchAttached = false; try { CadApplication.Idle -= OnWatchIdle; } catch { } }
+                    PluginLog.Warning("Toolbar.Watch", "读取工具栏显隐连续失败，停止启动守护：" + Describe(ex));
+                    StopWatching();
                 }
             }
         }
@@ -175,9 +179,12 @@ namespace GMAnnotation
             if (!ready) PluginLog.Warning("Toolbar.Retry", message);
         }
 
-        /// <summary>创建（或复用）「GM批注」工具栏，按当前代码重建按钮，并按上次记录的显隐状态显示或隐藏。
-        /// 记录为隐藏时不强制 Visible=true（也不停靠，避免宿主停靠时顺带显示），但工具栏仍会创建好，供 GMPANEL 打开。</summary>
-        public static bool Ensure(out string message)
+        /// <summary>插件加载时：创建（或复用）「GM批注」工具栏并按当前代码重建按钮，<b>保持隐藏</b>（启动时不自动显示）。</summary>
+        public static bool Ensure(out string message) => Ensure(false, out message);
+
+        /// <summary>创建（或复用）「GM批注」工具栏，按当前代码重建按钮，再按 <paramref name="show"/> 显示或隐藏。
+        /// 隐藏时不停靠（避免宿主停靠时顺带显示），但工具栏仍会创建好，供菜单「显示/隐藏工具栏」/ GM_PZ_TOOLBAR_SHOW 打开。</summary>
+        public static bool Ensure(bool show, out string message)
         {
             try
             {
@@ -202,22 +209,19 @@ namespace GMAnnotation
 
                 for (var i = 0; i < Buttons.Length; i++) AddButton(toolbar, i, Buttons[i]);
 
-                var visible = SettingsStore.LoadToolbarVisible();
-                if (visible)
+                if (show)
                 {
                     SetProperty(toolbar, "Visible", true);
-                    TryDockToTop(toolbar);
-                    _dockedThisSession = true;
+                    if (!_dockedThisSession) { TryDockToTop(toolbar); _dockedThisSession = true; }
                 }
                 else
                 {
                     SetProperty(toolbar, "Visible", false);
+                    if (!_userChoseThisSession) StartStartupGuard();
                 }
-                _lastKnownVisible = visible;
-                StartWatching();
 
                 message = "GM批注工具栏已" + (created ? "创建" : "刷新") + "（" + Buttons.Length + " 个按钮）" +
-                    (visible ? "。" : "，按上次关闭状态保持隐藏（GMPANEL 可重新打开）。");
+                    (show ? "。" : "，启动时不自动显示（菜单「显示/隐藏工具栏」或 GM_PZ_TOOLBAR_SHOW 打开）。");
                 return true;
             }
             catch (Exception ex)
@@ -228,7 +232,7 @@ namespace GMAnnotation
             }
         }
 
-        /// <summary>切换工具栏显示/隐藏并记住；工具栏还不存在时创建并显示。</summary>
+        /// <summary>切换工具栏显示/隐藏；工具栏还不存在时创建并显示。</summary>
         public static bool ToggleVisible(out string message)
         {
             try
@@ -248,17 +252,17 @@ namespace GMAnnotation
             }
         }
 
-        /// <summary>显示或隐藏工具栏并写入 settings.xml（下次启动按此状态）。工具栏不存在时先按目标状态创建。</summary>
+        /// <summary>用户主动显示或隐藏工具栏（只影响本次会话；下次启动 CAD 仍默认不显示）。工具栏不存在时先按目标状态创建。</summary>
         public static bool SetVisible(bool visible, out string message)
         {
             try
             {
-                SettingsStore.SaveToolbarVisible(visible);
-                _lastKnownVisible = visible;
+                _userChoseThisSession = true;
+                StopWatching();
                 var toolbars = GetToolbarsCollection();
                 if (toolbars == null) { message = "当前 CAD 未公开工具栏接口。"; return false; }
                 var toolbar = TryGetToolbar(toolbars);
-                if (toolbar == null) return Ensure(out message); // Ensure 按刚写入的状态创建
+                if (toolbar == null) return Ensure(visible, out message);
 
                 SetProperty(toolbar, "Visible", visible);
                 if (visible && !_dockedThisSession)
@@ -266,10 +270,9 @@ namespace GMAnnotation
                     TryDockToTop(toolbar);
                     _dockedThisSession = true;
                 }
-                StartWatching();
                 message = visible
-                    ? "GM批注工具栏已显示（下次启动保持显示）。"
-                    : "GM批注工具栏已隐藏（下次启动保持隐藏，输入 GMPANEL 可重新打开）。";
+                    ? "GM批注工具栏已显示（每次启动 CAD 默认不显示，需要时用菜单「显示/隐藏工具栏」或 GM_PZ_TOOLBAR_SHOW 打开）。"
+                    : "GM批注工具栏已隐藏（菜单「显示/隐藏工具栏」或 GM_PZ_TOOLBAR_SHOW / GMPANEL 可重新打开）。";
                 return true;
             }
             catch (Exception ex)

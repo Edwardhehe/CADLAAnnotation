@@ -326,8 +326,8 @@
                             GM_PZ_IMPORT   — 导入批注<LineBreak/>
                             GM_PZ_REPAIR   — 修复复制产生的批注<LineBreak/>
                             GM_PZ_TOOLBAR  — 显示/隐藏 GM批注工具栏（不存在时创建）<LineBreak/>
-                            GM_PZ_TOOLBAR_SHOW — 打开 GM批注工具栏并记住为显示<LineBreak/>
-                            GM_PZ_TOOLBAR_HIDE — 隐藏 GM批注工具栏并记住为隐藏<LineBreak/>
+                            GM_PZ_TOOLBAR_SHOW — 打开 GM批注工具栏（启动 CAD 时默认不显示）<LineBreak/>
+                            GM_PZ_TOOLBAR_HIDE — 隐藏 GM批注工具栏<LineBreak/>
                             GMPANEL        — GM_PZ_TOOLBAR_SHOW 的简短别名<LineBreak/>
                             GM_PZ_INSTALL_AUTOLOAD   — 为当前 CAD 安装启动自动加载<LineBreak/>
                             GM_PZ_UNINSTALL_AUTOLOAD — 卸载启动自动加载<LineBreak/>

@@ -74,9 +74,9 @@ namespace GMAnnotation
             CadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
             var doc = CadApplication.DocumentManager.MdiActiveDocument;
             var menuReady = MenuInstaller.EnsureWithRetry();
-            // 浮动快捷栏已取消：CAD 原生工具栏是单字按钮的唯一入口。加载时就建好并显示；
+            // 浮动快捷栏已取消：CAD 原生工具栏是单字按钮的唯一入口。加载时就建好，但启动时不自动显示；
             // 建不出来会自动安排一次 Idle 重试，仍不行可用 GM_PZ_TOOLBAR 手动建/显隐。
-            // 显隐按上次记录（用户关掉后下次启动保持隐藏，GMPANEL 重新打开）。
+            // 需要时用菜单「显示/隐藏工具栏」或 GM_PZ_TOOLBAR_SHOW / GMPANEL 打开（只影响本次会话）。
             var toolbarReady = ToolbarInstaller.EnsureWithRetry();
             AnnotationService.SyncNextNumber(doc);
             ObserveDatabase(doc?.Database);
@@ -84,7 +84,7 @@ namespace GMAnnotation
             doc?.Editor.WriteMessage(
                 "\nGM批注已加载。" + (menuReady ? " 菜单已就绪。" : " 菜单稍后自动挂上（或用 GM_PZ_MENU）。") +
                 (toolbarReady
-                    ? (ToolbarInstaller.SavedVisible ? " GM批注工具栏已就绪。" : " GM批注工具栏按上次关闭状态保持隐藏（输入 GMPANEL 打开）。")
+                    ? " GM批注工具栏已就绪（启动时不自动显示，菜单「显示/隐藏工具栏」或 GM_PZ_TOOLBAR_SHOW 打开）。"
                     : " GM批注工具栏未就绪（将自动重试，或用 GM_PZ_TOOLBAR / GMPANEL）。") +
                 " 命令: GM_PZ_DRAW / GM_PZ_NOTE / GM_PZ_EDIT / GM_PZ_MOVE /" +
                 " GM_PZ_DELETE / GM_PZ_HIDE / GM_PZ_SHOW / GM_PZ_MERGE / GM_PZ_FILTER / GM_PZ_FORMAT / GM_PZ_REFRESH / GM_PZ_CLOUD / GM_PZ_ADDCLOUD / GM_PZ_LIST /" +
