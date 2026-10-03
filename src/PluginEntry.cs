@@ -82,7 +82,7 @@ namespace GMAnnotation
             ObserveDatabase(doc?.Database);
             WatchUndo(doc);
             doc?.Editor.WriteMessage(
-                "\nGM批注已加载。" + (menuReady ? " 菜单已就绪。" : " 菜单稍后自动挂上（或用 GM_PZ_MENU）。") +
+                "\nGM批注 " + AppInfo.GetDisplayVersion() + " 已加载。" + (menuReady ? " 菜单已就绪。" : " 菜单稍后自动挂上（或用 GM_PZ_MENU）。") +
                 (toolbarReady
                     ? " GM批注工具栏已就绪（启动时不自动显示，菜单「显示/隐藏工具栏」或 GM_PZ_TOOLBAR_SHOW 打开）。"
                     : " GM批注工具栏未就绪（将自动重试，或用 GM_PZ_TOOLBAR / GMPANEL）。") +

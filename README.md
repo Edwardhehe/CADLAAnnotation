@@ -1,4 +1,4 @@
-# GM批注 v1.0.0
+# GM批注 v1.1
 
 同时支持 AutoCAD 与 ZWCAD 的本地批注插件，无需登录或联网。两种宿主共用同一套源码、DWG 数据格式、界面和命令。
 
@@ -8,18 +8,18 @@
 
 ### 1. 获取 DLL
 
-从 Releases 页面下载最新版本的 `GMAnnotation-vX.Y.Z.zip`（X.Y.Z 为版本号）并完整解压，再按 CAD 宿主选择 DLL：
+从 Releases 页面下载最新版本的 `GMAnnotation-vX.Y.zip`（如 `GMAnnotation-v1.1.zip`）并完整解压，再按 CAD 宿主选择 DLL：
 
 - GitHub：<https://github.com/Edwardhehe/CADLAAnnotation/releases>
 - Gitee（国内访问更快）：<https://gitee.com/Edwardhehe/CADLAAnnotation/releases>
 
-本文档对应源码版本 **v1.0.0**（「关于」窗口 `GM_PZ_ABOUT` 显示的版本号以实际加载的 DLL 为准）。
+本文档对应源码版本 **v1.1**（程序集版本 1.1.0.0；「关于」窗口 `GM_PZ_ABOUT` 与加载提示显示的版本号以实际加载的 DLL 为准）。
 
 | CAD 宿主 | DLL |
 |---|---|
 | AutoCAD 2015~2024 | `bin-acad/GMAnnotation.AutoCAD.dll` |
 | AutoCAD 2025~2027 | `bin-acad2025-2027/GMAnnotation.AutoCAD2025.dll` |
-| 中望 ZWCAD 2025~2026 | `bin/GMAnnotation.ZWCAD.dll` |
+| 中望 ZWCAD（基于中望 2020 编译，兼容范围待确认） | `bin/GMAnnotation.ZWCAD.dll` |
 
 **注意**：三个 DLL 不可混用，请严格按 CAD 宿主和版本选择；DLL 同目录内的依赖文件也必须保留。
 

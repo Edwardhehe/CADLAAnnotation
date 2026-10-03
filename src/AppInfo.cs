@@ -22,13 +22,18 @@ namespace GMAnnotation
 
         /// <summary>
         /// 从当前程序集读取版本号并格式化为带 V 前缀的显示文本。
-        /// 修订号为 0 时显示三段（如 V0.5.2），否则显示四段（如 V0.5.2.1）。
+        /// 生成号与修订号都为 0 时显示两段（如 V1.1），修订号为 0 时显示三段（如 V0.5.2），否则显示四段（如 V0.5.2.1）。
         /// </summary>
         /// <returns>格式化后的版本字符串。</returns>
         public static string GetDisplayVersion()
         {
             var version = Assembly.GetExecutingAssembly().GetName().Version
                 ?? new Version(0, 0, 0, 0);
+            if (version.Revision <= 0 && version.Build <= 0)
+            {
+                return $"V{version.Major}.{version.Minor}";
+            }
+
             if (version.Revision <= 0)
             {
                 return $"V{version.Major}.{version.Minor}.{version.Build}";
