@@ -125,8 +125,7 @@
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="正文字高(mm)" Style="{StaticResource FieldLabel}"/>
                             <TextBox x:Name="TextHeightText" Grid.Row="2" Grid.Column="1"/>
                         </Grid>
-                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
-                                   Text="未启用字体自适应时：字高按「打印字高(mm) × 比例分母」换算为图面尺寸（如 3mm、1:100 → 图上 300）。"/>
+                        <TextBlock x:Name="TextSizeHintText" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                         <CheckBox x:Name="FixedWidthCheck" Content="固定文字宽度"
                                   Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="120,4,0,2"/>
                         <Grid>

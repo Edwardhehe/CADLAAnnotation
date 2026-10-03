@@ -32,6 +32,9 @@ namespace GMAnnotation.Views
             if (textStyles != null) styles.AddRange(textStyles.Where(s => !string.Equals(s, "Standard", StringComparison.OrdinalIgnoreCase)));
             TextStyleCombo.ItemsSource = styles;
             LoadValues();
+            if (SettingsStore.IsCorrupt)
+                Title += "（settings.xml 损坏，当前显示默认值；点「保存设置」才会覆盖原文件" +
+                         (string.IsNullOrEmpty(SettingsStore.CorruptBackupPath) ? "" : "，原文件已备份") + "）";
             Loaded += (s, e) => { WindowSizing.FitToWorkArea(this, 0.9, 0.86); RefreshDependencies(); };
         }
 
@@ -122,6 +125,7 @@ namespace GMAnnotation.Views
                 _s.AutoNumber = On(AutoNumberCheck);
                 _s.LayerName = LayerNameText.Text.Trim();
                 if (_s.LayerName.Length == 0) throw new InvalidOperationException("图层名称不能为空。");
+                CheckLayerText(_s.LayerName, "图层基础名称", LayerNameText);
                 _s.TextStyleName = TextStyleCombo.Text.Trim();
                 _s.SameColors = On(SameColorsCheck);
                 _s.ColorIndex = SelectedColor(ColorIndexCombo); _s.CloudColor = SelectedColor(CloudColorCombo);
@@ -133,6 +137,8 @@ namespace GMAnnotation.Views
                 _s.CheckHeight = N(CheckHeightText, "对勾高度", 0.01);
                 _s.LayerAppendDate = On(LayerAppendDateCheck); _s.LayerAppendName = On(LayerAppendNameCheck);
                 _s.DateBeforeName = On(DateBeforeNameCheck); _s.Connector = ConnectorCombo.Text.Trim();
+                if (_s.Connector != "无") CheckLayerText(_s.Connector, "连接符", ConnectorCombo);
+                if (_s.LayerAppendName) CheckLayerText(_s.DefaultAuthor, "默认批注人（已勾选「图层名添加批注人姓名」）", DefaultAuthorText);
                 _s.Plottable = On(PlottableCheck);
                 _s.ShowDiscipline = On(ShowDisciplineCheck);
                 _s.ShowAuthor = On(ShowAuthorCheck); _s.ShowRole = On(ShowRoleCheck);
@@ -140,7 +146,7 @@ namespace GMAnnotation.Views
                 _s.ShowDrawingNo = On(ShowDrawingNoCheck);
                 // 统一颜色模式：所有独立颜色同步为统一颜色
                 if (_s.SameColors) _s.CloudColor = _s.LeaderColor = _s.TextColor = _s.BoxColor = _s.ReplyColor = _s.PassColor = _s.CheckColor = _s.ColorIndex;
-                SettingsStore.Save(_s); DialogResult = true;
+                SettingsStore.Save(_s, true); DialogResult = true;
             }
             catch (Exception ex) { MessageBox.Show(this, "设置保存失败：" + ex.Message, "GM批注", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
@@ -195,10 +201,16 @@ namespace GMAnnotation.Views
             CloudRadiusText.IsEnabled = !cloudAuto;
             LineWidthText.IsEnabled = !cloudAuto;
             var fontAuto = On(FontAutoFitCheck);
-            AutoTextViewPercentText.IsEnabled = fontAuto;
-            HeaderHeightText.IsEnabled = !fontAuto;
-            SecondLineHeightText.IsEnabled = !fontAuto;
-            TextHeightText.IsEnabled = !fontAuto;
+            // 界面状态与实际计算一致：百分比同时决定"自适应字高"和"云线自适应的半径/线宽"，任一自适应开启都参与计算；
+            // 三个字高在字体自适应时仍是相对比例（首行/次行相对正文、云线标记尺寸的换算基准），因此始终可编辑。
+            AutoTextViewPercentText.IsEnabled = fontAuto || cloudAuto;
+            HeaderHeightText.IsEnabled = true;
+            SecondLineHeightText.IsEnabled = true;
+            TextHeightText.IsEnabled = true;
+            if (TextSizeHintText != null)
+                TextSizeHintText.Text = fontAuto
+                    ? "已启用字体自适应：正文字高 = 云线对角线 × 百分比（比例不参与）；这里的三个字高只作为相对比例——首行/次行相对正文放大缩小，云线标记尺寸也按「标记字高 ÷ 正文字高」跟随。"
+                    : "未启用字体自适应：字高按「打印字高(mm) × 比例分母」换算为图面尺寸（如 3mm、1:100 → 图上 300；布局图纸空间中按 1:1）。";
             var same = On(SameColorsCheck);
             ColorIndexCombo.IsEnabled = same;
             foreach (var x in new[] { CloudColorCombo, LeaderColorCombo, TextColorCombo, BoxColorCombo, ReplyColorCombo, PassColorCombo, CheckColorCombo })
@@ -240,6 +252,15 @@ namespace GMAnnotation.Views
             => double.TryParse(box.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var n) || double.TryParse(box.Text, out n) ? n : fallback;
 
         private static string Num(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+
+        /// <summary>图层名组成部分（基础名/连接符/批注人）不得含 CAD 图层名非法字符，保存时提示并定位到该输入框。</summary>
+        private static void CheckLayerText(string text, string name, Control focus)
+        {
+            var i = AnnotationService.FindInvalidLayerChar(text);
+            if (i < 0) return;
+            focus?.Focus();
+            throw new InvalidOperationException(name + "含有 CAD 图层名不允许的字符「" + text[i] + "」。\n不允许的字符：< > / \\ \" : ; ? * | , = `");
+        }
 
         // ---- 辅助方法 ----
         private static bool On(CheckBox x) => x.IsChecked == true;

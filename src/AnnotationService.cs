@@ -78,6 +78,25 @@ namespace GMAnnotation
             catch{return false;}
         }
 
+        /// <summary>重排既有批注文字用的设置。缺少图面实测字高（Render*）的老批注：以图上 MText 的实际字高为准、
+        /// 首行/次行按当前设置的比例跟随；读不到 MText 时按"打印尺寸 × 比例分母"兜底——
+        /// 避免把"打印 mm"直接当图面值，导致 1:100 等图上刷新/编辑后文字缩成一点。</summary>
+        private static AnnotationSettings SettingsForExisting(AnnotationData data, MText existingText)
+        {
+            var s=SettingsForExisting(data);
+            if(data==null||data.RenderTextHeight>0)return s;
+            var actual=existingText!=null?existingText.TextHeight:0;
+            if(actual>1e-9)
+            {
+                var factor=actual/Math.Max(s.TextHeight,0.1);
+                s.TextHeight=actual;
+                s.HeaderHeight=Math.Max(0.1,s.HeaderHeight*factor);
+                s.SecondLineHeight=Math.Max(0.1,s.SecondLineHeight*factor);
+            }
+            else LegacyScaleFallback(s,data);
+            return s;
+        }
+
         private static AnnotationSettings SettingsForExisting(AnnotationData data)
         {
             var s=SettingsStore.Load();if(data.RenderTextHeight<=0)return s;s.TextHeight=data.RenderTextHeight;s.HeaderHeight=data.RenderHeaderHeight>0?data.RenderHeaderHeight:data.RenderTextHeight;s.SecondLineHeight=data.RenderSecondLineHeight>0?data.RenderSecondLineHeight:data.RenderTextHeight;s.CloudRadius=data.RenderCloudRadius>0?data.RenderCloudRadius:s.CloudRadius;s.LineWidth=data.RenderLineWidth>0?data.RenderLineWidth:s.LineWidth;return s;
@@ -86,15 +105,14 @@ namespace GMAnnotation
         /// <summary>交互式选点：第一角点 → 拖拽云线范围。文字放置由完整预览 Jig 单独完成。</summary>
         public static bool PromptGeometry(Document doc, AnnotationSettings s, out Point3d firstPoint, out Point3d secondPoint)
         {
-            firstPoint=Point3d.Origin;secondPoint=Point3d.Origin;var ed = doc.Editor;object ortho=null,osmode=null;
-            try{
-                if(s.AutoCloseOrtho){ortho=CadSystemVariable("ORTHOMODE");SetCadSystemVariable("ORTHOMODE",0);}if(s.AutoCloseSnap){osmode=CadSystemVariable("OSMODE");SetCadSystemVariable("OSMODE",0);}
+            firstPoint=Point3d.Origin;secondPoint=Point3d.Origin;var ed = doc.Editor;
+            using(SuppressDrawingAids(s)){
                 var first = ed.GetPoint("\n指定批注范围第一个角点: "); if (first.Status != PromptStatus.OK) return false;
                 var firstWcs=first.Value.TransformBy(GetUcsMatrix(doc));
                 var region=new RegionPreviewJig(doc,firstWcs,s);var regionResult=ed.Drag(region);if(regionResult.Status!=PromptStatus.OK)return false;
                 var (_,regionWidth,regionHeight)=UcsAlignedExtents(doc,firstWcs,region.Current);if(regionWidth<=1e-6||regionHeight<=1e-6){ed.WriteMessage("\n批注范围必须同时具有宽度和高度，请重新指定。");return false;}
                 firstPoint=firstWcs;secondPoint=region.Current;return true;
-            }finally{if(ortho!=null)SetCadSystemVariable("ORTHOMODE",ortho);if(osmode!=null)SetCadSystemVariable("OSMODE",osmode);}
+            }
         }
 
         /// <summary>交互式选点（仅云线）：第一角点 → 拖拽云线范围，不要求文字框位置。</summary>
@@ -113,9 +131,8 @@ namespace GMAnnotation
         private static CloudPromptResult PromptCloud(Document doc, AnnotationSettings s, bool allowFinish, IList<Point3d> historyFirsts, IList<Point3d> historySeconds, out Point3d firstPoint, out Point3d secondPoint,
             Func<string> message = null, string[] keywords = null, Action<string> onKeyword = null)
         {
-            firstPoint=Point3d.Origin;secondPoint=Point3d.Origin;var ed=doc.Editor;object ortho=null,osmode=null;
-            try{
-                if(s.AutoCloseOrtho){ortho=CadSystemVariable("ORTHOMODE");SetCadSystemVariable("ORTHOMODE",0);}if(s.AutoCloseSnap){osmode=CadSystemVariable("OSMODE");SetCadSystemVariable("OSMODE",0);}
+            firstPoint=Point3d.Origin;secondPoint=Point3d.Origin;var ed=doc.Editor;
+            using(SuppressDrawingAids(s)){
                 while(true)
                 {
                     Point3d firstWcs;
@@ -184,7 +201,7 @@ namespace GMAnnotation
                     }
                     firstPoint=firstWcs;secondPoint=region.Current;return CloudPromptResult.Completed;
                 }
-            }finally{if(ortho!=null)SetCadSystemVariable("ORTHOMODE",ortho);if(osmode!=null)SetCadSystemVariable("OSMODE",osmode);}
+            }
         }
 
         /// <summary>仅创建云线（不含文字、引线、边框），返回实体 ObjectId。</summary>
@@ -779,7 +796,11 @@ namespace GMAnnotation
                 var group = (Group)tr.GetObject(groups.GetAt(groupName), OpenMode.ForWrite);
                 if (!Contains(group, entityId)) return false;
                 TryReadMaster(group, tr, out var oldData); // 修改前留底，用于生成变更明细
-                var existingSettings=SettingsForExisting(data);
+                MText legacyProbe=null;
+                if(data.RenderTextHeight<=0)
+                    foreach(ObjectId probeId in group.GetAllEntityIds())
+                        if(probeId.IsValid&&!probeId.IsErased&&tr.GetObject(probeId,OpenMode.ForRead,false) is MText probeText){legacyProbe=probeText;break;}
+                var existingSettings=SettingsForExisting(data,legacyProbe);
                 // 图层保持各实体现有图层不变（格式刷/手工改过的图层、带日期人名后缀的图层都不被重算覆盖）；
                 // 文字颜色只在状态真正变化时才按状态色重设（格式刷刷过的文字颜色不被还原）。
                 var statusChanged=oldData==null||!string.Equals(oldData.Status??"",data.Status??"",StringComparison.Ordinal);
@@ -2480,7 +2501,7 @@ namespace GMAnnotation
         {
             try
             {
-                var settings = SettingsForExisting(data);
+                var settings = SettingsForExisting(data, cluster.OfType<MText>().FirstOrDefault());
                 foreach (var e in cluster) if (e is MText text) { EnsureWrite(text); text.Contents = FormatText(data, settings); }
             }
             catch (System.Exception ex) { PluginLog.Warning("Repair.RefreshText", ex.Message); }
@@ -2984,7 +3005,8 @@ namespace GMAnnotation
                 polygon,
                 initial,
                 kind);
-            var result = doc.Editor.Drag(jig);
+            PromptResult result;
+            using (SuppressDrawingAids(source ?? settings)) result = doc.Editor.Drag(jig);
             return InteractionResult.From(
                 result,
                 "批注框定位",
@@ -2996,7 +3018,8 @@ namespace GMAnnotation
             AnnotationSettings settings)
         {
             var jig = new PlinePointPreviewJig(doc, points, settings);
-            var result = doc.Editor.Drag(jig);
+            PromptResult result;
+            using (SuppressDrawingAids(settings)) result = doc.Editor.Drag(jig);
             return InteractionResult.From(
                 result,
                 "PL 点选择",
@@ -3425,12 +3448,29 @@ namespace GMAnnotation
                 if(DateTime.TryParseExact(data.Date,"yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.None,out var parsedDate))date=parsedDate;
             }
             var author=data!=null&&!string.IsNullOrWhiteSpace(data.Author)?data.Author:s.DefaultAuthor;
-            var parts=new List<string>{s.LayerName};
+            var parts=new List<string>{SanitizeLayerPart(s.LayerName)};
             if(s.LayerAppendDate&&s.DateBeforeName)parts.Add(date.ToString("yyyyMMdd"));
-            if(s.LayerAppendName)parts.Add(author);
+            if(s.LayerAppendName)parts.Add(SanitizeLayerPart(author));
             if(s.LayerAppendDate&&!s.DateBeforeName)parts.Add(date.ToString("yyyyMMdd"));
-            var connector=s.Connector=="无"?"":s.Connector;
-            return string.Join(connector,parts.Where(x=>!string.IsNullOrWhiteSpace(x)));
+            var connector=s.Connector=="无"?"":SanitizeLayerPart(s.Connector??"");
+            var name=string.Join(connector,parts.Where(x=>!string.IsNullOrWhiteSpace(x))).Trim();
+            if(name.Length==0)name="GM-批注";
+            return name.Length>255?name.Substring(0,255):name;
+        }
+
+        /// <summary>CAD 图层名不允许的字符（AutoCAD / 中望一致）。</summary>
+        internal const string InvalidLayerChars="<>/\\\":;?*|,=`";
+
+        /// <summary>返回第一个非法图层字符的位置，没有返回 -1。</summary>
+        internal static int FindInvalidLayerChar(string text)=>string.IsNullOrEmpty(text)?-1:text.IndexOfAny(InvalidLayerChars.ToCharArray());
+
+        /// <summary>运行时兜底：把非法字符换成"_"（设置窗口保存时已提示；这里防批注窗口里手填的批注人等）。</summary>
+        private static string SanitizeLayerPart(string part)
+        {
+            if(string.IsNullOrEmpty(part))return part;
+            var chars=part.ToCharArray();
+            for(var i=0;i<chars.Length;i++)if(InvalidLayerChars.IndexOf(chars[i])>=0||char.IsControl(chars[i]))chars[i]='_';
+            return new string(chars).Trim();
         }
         /// <summary>应用文字样式；若指定样式不存在则记录警告并回退为默认样式。</summary>
         internal static void ApplyTextStyle(Database db,Transaction tr,MText text,string name)
@@ -3447,6 +3487,93 @@ namespace GMAnnotation
         private static object CadSystemVariable(string name)=>Autodesk.AutoCAD.ApplicationServices.Core.Application.GetSystemVariable(name);
         private static void SetCadSystemVariable(string name,object value)=>Autodesk.AutoCAD.ApplicationServices.Core.Application.SetSystemVariable(name,value);
 #endif
+
+        // ============ 绘制辅助（正交 / 对象捕捉）临时关闭 ============
+        // 覆盖框选角点、PL 逐点选择、文字框定位三类交互；可嵌套（只有最外层真正改/还原系统变量），
+        // using/finally 保证取消与异常时也还原；改动前把原值写进 settings.xml 的 PendingDrawAidsRestore，
+        // CAD 在选点途中崩溃/被结束时，下次加载由 RecoverDrawingAids 还原。
+        internal const string PendingDrawAidsKey = "PendingDrawAidsRestore";
+        private static int _drawingAidsDepth;
+        private static object _savedOrthoMode, _savedOsMode;
+
+        private sealed class DrawingAidsScope : IDisposable
+        {
+            private bool _disposed;
+            private readonly bool _counted;
+            public DrawingAidsScope(bool counted) { _counted = counted; }
+            public void Dispose()
+            {
+                if (_disposed || !_counted) return;
+                _disposed = true;
+                if (--_drawingAidsDepth > 0) return;
+                _drawingAidsDepth = 0;
+                RestoreDrawingAids();
+            }
+        }
+
+        /// <summary>按设置临时关闭正交/对象捕捉，返回的对象 Dispose 时还原（嵌套调用只在最外层生效）。</summary>
+        internal static IDisposable SuppressDrawingAids(AnnotationSettings s)
+        {
+            if (s == null || (!s.AutoCloseOrtho && !s.AutoCloseSnap)) return new DrawingAidsScope(false);
+            if (_drawingAidsDepth++ > 0) return new DrawingAidsScope(true);
+            var parts = new List<string>();
+            try
+            {
+                if (s.AutoCloseOrtho)
+                {
+                    var value = CadSystemVariable("ORTHOMODE");
+                    if (Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture) != 0)
+                    { _savedOrthoMode = value; parts.Add("ORTHOMODE=" + Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture)); }
+                }
+                if (s.AutoCloseSnap)
+                {
+                    var value = CadSystemVariable("OSMODE");
+                    if (Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture) != 0)
+                    { _savedOsMode = value; parts.Add("OSMODE=" + Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture)); }
+                }
+                if (parts.Count > 0) SettingsStore.SaveExtra(PendingDrawAidsKey, string.Join(";", parts));
+                if (_savedOrthoMode != null) SetCadSystemVariable("ORTHOMODE", 0);
+                if (_savedOsMode != null) SetCadSystemVariable("OSMODE", 0);
+            }
+            catch (System.Exception ex) { PluginLog.Warning("DrawingAids.Suppress", ex.Message); }
+            return new DrawingAidsScope(true);
+        }
+
+        private static void RestoreDrawingAids()
+        {
+            var restored = false;
+            try { if (_savedOrthoMode != null) { SetCadSystemVariable("ORTHOMODE", _savedOrthoMode); restored = true; } }
+            catch (System.Exception ex) { PluginLog.Warning("DrawingAids.RestoreOrtho", ex.Message); }
+            try { if (_savedOsMode != null) { SetCadSystemVariable("OSMODE", _savedOsMode); restored = true; } }
+            catch (System.Exception ex) { PluginLog.Warning("DrawingAids.RestoreOsmode", ex.Message); }
+            _savedOrthoMode = null; _savedOsMode = null;
+            if (restored) SettingsStore.SaveExtra(PendingDrawAidsKey, null);
+        }
+
+        /// <summary>加载时调用：上次绘制途中 CAD 未正常结束，正交/捕捉还停在关闭状态时按记录还原（当前已被用户重新打开的不动）。</summary>
+        internal static void RecoverDrawingAids()
+        {
+            try
+            {
+                var pending = SettingsStore.LoadExtra(PendingDrawAidsKey);
+                if (string.IsNullOrWhiteSpace(pending)) return;
+                foreach (var part in pending.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var eq = part.IndexOf('='); if (eq <= 0) continue;
+                    var name = part.Substring(0, eq).Trim();
+                    if ((name != "ORTHOMODE" && name != "OSMODE") || !short.TryParse(part.Substring(eq + 1).Trim(), out var value)) continue;
+                    try
+                    {
+                        if (Convert.ToInt32(CadSystemVariable(name), System.Globalization.CultureInfo.InvariantCulture) != 0) continue;
+                        SetCadSystemVariable(name, value);
+                        PluginLog.Warning("DrawingAids.Recover", "上次绘制批注时 CAD 未正常结束，已把 " + name + " 恢复为 " + value + "。");
+                    }
+                    catch (System.Exception ex) { PluginLog.Warning("DrawingAids.Recover", name + "：" + ex.Message); }
+                }
+                SettingsStore.SaveExtra(PendingDrawAidsKey, null);
+            }
+            catch (System.Exception ex) { PluginLog.Warning("DrawingAids.Recover", ex.Message); }
+        }
 
         /// <summary>获取当前 UCS → WCS 变换矩阵。</summary>
         internal static Matrix3d GetUcsMatrix(Document doc){try{return doc.Editor.CurrentUserCoordinateSystem;}catch{return Matrix3d.Identity;}}

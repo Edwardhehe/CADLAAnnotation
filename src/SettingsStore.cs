@@ -11,13 +11,32 @@ namespace GMAnnotation
         private static readonly string Folder = AppPaths.DataFolder;
         private static readonly string PathName = Path.Combine(Folder, "settings.xml");
 
+        /// <summary>已为哪个"损坏版本"（修改时间+长度）做过备份，避免每次读取都重复备份。</summary>
+        private static string _backedUpSignature;
+
+        /// <summary>最近一次读取时 settings.xml 是否损坏（无法解析）。损坏期间只有用户在设置窗口主动保存才会覆盖原文件。</summary>
+        public static bool IsCorrupt { get; private set; }
+
+        /// <summary>最近一次为损坏文件生成的备份路径（settings.xml.bad-时间戳），没有则为 null。</summary>
+        public static string CorruptBackupPath { get; private set; }
+
         public static AnnotationSettings Load()
         {
             var s = new AnnotationSettings();
             try
             {
-                if (!File.Exists(PathName)) return s;
-                var x = XElement.Load(PathName);
+                if (!File.Exists(PathName)) { IsCorrupt = false; return s; }
+                XElement x;
+                try { x = XElement.Load(PathName); }
+                catch (Exception ex)
+                {
+                    // 文件损坏：先备份，再用默认值运行；原文件保持不动，直到用户在设置窗口点「保存设置」。
+                    IsCorrupt = true;
+                    BackupCorruptFile();
+                    PluginLog.Error("Settings.Load.Corrupt", ex);
+                    return s;
+                }
+                IsCorrupt = false;
                 s.Shape = Get(x, "Shape", s.Shape); s.CloudStyle = Get(x, "CloudStyle", s.CloudStyle);
                 s.LayerName = Get(x, "LayerName", s.LayerName);
                 // 改名前版本的默认图层名为 "LA-批注"：升级后统一按新默认名 "GM-批注" 使用（用户自定义过的图层名不受影响）。
@@ -48,11 +67,48 @@ namespace GMAnnotation
             return s;
         }
 
-        /// <summary>保存设置（跨进程加锁 + 临时文件原子替换）。内容与磁盘上完全相同时不写盘。</summary>
-        public static void Save(AnnotationSettings s)
+        /// <summary>把损坏的 settings.xml 复制为 settings.xml.bad-yyyyMMdd-HHmmss（同一损坏版本只备份一次）。</summary>
+        private static void BackupCorruptFile()
+        {
+            try
+            {
+                var info = new FileInfo(PathName);
+                if (!info.Exists) return;
+                var signature = info.LastWriteTimeUtc.Ticks + ":" + info.Length;
+                if (signature == _backedUpSignature) return;
+                var target = PathName + ".bad-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+                if (!File.Exists(target)) File.Copy(PathName, target, false);
+                _backedUpSignature = signature;
+                CorruptBackupPath = target;
+                PluginLog.Warning("Settings.Backup", "settings.xml 无法解析，已备份为 " + target + "，当前使用默认设置。");
+            }
+            catch (Exception ex) { PluginLog.Warning("Settings.Backup", ex.Message); }
+        }
+
+        /// <summary>磁盘上的 settings.xml 当前是否无法解析。</summary>
+        private static bool FileIsCorrupt()
+        {
+            try { if (!File.Exists(PathName)) return false; XElement.Load(PathName); return false; }
+            catch { return true; }
+        }
+
+        /// <summary>保存设置（跨进程加锁 + 临时文件原子替换）。内容与磁盘上完全相同时不写盘。
+        /// settings.xml 损坏时：自动保存（编号同步、开关记忆等）一律跳过并返回 false，不覆盖原文件；
+        /// 只有 <paramref name="userConfirmed"/>=true（用户在设置窗口点「保存设置」）才会在备份后重建文件。</summary>
+        public static bool Save(AnnotationSettings s, bool userConfirmed = false)
         {
             using (DataFiles.Lock(false))
             {
+                if (FileIsCorrupt())
+                {
+                    IsCorrupt = true;
+                    BackupCorruptFile();
+                    if (!userConfirmed)
+                    {
+                        PluginLog.Warning("Settings.Save", "settings.xml 已损坏，自动保存已跳过（请在 GM_PZ_SETTINGS 中点「保存设置」重建）。");
+                        return false;
+                    }
+                }
                 var root = BuildRoot(s);
                 // 不属于 AnnotationSettings 的节点（工具栏显隐、待恢复的系统变量）由各自模块单独读写：整文件重写时原样保留，
                 // 防止面板/设置窗口长时间持有的旧设置对象把这些状态覆盖掉。
@@ -62,6 +118,8 @@ namespace GMAnnotation
                     if (value != null) root.Add(new XElement(key, value));
                 }
                 WriteIfChanged(root);
+                IsCorrupt = false;
+                return true;
             }
         }
 
@@ -98,7 +156,7 @@ namespace GMAnnotation
         }
 
         /// <summary>不经 AnnotationSettings、由各模块单独读写的节点；<see cref="Save"/> 时原样保留。</summary>
-        private static readonly string[] ExtraKeys = { "ToolbarVisible", "PendingSysvarRestore" };
+        private static readonly string[] ExtraKeys = { "ToolbarVisible", "PendingSysvarRestore", "PendingDrawAidsRestore" };
 
         /// <summary>读取单独存放的节点值；没有时返回 null。</summary>
         public static string LoadExtra(string key) => ReadElement(key);

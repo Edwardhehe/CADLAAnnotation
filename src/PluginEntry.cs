@@ -66,6 +66,8 @@ namespace GMAnnotation
             DataFiles.EnsureEncodings();
             // 上次双击编辑期间 CAD 异常退出：QPMODE/DBLCLKEDIT 还停留在临时关闭状态，这里恢复。
             RecoverPendingSystemVariables();
+            // 上次绘制批注（选点/定位）期间 CAD 异常退出：正交/捕捉还停在临时关闭状态，这里恢复。
+            AnnotationService.RecoverDrawingAids();
             // BeginDoubleClick 是应用级事件，覆盖之后新建/打开的所有文档，无需逐文档注册。
             CadApplication.BeginDoubleClick += OnBeginDoubleClick;
             CadApplication.DocumentManager.DocumentActivated += OnDocumentActivated;
@@ -90,6 +92,10 @@ namespace GMAnnotation
                 " GM_PZ_EXPORT / GM_PZ_IMPORT / GM_PZ_REPAIR /" +
                 " GM_PZ_TOOLBAR / GM_PZ_TOOLBAR_SHOW / GM_PZ_TOOLBAR_HIDE / GMPANEL / GM_PZ_SETTINGS /" +
                 " GM_PZ_INSTALL_AUTOLOAD / GM_PZ_UNINSTALL_AUTOLOAD / GM_PZ_AUTOLOAD / GM_PZ_MENU / GM_PZ_ABOUT");
+            if (doc != null && SettingsStore.IsCorrupt)
+                doc.Editor.WriteMessage("\n警告：设置文件 settings.xml 无法解析，当前使用默认设置" +
+                    (string.IsNullOrEmpty(SettingsStore.CorruptBackupPath) ? "" : "（原文件已备份为 " + SettingsStore.CorruptBackupPath + "）") +
+                    "；原文件不会被自动覆盖，在 GM_PZ_SETTINGS 中点「保存设置」后才会重建。");
         }
 
         public void Terminate()

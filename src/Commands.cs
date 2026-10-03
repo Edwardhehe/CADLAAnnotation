@@ -153,14 +153,14 @@ namespace GMAnnotation
             if (string.Equals(keyword, "M", StringComparison.OrdinalIgnoreCase))
             {
                 settings.CloudMarkerEnabled = !settings.CloudMarkerEnabled;
-                SettingsStore.Save(settings);
+                if (!SettingsStore.Save(settings)) { doc.Editor.WriteMessage("\n设置文件 settings.xml 已损坏，未能保存（请用 GM_PZ_SETTINGS 打开设置窗口点「保存设置」重建）。"); return; }
                 doc.Editor.WriteMessage("\n云线标记已" + (settings.CloudMarkerEnabled ? "开启：" + CloudMarker.Describe(settings) : "关闭") + "。");
             }
             else if (string.Equals(keyword, "S", StringComparison.OrdinalIgnoreCase))
             {
                 if (CadDialog.ShowModal(new CloudMarkerWindow(settings)) == true)
                 {
-                    SettingsStore.Save(settings);
+                    if (!SettingsStore.Save(settings)) { doc.Editor.WriteMessage("\n设置文件 settings.xml 已损坏，未能保存（请用 GM_PZ_SETTINGS 打开设置窗口点「保存设置」重建）。"); return; }
                     doc.Editor.WriteMessage("\n云线标记设置已保存：" + CloudMarker.Describe(settings) + "。");
                 }
             }
@@ -610,7 +610,7 @@ namespace GMAnnotation
                 }
             }
             catch (System.Exception ex) { PluginLog.Warning("GM_PZ_SETTINGS.Styles", ex.Message); /* 获取样式失败时使用默认列表 */ }
-            try { CadDialog.ShowModal(new SettingsWindow(SettingsStore.Load(), styles)); }
+            try { if (CadDialog.ShowModal(new SettingsWindow(SettingsStore.Load(), styles)) == true) AnnotationPanel.ReloadSettingsIfOpen(); }
             catch (System.Exception ex)
             {
                 PluginLog.Error("GM_PZ_SETTINGS", ex);

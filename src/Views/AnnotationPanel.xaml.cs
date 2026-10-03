@@ -29,6 +29,9 @@ namespace GMAnnotation.Views
         private static bool _rememberedIsSingle = true;
         private static string _rememberedShape = "矩形";
         private AnnotationSettings _s;
+        /// <summary>面板控件上次显示的设置值：开始批注时只把"与它不同"（用户在面板上真正改过）的字段写回，
+        /// 其余字段一律以磁盘上的最新设置为准，不会把设置窗口/GM_PZ_SETTINGS 改过的值覆盖回去。</summary>
+        private AnnotationSettings _shown;
         private bool _isRunning;
         private bool _continuePending;
         private bool _startPending;
@@ -71,6 +74,7 @@ namespace GMAnnotation.Views
 
         private void RefreshControls()
         {
+            _shown = _s.Clone();
             DisciplineCombo.Text = _s.DefaultDiscipline;
             AuthorText.Text = _s.DefaultAuthor;
             ShapeCombo.Text = _s.Shape;
@@ -87,17 +91,32 @@ namespace GMAnnotation.Views
         /// 或批注窗口（立即入库）里做的修改不会被面板持有的旧设置对象覆盖回去。</summary>
         private void ApplyPanelSettings()
         {
-            _s = SettingsStore.Load();
-            _s.DefaultDiscipline = DisciplineCombo.Text.Trim();
-            _s.DefaultAuthor = AuthorText.Text.Trim();
-            _s.Shape = ShapeCombo.Text.Trim();
-            _s.CloudStyle = CloudStyleCombo.Text.Trim();
-            _s.DefaultRole = RoleCombo.Text.Trim();
-            _s.AutoNumber = AutoNumberCheck.IsChecked == true;
-            _s.DoubleClickEdit = DoubleClickEditCheck.IsChecked == true;
-            _s.ContinuousAnnotation = ContinuousCheck.IsChecked == true;
-            _s.CloudOnly = CloudOnlyCheck.IsChecked == true;
-            SettingsStore.Save(_s);
+            var shown = _shown ?? _s;
+            var fresh = SettingsStore.Load();
+            var changed = false;
+            void ApplyText(string value, string before, Action<string> set) { value = (value ?? "").Trim(); if (!string.Equals(value, (before ?? "").Trim(), StringComparison.Ordinal)) { set(value); changed = true; } }
+            void ApplyFlag(bool value, bool before, Action<bool> set) { if (value != before) { set(value); changed = true; } }
+            ApplyText(DisciplineCombo.Text, shown.DefaultDiscipline, v => fresh.DefaultDiscipline = v);
+            ApplyText(AuthorText.Text, shown.DefaultAuthor, v => fresh.DefaultAuthor = v);
+            ApplyText(ShapeCombo.Text, shown.Shape, v => fresh.Shape = v);
+            ApplyText(CloudStyleCombo.Text, shown.CloudStyle, v => fresh.CloudStyle = v);
+            ApplyText(RoleCombo.Text, shown.DefaultRole, v => fresh.DefaultRole = v);
+            ApplyFlag(AutoNumberCheck.IsChecked == true, shown.AutoNumber, v => fresh.AutoNumber = v);
+            ApplyFlag(DoubleClickEditCheck.IsChecked == true, shown.DoubleClickEdit, v => fresh.DoubleClickEdit = v);
+            ApplyFlag(ContinuousCheck.IsChecked == true, shown.ContinuousAnnotation, v => fresh.ContinuousAnnotation = v);
+            ApplyFlag(CloudOnlyCheck.IsChecked == true, shown.CloudOnly, v => fresh.CloudOnly = v);
+            if (changed) SettingsStore.Save(fresh);
+            _s = fresh;
+            RefreshControls(); // 面板显示与实际生效的设置保持一致（含其他入口刚改过的值）
+        }
+
+        /// <summary>设置窗口（GM_PZ_SETTINGS 等）保存后调用：面板开着时重新读取设置并刷新控件。</summary>
+        internal static void ReloadSettingsIfOpen()
+        {
+            var panel = _instance;
+            if (panel == null || !panel.IsLoaded) return;
+            try { panel._s = SettingsStore.Load(); panel.RefreshControls(); }
+            catch (Exception ex) { PluginLog.Warning("Panel.ReloadSettings", ex.Message); }
         }
 
         /// <summary>显示或激活批注面板（单例）。</summary>
@@ -405,7 +424,9 @@ namespace GMAnnotation.Views
 
         private void DoPlineCloud(Document doc, AnnotationData data)
         {
-            var points = CollectPlinePoints(doc, _runSettings, out var cancelled);
+            // PL 逐点选择期间整体关闭正交/捕捉（按设置），结束、取消或异常都会还原。
+            List<Point3d> points; bool cancelled;
+            using (AnnotationService.SuppressDrawingAids(_runSettings)) points = CollectPlinePoints(doc, _runSettings, out cancelled);
             if (cancelled || points == null) return;
             var ucsMatrix=AnnotationService.GetUcsMatrix(doc);var wcsToUcs=ucsMatrix.Inverse();var localPoints=points.Select(p=>p.TransformBy(wcsToUcs)).ToList();
             var polygonPoints=localPoints.Select(p=>new Point2d(p.X,p.Y)).ToList();
