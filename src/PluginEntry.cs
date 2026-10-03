@@ -85,10 +85,11 @@ namespace GMAnnotation
                     ? (ToolbarInstaller.SavedVisible ? " GM批注工具栏已就绪。" : " GM批注工具栏按上次关闭状态保持隐藏（输入 GMPANEL 打开）。")
                     : " GM批注工具栏未就绪（将自动重试，或用 GM_PZ_TOOLBAR / GMPANEL）。") +
                 " 命令: GM_PZ_DRAW / GM_PZ_NOTE / GM_PZ_EDIT / GM_PZ_MOVE /" +
-                " GM_PZ_DELETE / GM_PZ_HIDE / GM_PZ_SHOW / GM_PZ_MERGE / GM_PZ_FILTER / GM_PZ_REFRESH / GM_PZ_CLOUD / GM_PZ_LIST /" +
+                " GM_PZ_DELETE / GM_PZ_HIDE / GM_PZ_SHOW / GM_PZ_MERGE / GM_PZ_FILTER / GM_PZ_FORMAT / GM_PZ_REFRESH / GM_PZ_CLOUD / GM_PZ_ADDCLOUD / GM_PZ_LIST /" +
                 " GM_PZ_SUMMARY / GM_PZ_LEGEND / GM_PZ_WORD / GM_PZ_HISTORY / GM_PZ_KB /" +
                 " GM_PZ_EXPORT / GM_PZ_IMPORT / GM_PZ_REPAIR /" +
-                " GM_PZ_TOOLBAR / GMPANEL / GM_PZ_SETTINGS / GM_PZ_INSTALL_AUTOLOAD / GM_PZ_UNINSTALL_AUTOLOAD / GM_PZ_AUTOLOAD / GM_PZ_MENU / GM_PZ_ABOUT");
+                " GM_PZ_TOOLBAR / GM_PZ_TOOLBAR_SHOW / GM_PZ_TOOLBAR_HIDE / GMPANEL / GM_PZ_SETTINGS /" +
+                " GM_PZ_INSTALL_AUTOLOAD / GM_PZ_UNINSTALL_AUTOLOAD / GM_PZ_AUTOLOAD / GM_PZ_MENU / GM_PZ_ABOUT");
         }
 
         public void Terminate()
