@@ -171,54 +171,57 @@ namespace GMAnnotation
         {
             try
             {
-                if (data == null) return false;
-                var drawingPath = "";
-                try { drawingPath = doc == null ? "" : (doc.Name ?? ""); } catch { }
-
-                var now = DateTime.Now;
-                var entry = new KnowledgeEntry
+                using (DataFiles.Lock())
                 {
-                    Id = NewId(),
-                    Time = now,
-                    User = AnnotationHistoryStore.CurrentUser(),
-                    Drawing = string.IsNullOrEmpty(drawingPath) ? "(未命名)" : Path.GetFileName(drawingPath),
-                    DrawingPath = drawingPath,
-                    DrawingNo = data.DrawingNo ?? "",
-                    Number = data.Number ?? "",
-                    Date = data.Date ?? "",
-                    Discipline = data.Discipline ?? "",
-                    Author = data.Author ?? "",
-                    Role = data.Role ?? "",
-                    Status = data.Status ?? "",
-                    Content = Truncate(data.Content)
-                };
+                    if (data == null) return false;
+                    var drawingPath = "";
+                    try { drawingPath = doc == null ? "" : (doc.Name ?? ""); } catch { }
 
-                var snapshot = Load();
-                // 兼容键里必须至少含"图"或"编号"才算有效身份：导入的条文条目这两个字段都是空的，
-                // 全都退化成 "|"，若不拦一刀，图名为空且没编号的批注就会误更新第一条导入数据。
-                var legacyKey = entry.LegacyKey();
-                var index = legacyKey.Trim('|').Length == 0
-                    ? -1
-                    : snapshot.Entries.FindIndex(e => string.Equals(e.LegacyKey(), legacyKey, StringComparison.Ordinal));
-                if (index >= 0)
-                {
-                    // 更新而不是新增：保留原有 Id（窗口里选中的还是同一条）与已手工填好的规范字段。
-                    var old = snapshot.Entries[index];
-                    entry.Id = string.IsNullOrEmpty(old.Id) ? entry.Id : old.Id;
-                    entry.Attribute = old.Attribute;
-                    entry.SpecName = old.SpecName;
-                    entry.SpecNumber = old.SpecNumber;
-                    entry.Clause = old.Clause;
-                    snapshot.Entries[index] = entry;
+                    var now = DateTime.Now;
+                    var entry = new KnowledgeEntry
+                    {
+                        Id = NewId(),
+                        Time = now,
+                        User = AnnotationHistoryStore.CurrentUser(),
+                        Drawing = string.IsNullOrEmpty(drawingPath) ? "(未命名)" : Path.GetFileName(drawingPath),
+                        DrawingPath = drawingPath,
+                        DrawingNo = data.DrawingNo ?? "",
+                        Number = data.Number ?? "",
+                        Date = data.Date ?? "",
+                        Discipline = data.Discipline ?? "",
+                        Author = data.Author ?? "",
+                        Role = data.Role ?? "",
+                        Status = data.Status ?? "",
+                        Content = Truncate(data.Content)
+                    };
+
+                    var snapshot = LoadForWrite();
+                    // 兼容键里必须至少含"图"或"编号"才算有效身份：导入的条文条目这两个字段都是空的，
+                    // 全都退化成 "|"，若不拦一刀，图名为空且没编号的批注就会误更新第一条导入数据。
+                    var legacyKey = entry.LegacyKey();
+                    var index = legacyKey.Trim('|').Length == 0
+                        ? -1
+                        : snapshot.Entries.FindIndex(e => string.Equals(e.LegacyKey(), legacyKey, StringComparison.Ordinal));
+                    if (index >= 0)
+                    {
+                        // 更新而不是新增：保留原有 Id（窗口里选中的还是同一条）与已手工填好的规范字段。
+                        var old = snapshot.Entries[index];
+                        entry.Id = string.IsNullOrEmpty(old.Id) ? entry.Id : old.Id;
+                        entry.Attribute = old.Attribute;
+                        entry.SpecName = old.SpecName;
+                        entry.SpecNumber = old.SpecNumber;
+                        entry.Clause = old.Clause;
+                        snapshot.Entries[index] = entry;
+                    }
+                    else snapshot.Entries.Add(entry);
+
+                    // 内容同时沉淀为常用批注语（同样内容只留一条）。
+                    var text = (entry.Content ?? "").Trim();
+                    if (text.Length > 0 && !HasPhrase(snapshot.Phrases, text))
+                        snapshot.Phrases.Add(new KnowledgePhrase { Time = now, Text = text });
+
+                    return Save(snapshot);
                 }
-                else snapshot.Entries.Add(entry);
-
-                // 内容同时沉淀为常用批注语（同样内容只留一条）。
-                var text = (entry.Content ?? "").Trim();
-                if (text.Length > 0 && !HasPhrase(snapshot.Phrases, text))
-                    snapshot.Phrases.Add(new KnowledgePhrase { Time = now, Text = text });
-
-                return Save(snapshot);
             }
             catch (Exception ex) { PluginLog.Warning("Knowledge.Archive", ex.Message); return false; }
         }
@@ -254,13 +257,16 @@ namespace GMAnnotation
         {
             try
             {
-                var snapshot = Load();
-                var list = entries == null ? new List<KnowledgeEntry>() : entries.ToList();
-                var text = phrases == null ? new List<KnowledgePhrase>() : phrases.ToList();
-                foreach (var e in list) if (string.IsNullOrEmpty(e.Id)) e.Id = NewId();
-                snapshot.Entries = list;
-                snapshot.Phrases = text;
-                return Save(snapshot);
+                using (DataFiles.Lock())
+                {
+                    var snapshot = LoadForWrite();
+                    var list = entries == null ? new List<KnowledgeEntry>() : entries.ToList();
+                    var text = phrases == null ? new List<KnowledgePhrase>() : phrases.ToList();
+                    foreach (var e in list) if (string.IsNullOrEmpty(e.Id)) e.Id = NewId();
+                    snapshot.Entries = list;
+                    snapshot.Phrases = text;
+                    return Save(snapshot);
+                }
             }
             catch (Exception ex) { PluginLog.Warning("Knowledge.SaveAll", ex.Message); return false; }
         }
@@ -272,12 +278,15 @@ namespace GMAnnotation
         {
             try
             {
-                var value = (text ?? "").Trim();
-                if (value.Length == 0) return 0;
-                var snapshot = Load();
-                if (HasPhrase(snapshot.Phrases, value)) return 0;
-                snapshot.Phrases.Add(new KnowledgePhrase { Time = DateTime.Now, Text = Truncate(value) });
-                return Save(snapshot) ? 1 : -1;
+                using (DataFiles.Lock())
+                {
+                    var value = (text ?? "").Trim();
+                    if (value.Length == 0) return 0;
+                    var snapshot = LoadForWrite();
+                    if (HasPhrase(snapshot.Phrases, value)) return 0;
+                    snapshot.Phrases.Add(new KnowledgePhrase { Time = DateTime.Now, Text = Truncate(value) });
+                    return Save(snapshot) ? 1 : -1;
+                }
             }
             catch (Exception ex) { PluginLog.Warning("Knowledge.AddPhrase", ex.Message); return -1; }
         }
@@ -287,16 +296,19 @@ namespace GMAnnotation
         {
             try
             {
-                if (target == null) return false;
-                var value = (newText ?? "").Trim();
-                if (value.Length == 0) return false;
-                var snapshot = Load();
-                var index = snapshot.Phrases.FindIndex(p => string.Equals(p.Text ?? "", target.Text ?? "", StringComparison.Ordinal));
-                if (index < 0) return false;
-                if (!string.Equals(snapshot.Phrases[index].Text ?? "", value, StringComparison.Ordinal) && HasPhrase(snapshot.Phrases, value))
-                    return false; // 改成的内容已存在
-                snapshot.Phrases[index] = new KnowledgePhrase { Time = snapshot.Phrases[index].Time, Text = Truncate(value) };
-                return Save(snapshot);
+                using (DataFiles.Lock())
+                {
+                    if (target == null) return false;
+                    var value = (newText ?? "").Trim();
+                    if (value.Length == 0) return false;
+                    var snapshot = LoadForWrite();
+                    var index = snapshot.Phrases.FindIndex(p => string.Equals(p.Text ?? "", target.Text ?? "", StringComparison.Ordinal));
+                    if (index < 0) return false;
+                    if (!string.Equals(snapshot.Phrases[index].Text ?? "", value, StringComparison.Ordinal) && HasPhrase(snapshot.Phrases, value))
+                        return false; // 改成的内容已存在
+                    snapshot.Phrases[index] = new KnowledgePhrase { Time = snapshot.Phrases[index].Time, Text = Truncate(value) };
+                    return Save(snapshot);
+                }
             }
             catch (Exception ex) { PluginLog.Warning("Knowledge.ReplacePhrase", ex.Message); return false; }
         }
@@ -308,15 +320,18 @@ namespace GMAnnotation
         {
             try
             {
-                var targets = remove == null ? new List<KnowledgeEntry>() : remove.ToList();
-                if (targets.Count == 0) return false;
-                var keys = new HashSet<string>(targets.Select(e => e.Identity()), StringComparer.Ordinal);
-                var snapshot = Load();
-                var before = snapshot.Entries.Count;
-                snapshot.Entries.RemoveAll(e => keys.Contains(e.Identity()));
-                if (snapshot.Entries.Count == before) return false;
-                Backup();
-                return Save(snapshot);
+                using (DataFiles.Lock())
+                {
+                    var targets = remove == null ? new List<KnowledgeEntry>() : remove.ToList();
+                    if (targets.Count == 0) return false;
+                    var keys = new HashSet<string>(targets.Select(e => e.Identity()), StringComparer.Ordinal);
+                    var snapshot = LoadForWrite();
+                    var before = snapshot.Entries.Count;
+                    snapshot.Entries.RemoveAll(e => keys.Contains(e.Identity()));
+                    if (snapshot.Entries.Count == before) return false;
+                    Backup();
+                    return Save(snapshot);
+                }
             }
             catch (Exception ex) { PluginLog.Warning("Knowledge.RemoveEntries", ex.Message); return false; }
         }
@@ -326,11 +341,14 @@ namespace GMAnnotation
         {
             try
             {
-                var snapshot = Load();
-                if (snapshot.Entries.Count == 0) return false;
-                snapshot.Entries.Clear();
-                Backup();
-                return Save(snapshot);
+                using (DataFiles.Lock())
+                {
+                    var snapshot = LoadForWrite();
+                    if (snapshot.Entries.Count == 0) return false;
+                    snapshot.Entries.Clear();
+                    Backup();
+                    return Save(snapshot);
+                }
             }
             catch (Exception ex) { PluginLog.Warning("Knowledge.ClearEntries", ex.Message); return false; }
         }
@@ -340,15 +358,18 @@ namespace GMAnnotation
         {
             try
             {
-                var targets = remove == null ? new List<KnowledgePhrase>() : remove.ToList();
-                if (targets.Count == 0) return false;
-                var texts = new HashSet<string>(targets.Select(p => p.Text ?? ""), StringComparer.Ordinal);
-                var snapshot = Load();
-                var before = snapshot.Phrases.Count;
-                snapshot.Phrases.RemoveAll(p => texts.Contains(p.Text ?? ""));
-                if (snapshot.Phrases.Count == before) return false;
-                Backup();
-                return Save(snapshot);
+                using (DataFiles.Lock())
+                {
+                    var targets = remove == null ? new List<KnowledgePhrase>() : remove.ToList();
+                    if (targets.Count == 0) return false;
+                    var texts = new HashSet<string>(targets.Select(p => p.Text ?? ""), StringComparer.Ordinal);
+                    var snapshot = LoadForWrite();
+                    var before = snapshot.Phrases.Count;
+                    snapshot.Phrases.RemoveAll(p => texts.Contains(p.Text ?? ""));
+                    if (snapshot.Phrases.Count == before) return false;
+                    Backup();
+                    return Save(snapshot);
+                }
             }
             catch (Exception ex) { PluginLog.Warning("Knowledge.RemovePhrases", ex.Message); return false; }
         }
@@ -358,11 +379,14 @@ namespace GMAnnotation
         {
             try
             {
-                var snapshot = Load();
-                if (snapshot.Phrases.Count == 0) return false;
-                snapshot.Phrases.Clear();
-                Backup();
-                return Save(snapshot);
+                using (DataFiles.Lock())
+                {
+                    var snapshot = LoadForWrite();
+                    if (snapshot.Phrases.Count == 0) return false;
+                    snapshot.Phrases.Clear();
+                    Backup();
+                    return Save(snapshot);
+                }
             }
             catch (Exception ex) { PluginLog.Warning("Knowledge.ClearPhrases", ex.Message); return false; }
         }
@@ -420,66 +444,69 @@ namespace GMAnnotation
             var result = new KnowledgeImportResult();
             try
             {
-                var rows = ReadCsv(filePath);
-                if (rows.Count == 0) return result;
-
-                var header = rows[0];
-                var hasHeader = LooksLikeEntryHeader(header);
-                var start = hasHeader ? 1 : 0;
-
-                int cDiscipline, cAttribute, cSpecName, cSpecNumber, cClause, cContent;
-                if (hasHeader)
+                using (DataFiles.Lock())
                 {
-                    var claimed = new HashSet<int>();
-                    // 先认「规范编号」再认「规范名称」，避免"规范"这种短别名把"规范编号"列抢走。
-                    cSpecNumber = ColumnIndexOf(header, claimed, new[] { "规范编号", "标准编号", "规范号", "文件编号", "编号" });
-                    cSpecName = ColumnIndexOf(header, claimed, new[] { "规范名称", "规范名", "标准名称", "规范", "来源", "出处" });
-                    cClause = ColumnIndexOf(header, claimed, new[] { "条款", "条款号", "条文号", "条号", "章条" });
-                    cAttribute = ColumnIndexOf(header, claimed, new[] { "属性", "性质", "条文属性" });
-                    cDiscipline = ColumnIndexOf(header, claimed, new[] { "专业" });
-                    cContent = ColumnIndexOf(header, claimed, new[] { "内容", "条文内容", "批注内容", "正文", "条文" });
-                    if (cSpecNumber < 0 && cSpecName < 0 && cClause < 0 && cContent < 0)
-                        throw new InvalidDataException("表头里没有找到 规范名称/规范编号/条款/内容 中的任何一列，无法确定对应关系。");
-                }
-                else
-                {
-                    cDiscipline = 0; cAttribute = 1; cSpecName = 2; cSpecNumber = 3; cClause = 4; cContent = 5;
-                }
+                    var rows = ReadCsv(filePath);
+                    if (rows.Count == 0) return result;
 
-                var snapshot = Load();
-                var now = DateTime.Now;
-                var user = AnnotationHistoryStore.CurrentUser();
-                for (var i = start; i < rows.Count; i++)
-                {
-                    var row = rows[i];
-                    var entry = new KnowledgeEntry
+                    var header = rows[0];
+                    var hasHeader = LooksLikeEntryHeader(header);
+                    var start = hasHeader ? 1 : 0;
+
+                    int cDiscipline, cAttribute, cSpecName, cSpecNumber, cClause, cContent;
+                    if (hasHeader)
                     {
-                        Id = NewId(),
-                        Time = now,
-                        User = user,
-                        Discipline = Cell(row, cDiscipline),
-                        Attribute = Cell(row, cAttribute),
-                        SpecName = Cell(row, cSpecName),
-                        SpecNumber = Cell(row, cSpecNumber),
-                        Clause = Cell(row, cClause),
-                        Content = Truncate(Cell(row, cContent))
-                    };
-                    if (!RowHasAnyText(row)) continue; // 整行空白：连行数都不计
-                    result.Lines++;
-                    if (entry.IsBlank()) { result.Skipped++; continue; } // 有内容但都不在映射到的列里
+                        var claimed = new HashSet<int>();
+                        // 先认「规范编号」再认「规范名称」，避免"规范"这种短别名把"规范编号"列抢走。
+                        cSpecNumber = ColumnIndexOf(header, claimed, new[] { "规范编号", "标准编号", "规范号", "文件编号", "编号" });
+                        cSpecName = ColumnIndexOf(header, claimed, new[] { "规范名称", "规范名", "标准名称", "规范", "来源", "出处" });
+                        cClause = ColumnIndexOf(header, claimed, new[] { "条款", "条款号", "条文号", "条号", "章条" });
+                        cAttribute = ColumnIndexOf(header, claimed, new[] { "属性", "性质", "条文属性" });
+                        cDiscipline = ColumnIndexOf(header, claimed, new[] { "专业" });
+                        cContent = ColumnIndexOf(header, claimed, new[] { "内容", "条文内容", "批注内容", "正文", "条文" });
+                        if (cSpecNumber < 0 && cSpecName < 0 && cClause < 0 && cContent < 0)
+                            throw new InvalidDataException("表头里没有找到 规范名称/规范编号/条款/内容 中的任何一列，无法确定对应关系。");
+                    }
+                    else
+                    {
+                        cDiscipline = 0; cAttribute = 1; cSpecName = 2; cSpecNumber = 3; cClause = 4; cContent = 5;
+                    }
 
-                    var key = entry.SpecKey();
-                    if (key.Length == 0) { snapshot.Entries.Add(entry); result.Added++; continue; }
+                    var snapshot = LoadForWrite();
+                    var now = DateTime.Now;
+                    var user = AnnotationHistoryStore.CurrentUser();
+                    for (var i = start; i < rows.Count; i++)
+                    {
+                        var row = rows[i];
+                        var entry = new KnowledgeEntry
+                        {
+                            Id = NewId(),
+                            Time = now,
+                            User = user,
+                            Discipline = Cell(row, cDiscipline),
+                            Attribute = Cell(row, cAttribute),
+                            SpecName = Cell(row, cSpecName),
+                            SpecNumber = Cell(row, cSpecNumber),
+                            Clause = Cell(row, cClause),
+                            Content = Truncate(Cell(row, cContent))
+                        };
+                        if (!RowHasAnyText(row)) continue; // 整行空白：连行数都不计
+                        result.Lines++;
+                        if (entry.IsBlank()) { result.Skipped++; continue; } // 有内容但都不在映射到的列里
 
-                    var index = snapshot.Entries.FindIndex(e => string.Equals(e.SpecKey(), key, StringComparison.Ordinal));
-                    if (index >= 0) { entry.Id = snapshot.Entries[index].Id; snapshot.Entries[index] = entry; result.Updated++; }
-                    else { snapshot.Entries.Add(entry); result.Added++; }
+                        var key = entry.SpecKey();
+                        if (key.Length == 0) { snapshot.Entries.Add(entry); result.Added++; continue; }
+
+                        var index = snapshot.Entries.FindIndex(e => string.Equals(e.SpecKey(), key, StringComparison.Ordinal));
+                        if (index >= 0) { entry.Id = snapshot.Entries[index].Id; snapshot.Entries[index] = entry; result.Updated++; }
+                        else { snapshot.Entries.Add(entry); result.Added++; }
+                    }
+
+                    if (result.Added == 0 && result.Updated == 0) return result;
+                    Backup();
+                    Save(snapshot);
+                    return result;
                 }
-
-                if (result.Added == 0 && result.Updated == 0) return result;
-                Backup();
-                Save(snapshot);
-                return result;
             }
             catch (Exception ex)
             {
@@ -497,30 +524,33 @@ namespace GMAnnotation
             var result = new KnowledgeImportResult();
             try
             {
-                var rows = ReadCsv(filePath);
-                if (rows.Count == 0) return result;
-
-                var column = 0;
-                var start = 0;
-                var headerIndex = ColumnIndexOf(rows[0], new HashSet<int>(), new[] { "常用批注语", "批注内容", "内容", "文本", "text" });
-                if (headerIndex >= 0) { column = headerIndex; start = 1; }
-
-                var snapshot = Load();
-                var now = DateTime.Now;
-                for (var i = start; i < rows.Count; i++)
+                using (DataFiles.Lock())
                 {
-                    var text = Cell(rows[i], column).Trim();
-                    if (text.Length == 0) { if (RowHasAnyText(rows[i])) result.Skipped++; continue; }
-                    result.Lines++;
-                    if (HasPhrase(snapshot.Phrases, text)) { result.Skipped++; continue; }
-                    snapshot.Phrases.Add(new KnowledgePhrase { Time = now, Text = Truncate(text) });
-                    result.Added++;
-                }
+                    var rows = ReadCsv(filePath);
+                    if (rows.Count == 0) return result;
 
-                if (result.Added == 0) return result;
-                Backup();
-                Save(snapshot);
-                return result;
+                    var column = 0;
+                    var start = 0;
+                    var headerIndex = ColumnIndexOf(rows[0], new HashSet<int>(), new[] { "常用批注语", "批注内容", "内容", "文本", "text" });
+                    if (headerIndex >= 0) { column = headerIndex; start = 1; }
+
+                    var snapshot = LoadForWrite();
+                    var now = DateTime.Now;
+                    for (var i = start; i < rows.Count; i++)
+                    {
+                        var text = Cell(rows[i], column).Trim();
+                        if (text.Length == 0) { if (RowHasAnyText(rows[i])) result.Skipped++; continue; }
+                        result.Lines++;
+                        if (HasPhrase(snapshot.Phrases, text)) { result.Skipped++; continue; }
+                        snapshot.Phrases.Add(new KnowledgePhrase { Time = now, Text = Truncate(text) });
+                        result.Added++;
+                    }
+
+                    if (result.Added == 0) return result;
+                    Backup();
+                    Save(snapshot);
+                    return result;
+                }
             }
             catch (Exception ex)
             {
@@ -539,7 +569,17 @@ namespace GMAnnotation
             public List<string> Others = new List<string>();
         }
 
+        /// <summary>只读场景：读失败时返回已读到的部分并记日志（界面显示用）。</summary>
         private static Snapshot Load()
+        {
+            // 读也拿锁（拿不到照读）：另一个进程正在原子替换文件时，读句柄会让替换失败。
+            using (DataFiles.Lock(false)) return LoadCore(false);
+        }
+
+        /// <summary>读-改-写场景：读失败直接抛异常，调用方据此放弃保存——绝不拿不完整的快照覆盖知识库文件。</summary>
+        private static Snapshot LoadForWrite() => LoadCore(true);
+
+        private static Snapshot LoadCore(bool strict)
         {
             var snapshot = new Snapshot();
             try
@@ -586,7 +626,11 @@ namespace GMAnnotation
                     else snapshot.Others.Add(line);
                 }
             }
-            catch (Exception ex) { PluginLog.Warning("Knowledge.Load", ex.Message); }
+            catch (Exception ex)
+            {
+                PluginLog.Warning("Knowledge.Load", ex.Message);
+                if (strict) throw new IOException("读取知识库文件失败，为避免覆盖已有数据，本次未保存：" + ex.Message, ex);
+            }
             return snapshot;
         }
 
@@ -599,10 +643,7 @@ namespace GMAnnotation
                 var lines = new List<string>(snapshot.Others);
                 foreach (var e in snapshot.Entries) lines.Add(EntryJson(e));
                 foreach (var p in snapshot.Phrases) lines.Add(PhraseJson(p));
-                var temp = PathName + ".tmp";
-                File.WriteAllText(temp, lines.Count > 0 ? string.Join("\r\n", lines) + "\r\n" : "", Encoding.UTF8);
-                if (File.Exists(PathName)) File.Delete(PathName);
-                File.Move(temp, PathName);
+                DataFiles.WriteAllTextAtomic(PathName, lines.Count > 0 ? string.Join("\r\n", lines) + "\r\n" : "", Encoding.UTF8);
                 return true;
             }
             catch (Exception ex) { PluginLog.Warning("Knowledge.Save", ex.Message); return false; }
@@ -690,7 +731,7 @@ namespace GMAnnotation
         private static List<List<string>> ReadCsv(string filePath)
         {
             var rows = new List<List<string>>();
-            var text = ReadAllText(filePath);
+            var text = DataFiles.ReadAllTextDetect(filePath);
             var row = new List<string>();
             var cell = new StringBuilder();
             var inQuotes = false;
@@ -725,21 +766,6 @@ namespace GMAnnotation
             while (rows.Count > 0 && rows[rows.Count - 1].Count == 1 && rows[rows.Count - 1][0].Trim().Length == 0)
                 rows.RemoveAt(rows.Count - 1);
             return rows;
-        }
-
-        /// <summary>
-        /// 读文本并猜编码：UTF-8 BOM → 严格 UTF-8（解不出来就说明不是 UTF-8）→ GBK(936) → 系统默认。
-        /// Excel「另存为 CSV」在中文 Windows 上默认是 GBK，所以必须留这条路。
-        /// </summary>
-        private static string ReadAllText(string filePath)
-        {
-            var bytes = File.ReadAllBytes(filePath);
-            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
-                return Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
-            try { return new UTF8Encoding(false, true).GetString(bytes); }
-            catch (Exception) { /* 不是合法 UTF-8，继续往下试 */ }
-            try { return Encoding.GetEncoding(936).GetString(bytes); }
-            catch (Exception) { return Encoding.Default.GetString(bytes); }
         }
 
         /// <summary>表头识别：整行里只要有单元格是已知的列名，就当成表头。</summary>

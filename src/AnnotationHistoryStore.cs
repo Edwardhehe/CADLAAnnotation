@@ -71,7 +71,7 @@ namespace GMAnnotation
                     Changes = Truncate(changes)
                 };
                 Directory.CreateDirectory(Folder);
-                File.AppendAllText(PathName, ToJson(record) + "\r\n", Encoding.UTF8);
+                using (DataFiles.Lock(false)) File.AppendAllText(PathName, ToJson(record) + "\r\n", Encoding.UTF8);
             }
             catch (Exception ex) { PluginLog.Warning("History.Record", ex.Message); }
         }
@@ -82,12 +82,15 @@ namespace GMAnnotation
             var list = new List<AnnotationHistoryRecord>();
             try
             {
-                if (!File.Exists(PathName)) return list;
-                foreach (var line in File.ReadLines(PathName, Encoding.UTF8))
+                using (DataFiles.Lock(false))
                 {
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-                    var record = Parse(line);
-                    if (record != null) list.Add(record);
+                    if (!File.Exists(PathName)) return list;
+                    foreach (var line in File.ReadLines(PathName, Encoding.UTF8))
+                    {
+                        if (string.IsNullOrWhiteSpace(line)) continue;
+                        var record = Parse(line);
+                        if (record != null) list.Add(record);
+                    }
                 }
             }
             catch (Exception ex) { PluginLog.Warning("History.LoadAll", ex.Message); }
@@ -112,26 +115,26 @@ namespace GMAnnotation
             {
                 var targets = remove == null ? new List<AnnotationHistoryRecord>() : remove.ToList();
                 if (targets.Count == 0) return 0;
-                if (!File.Exists(PathName)) return 0;
-                var keys = new HashSet<string>(targets.Select(KeyOf), StringComparer.Ordinal);
-                var keep = new List<string>(); var removed = 0;
-                foreach (var line in File.ReadAllLines(PathName, Encoding.UTF8))
+                using (DataFiles.Lock())
                 {
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-                    var record = Parse(line);
-                    if (record != null && keys.Contains(KeyOf(record))) { removed++; continue; }
-                    keep.Add(line);
+                    if (!File.Exists(PathName)) return 0;
+                    var keys = new HashSet<string>(targets.Select(KeyOf), StringComparer.Ordinal);
+                    var keep = new List<string>(); var removed = 0;
+                    foreach (var line in File.ReadAllLines(PathName, Encoding.UTF8))
+                    {
+                        if (string.IsNullOrWhiteSpace(line)) continue;
+                        var record = Parse(line);
+                        if (record != null && keys.Contains(KeyOf(record))) { removed++; continue; }
+                        keep.Add(line);
+                    }
+                    if (removed == 0) return 0;
+
+                    try { File.Copy(PathName, BackupPath, true); }
+                    catch (Exception ex) { PluginLog.Warning("History.Backup", ex.Message); }
+
+                    DataFiles.WriteAllTextAtomic(PathName, keep.Count > 0 ? string.Join("\r\n", keep) + "\r\n" : "", Encoding.UTF8);
+                    return removed;
                 }
-                if (removed == 0) return 0;
-
-                try { File.Copy(PathName, BackupPath, true); }
-                catch (Exception ex) { PluginLog.Warning("History.Backup", ex.Message); }
-
-                var temp = PathName + ".tmp";
-                File.WriteAllText(temp, keep.Count > 0 ? string.Join("\r\n", keep) + "\r\n" : "", Encoding.UTF8);
-                if (File.Exists(PathName)) File.Delete(PathName);
-                File.Move(temp, PathName);
-                return removed;
             }
             catch (Exception ex) { PluginLog.Warning("History.Cleanup", ex.Message); return -1; }
         }
@@ -167,37 +170,122 @@ namespace GMAnnotation
 
         private static readonly string DrawingNoPath = Path.Combine(Folder, "drawingnos.json");
 
-        /// <summary>取某张 DWG 上次使用的图号；没有则返回空串。</summary>
+        /// <summary>取某张 DWG 上次使用的图号（路径不区分大小写）；没有则返回空串。</summary>
         public static string GetDrawingNo(string drawingPath)
         {
             try
             {
-                if (string.IsNullOrEmpty(drawingPath) || !File.Exists(DrawingNoPath)) return "";
-                var match = Regex.Match(File.ReadAllText(DrawingNoPath, Encoding.UTF8),
-                    Regex.Escape(Escape(drawingPath)) + "\":\"((?:[^\"\\\\]|\\\\.)*)\"");
-                return match.Success ? Unescape(match.Groups[1].Value) : "";
+                if (string.IsNullOrEmpty(drawingPath)) return "";
+                Dictionary<string, string> map;
+                using (DataFiles.Lock(false)) map = LoadDrawingNos(out _);
+                return map.TryGetValue(NormalizeDrawingPath(drawingPath), out var no) ? no : "";
             }
             catch (Exception ex) { PluginLog.Warning("History.GetDrawingNo", ex.Message); return ""; }
         }
 
-        /// <summary>记住某张 DWG 的图号，下次打开批注窗口自动带出。</summary>
+        /// <summary>记住某张 DWG 的图号，下次打开批注窗口自动带出。
+        /// 文件损坏时先原样备份为 drawingnos.json.corrupt-时间.bak，再从中抢救能识别的记录写回，绝不整份清空。</summary>
         public static void SetDrawingNo(string drawingPath, string drawingNo)
         {
             try
             {
                 if (string.IsNullOrEmpty(drawingPath)) return;
-                Directory.CreateDirectory(Folder);
-                var text = File.Exists(DrawingNoPath) ? File.ReadAllText(DrawingNoPath, Encoding.UTF8) : "";
-                text = text.Trim();
-                if (text.StartsWith("{") && text.EndsWith("}")) text = text.Substring(1, text.Length - 2); else text = "";
-                // 去掉本图的旧记录，追加新记录。
-                var pattern = "\\s*\"" + Regex.Escape(Escape(drawingPath)) + "\":\"(?:[^\"\\\\]|\\\\.)*\",?";
-                text = Regex.Replace(text, pattern, "");
-                text = text.TrimEnd().TrimEnd(',');
-                var entry = Q(drawingPath, drawingNo ?? "");
-                File.WriteAllText(DrawingNoPath, "{" + (text.Length > 0 ? text + "," : "") + entry + "}", Encoding.UTF8);
+                using (DataFiles.Lock())
+                {
+                    var map = LoadDrawingNos(out var corrupt);
+                    var key = NormalizeDrawingPath(drawingPath);
+                    var value = drawingNo ?? "";
+                    if (!corrupt && map.TryGetValue(key, out var old) && string.Equals(old, value, StringComparison.Ordinal)) return;
+                    if (corrupt)
+                    {
+                        var backup = DrawingNoPath + ".corrupt-" + DateTime.Now.ToString("yyyyMMddHHmmss") + ".bak";
+                        File.Copy(DrawingNoPath, backup, true);
+                        PluginLog.Warning("History.DrawingNos", "drawingnos.json 格式损坏，已备份到 " + backup + "，保留能识别的 " + map.Count + " 条记录后重写。");
+                    }
+                    map[key] = value;
+                    var sb = new StringBuilder("{");
+                    var first = true;
+                    foreach (var pair in map)
+                    {
+                        sb.Append(first ? "\r\n  " : ",\r\n  ");
+                        sb.Append('"').Append(Escape(pair.Key)).Append("\": \"").Append(Escape(pair.Value)).Append('"');
+                        first = false;
+                    }
+                    sb.Append("\r\n}\r\n");
+                    DataFiles.WriteAllTextAtomic(DrawingNoPath, sb.ToString());
+                }
             }
             catch (Exception ex) { PluginLog.Warning("History.SetDrawingNo", ex.Message); }
+        }
+
+        private static string NormalizeDrawingPath(string path)
+        {
+            var trimmed = (path ?? "").Trim();
+            try { return Path.GetFullPath(trimmed); } catch { return trimmed; }
+        }
+
+        /// <summary>读取图号记忆（键不区分大小写）。文件不存在或为空 → 空表；
+        /// 格式损坏 → corrupt=true，并用宽松规则抢救出能识别的 "路径":"图号" 记录。</summary>
+        private static Dictionary<string, string> LoadDrawingNos(out bool corrupt)
+        {
+            corrupt = false;
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (!File.Exists(DrawingNoPath)) return map;
+            var text = File.ReadAllText(DrawingNoPath, Encoding.UTF8);
+            if (text.Trim().Length == 0) return map;
+            if (TryParseFlatJson(text, map)) return map;
+            corrupt = true;
+            map.Clear();
+            foreach (Match m in Regex.Matches(text, "\"((?:[^\"\\\\]|\\\\.)*)\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\""))
+                map[Unescape(m.Groups[1].Value)] = Unescape(m.Groups[2].Value);
+            return map;
+        }
+
+        /// <summary>解析只含"字符串: 字符串"的扁平 JSON 对象（drawingnos.json 的格式）；格式不符返回 false。</summary>
+        private static bool TryParseFlatJson(string text, Dictionary<string, string> map)
+        {
+            var i = 0;
+            void SkipWs()
+            {
+                while (i < text.Length && (char.IsWhiteSpace(text[i]) || text[i] == '\uFEFF')) i++;
+            }
+            string ReadString()
+            {
+                if (i >= text.Length || text[i] != '"') return null;
+                var sb = new StringBuilder();
+                i++;
+                while (i < text.Length)
+                {
+                    var c = text[i++];
+                    if (c == '"') return Unescape(sb.ToString());
+                    sb.Append(c);
+                    if (c == '\\' && i < text.Length) sb.Append(text[i++]);
+                }
+                return null;
+            }
+
+            SkipWs();
+            if (i >= text.Length || text[i] != '{') return false;
+            i++;
+            SkipWs();
+            if (i < text.Length && text[i] == '}') { i++; SkipWs(); return i == text.Length; }
+            while (true)
+            {
+                SkipWs();
+                var key = ReadString();
+                if (key == null) return false;
+                SkipWs();
+                if (i >= text.Length || text[i] != ':') return false;
+                i++;
+                SkipWs();
+                var value = ReadString();
+                if (value == null) return false;
+                map[key] = value;
+                SkipWs();
+                if (i < text.Length && text[i] == ',') { i++; continue; }
+                if (i < text.Length && text[i] == '}') { i++; SkipWs(); return i == text.Length; }
+                return false;
+            }
         }
 
         /// <summary>
@@ -226,8 +314,7 @@ namespace GMAnnotation
         {
             try
             {
-                Directory.CreateDirectory(Folder);
-                File.WriteAllText(RecentClearedPath, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), Encoding.UTF8);
+                DataFiles.WriteAllTextAtomic(RecentClearedPath, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
                 return true;
             }
             catch (Exception ex) { PluginLog.Warning("History.ClearRecentContents", ex.Message); return false; }

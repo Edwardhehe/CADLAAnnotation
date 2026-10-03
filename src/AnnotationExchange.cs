@@ -85,7 +85,9 @@ namespace GMAnnotation
         {
             var ed = doc.Editor;
             List<Dictionary<string, string>> rows;
-            try { rows = ParseFile(filePath); }
+            string encodingName, headerWarning;
+            try { rows = ParseFile(filePath, out encodingName, out headerWarning); }
+            catch (InvalidDataException ex) { return "无法导入：" + ex.Message; }
             catch (Exception ex) { return "读取文件失败: " + ex.Message; }
             var skipped = 0;
             if (rows.Count == 0) return "文件中没有可导入的批注数据（请确认表头包含「编号」和「批注内容」列）。";
@@ -193,7 +195,9 @@ namespace GMAnnotation
             if (updated > 0 || created > 0 || createdAtCoord > 0) { try { ed.Regen(); } catch { } }
 #endif
 
-            var report = "导入完成：更新 " + updated + " 条，未变化 " + unchanged + " 条，新建 " + (created + createdAtCoord) + " 条。";
+            var report = "导入完成：更新 " + updated + " 条，未变化 " + unchanged + " 条，新建 " + (created + createdAtCoord) + " 条。"
+                + "（文件编码：" + encodingName + "）";
+            if (!string.IsNullOrEmpty(headerWarning)) report += "\n" + headerWarning;
             if (createdAtCoord > 0) report += "\n其中 " + createdAtCoord + " 条按 CSV 记录的原图坐标（含布局）还原到原位置。";
             if (created > 0) report += "\n其中 " + created + " 条因 CSV 无坐标，按指定基点排布。";
             if (missingLayouts.Count > 0)
@@ -427,12 +431,25 @@ namespace GMAnnotation
 
         private static string UnCsv(string value) => (value ?? "").Replace("\\P", "\n");
 
-        private static List<Dictionary<string, string>> ParseFile(string filePath)
+        /// <summary>读取并解析 CSV。编码自动识别（UTF-8 BOM → 严格 UTF-8 → GBK），Excel 中文版"另存为 CSV"的 GBK 文件也能直接导入。
+        /// 表头既没有「编号」也没有「批注内容」时抛 <see cref="InvalidDataException"/>（多半是选错文件或编码异常）；
+        /// 只缺「编号」时照常导入（全部按新建处理），并通过 <paramref name="headerWarning"/> 提示。</summary>
+        private static List<Dictionary<string, string>> ParseFile(string filePath, out string encodingName, out string headerWarning)
         {
             var rows = new List<Dictionary<string, string>>();
-            var lines = SplitRecords(File.ReadAllText(filePath, Encoding.UTF8)); // 已处理带引号的多行内容
+            headerWarning = "";
+            var text = DataFiles.DecodeDetect(File.ReadAllBytes(filePath), out encodingName);
+            var lines = SplitRecords(text); // 已处理带引号的多行内容
             if (lines.Count == 0) return rows;
             var header = ParseLine(lines[0]).Select(h => (h ?? "").Trim().TrimStart('\uFEFF')).ToArray();
+            var hasNumber = header.Any(h => string.Equals(h, "编号", StringComparison.OrdinalIgnoreCase));
+            var hasContent = header.Any(h => string.Equals(h, "批注内容", StringComparison.OrdinalIgnoreCase));
+            if (!hasNumber && !hasContent)
+                throw new InvalidDataException("表头中找不到「编号」或「批注内容」列（识别到的编码：" + encodingName
+                    + "；首行：" + (lines[0].Length > 60 ? lines[0].Substring(0, 60) + "…" : lines[0])
+                    + "）。请使用本插件导出的 CSV 作为模板。");
+            if (!hasNumber) headerWarning = "提示：文件没有「编号」列，所有行都按新建处理（不会更新图中已有批注）。";
+            else if (!hasContent) headerWarning = "提示：文件没有「批注内容」列，已有批注的内容保持不变。";
             for (var i = 1; i < lines.Count; i++)
             {
                 if (string.IsNullOrWhiteSpace(lines[i])) continue;

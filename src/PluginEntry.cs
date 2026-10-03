@@ -57,6 +57,8 @@ namespace GMAnnotation
             var asm = typeof(PluginEntry).Assembly;
             var buildTime = System.IO.File.GetLastWriteTime(asm.Location);
             PluginLog.Info("Initialize", "构建于 " + buildTime.ToString("yyyy-MM-dd HH:mm:ss") + "，加载自 " + asm.Location);
+            // .NET 8（AutoCAD 2025+）默认不含 GBK 等代码页，CSV 导入识别 GBK 前必须先注册。
+            DataFiles.EnsureEncodings();
             // BeginDoubleClick 是应用级事件，覆盖之后新建/打开的所有文档，无需逐文档注册。
             CadApplication.BeginDoubleClick += OnBeginDoubleClick;
             CadApplication.DocumentManager.DocumentActivated += OnDocumentActivated;

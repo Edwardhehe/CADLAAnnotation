@@ -684,15 +684,15 @@ namespace GMAnnotation
                 if (!Contains(group, entityId)) return false;
                 TryReadMaster(group, tr, out var oldData); // 修改前留底，用于生成变更明细
                 var existingSettings=SettingsForExisting(data);
-                EnsureLayer(doc.Database,tr,existingSettings,data);
-                var targetLayer=EffectiveLayer(existingSettings,data);
+                // 图层保持各实体现有图层不变（格式刷/手工改过的图层、带日期人名后缀的图层都不被重算覆盖）；
+                // 文字颜色只在状态真正变化时才按状态色重设（格式刷刷过的文字颜色不被还原）。
+                var statusChanged=oldData==null||!string.Equals(oldData.Status??"",data.Status??"",StringComparison.Ordinal);
                 MText changedText=null;Polyline box=null;var leaders=new List<Polyline>();
                 foreach (ObjectId oid in group.GetAllEntityIds())
                 {
                     if(!oid.IsValid||oid.IsErased)continue;
                     var entity = tr.GetObject(oid, OpenMode.ForWrite, false) as Entity;
                     if(entity==null)continue;
-                    entity.Layer=targetLayer;
                     // 内嵌数据分片随主数据一起刷新：否则复制/粘贴或编组丢失后，回退读取到的是创建时的旧内容。
                     if(TryGetRole(entity,out var memberRole))RewriteAnnotationXData(entity,id,memberRole,data);
                     if (entity is MText text)
@@ -701,7 +701,7 @@ namespace GMAnnotation
                         // 首行（日期/专业/批注人）不折行：老批注创建时文字宽度不够的，编辑时补足。
                         try{var need=MeasureHeaderWidth(doc.Database,tr,data,existingSettings);if(need>text.Width)text.Width=need;}
                         catch(System.Exception ex){PluginLog.Warning("Update.HeaderWidth",ex.Message);}
-                        text.Color=Color.FromColorIndex(ColorMethod.ByAci,TextColorForStatus(existingSettings,data.Status));
+                        if(statusChanged)text.Color=Color.FromColorIndex(ColorMethod.ByAci,TextColorForStatus(existingSettings,data.Status));
                         changedText=text;
                     }
                     else if(entity is Polyline poly && TryGetRole(entity,out var role))
@@ -2005,16 +2005,16 @@ namespace GMAnnotation
             return AnnotationCodec.TryDecode(value, out data);
         }
 
-        /// <summary>写入留痕：创建/修改受"立即入库"开关控制，其余动作（删除/移动/增补/修复）始终记录。
+        /// <summary>写入留痕：所有动作（创建/修改/删除/移动/增补/修复）始终记录到留痕。
         /// 勾选"立即入库"时，创建/修改还会同时把该条批注写入<b>知识库</b>（批注条目 + 常用批注语）——
         /// 留痕（history.json）与知识库（knowledge.json）是两套独立数据，各查各的、各清各的。</summary>
         private static void ArchiveRecord(Document doc, string action, AnnotationData data, string changes)
         {
             var creates = action == "创建" || action == "修改";
-            if (creates && !SettingsStore.Load().ArchiveOnCreate) return;
+            // 留痕（history.json）始终记录；「立即入库」只控制是否同时写入知识库。
             AnnotationHistoryStore.Record(doc, action, data, changes);
             // 知识库入库只对创建/修改生效：删除/移动/增补/修复属于留痕范畴，不往知识库里写条目。
-            if (creates) KnowledgeStore.Archive(doc, data);
+            if (creates && SettingsStore.Load().ArchiveOnCreate) KnowledgeStore.Archive(doc, data);
         }
 
         // ============ 复制/粘贴批注修复 ============

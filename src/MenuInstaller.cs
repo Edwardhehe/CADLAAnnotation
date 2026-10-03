@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 #if ZWCAD
 using UiApplication = ZwSoft.ZwCAD.ApplicationServices.Application;
@@ -284,8 +285,19 @@ namespace GMAnnotation
             TryInvoke(menu, "AddMenuItem", index, displayName, CreateMenuMacro(commandName));
         }
 
+        /// <summary>依赖预选集（先选对象再点按钮/菜单）的命令：宏前不能加 ^C^C，否则 ^C 会先清掉用户的选择。</summary>
+        private static readonly HashSet<string> PickSetCommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "GM_PZ_EDIT", "GM_PZ_DELETE", "GM_PZ_MOVE", "GM_PZ_HIDE", "GM_PZ_SHOW",
+            "GM_PZ_ADDCLOUD", "GM_PZ_FILTER", "GM_PZ_FORMAT", "GM_PZ_EXPORT"
+        };
+
+        /// <summary>菜单/工具栏宏。一般命令前缀 ^C^C（先取消正在执行的命令）；依赖预选集的命令不加 ^C^C，
+        /// 以便"先选批注再点按钮"能直接作用于所选对象（代价：有其他命令正在运行时，需先按 Esc 再点）。
+        /// 未采用 AutoCAD 的 DIESEL 条件宏 $M=$(if,$(getvar,cmdactive),^C^C)：中望 CAD 对菜单宏 DIESEL 的支持不确定，两家通用起见用最保守的写法。</summary>
         internal static string CreateMenuMacro(string commandName)
         {
+            if (PickSetCommands.Contains(commandName ?? "")) return "_" + commandName + " ";
             return new string((char)3, 2) + "_" + commandName + " ";
         }
 

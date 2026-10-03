@@ -82,9 +82,12 @@ namespace GMAnnotation.Views
             CloudOnlyCheck.IsChecked = _s.CloudOnly;
         }
 
-        /// <summary>点击开始时，将面板当前值一次性写回设置并持久化。</summary>
+        /// <summary>点击开始时，将面板当前值一次性写回设置并持久化。
+        /// 先重新读取磁盘上的最新设置，只覆盖面板自己管理的字段——面板开着期间在「批注设置」窗口
+        /// 或批注窗口（立即入库）里做的修改不会被面板持有的旧设置对象覆盖回去。</summary>
         private void ApplyPanelSettings()
         {
+            _s = SettingsStore.Load();
             _s.DefaultDiscipline = DisciplineCombo.Text.Trim();
             _s.DefaultAuthor = AuthorText.Text.Trim();
             _s.Shape = ShapeCombo.Text.Trim();
@@ -366,7 +369,7 @@ namespace GMAnnotation.Views
         {
             var doc = CadApplication.DocumentManager.MdiActiveDocument;
             var styles = GetTextStyles(doc);
-            var w = new SettingsWindow(_s, styles);
+            var w = new SettingsWindow(SettingsStore.Load(), styles);
             if (CadDialog.ShowModal(w) == true)
             {
                 _s = w.Value;
@@ -651,8 +654,15 @@ namespace GMAnnotation.Views
             if (_runSettings.AutoNumber)
             {
                 _runSettings.NextNumber++;
-                _s.NextNumber = _runSettings.NextNumber;
-                SettingsStore.Save(_s);
+                // 只回写编号：重新读取最新设置后再保存，避免把批注窗口刚改的「立即入库」等设置覆盖掉。
+                try
+                {
+                    var fresh = SettingsStore.Load();
+                    fresh.NextNumber = _runSettings.NextNumber;
+                    SettingsStore.Save(fresh);
+                    _s.NextNumber = fresh.NextNumber;
+                }
+                catch (Exception ex) { PluginLog.Error("Panel.SaveNextNumber", ex); }
             }
 
             doc.Editor.WriteMessage("\nGM批注已创建: " + data.Number);
