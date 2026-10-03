@@ -17,90 +17,71 @@ namespace GMAnnotation
             Index = index;
             Name = name;
             Brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+            Brush.Freeze();
         }
     }
 
-    /// <summary>ACI 255 色索引 → RGB 映射，供设置界面颜色下拉菜单使用。</summary>
+    /// <summary>
+    /// ACI 1~255 完整调色板（RGB 取 AutoCAD 标准色表，1~249 与 CAD 显示一致，250~255 为经典灰度）。
+    /// 查找一律按<b>颜色号</b>（<see cref="Find"/>），不按列表下标——旧版列表缺 202~249 号、按下标取色会把 250~255 错还原成 7 号。
+    /// </summary>
     public static class AciColors
     {
-        /// <summary>全部 255 种 ACI 颜色。</summary>
+        /// <summary>索引 1~255 对应的 RGB（下标 0 = ACI 1）。</summary>
+        private static readonly int[] Rgb =
+        {
+            0xFF0000, 0xFFFF00, 0x00FF00, 0x00FFFF, 0x0000FF, 0xFF00FF, 0xFFFFFF, 0x808080, 0xC0C0C0, 0xFF0000,
+            0xFF7F7F, 0xA50000, 0xA55252, 0x7F0000, 0x7F3F3F, 0x4C0000, 0x4C2626, 0x260000, 0x261313, 0xFF3F00,
+            0xFF9F7F, 0xA52900, 0xA56752, 0x7F1F00, 0x7F4F3F, 0x4C1300, 0x4C2F26, 0x260900, 0x261713, 0xFF7F00,
+            0xFFBF7F, 0xA55200, 0xA57C52, 0x7F3F00, 0x7F5F3F, 0x4C2600, 0x4C3926, 0x261300, 0x261C13, 0xFFBF00,
+            0xFFDF7F, 0xA57C00, 0xA59152, 0x7F5F00, 0x7F6F3F, 0x4C3900, 0x4C4226, 0x261C00, 0x262113, 0xFFFF00,
+            0xFFFF7F, 0xA5A500, 0xA5A552, 0x7F7F00, 0x7F7F3F, 0x4C4C00, 0x4C4C26, 0x262600, 0x262613, 0xBFFF00,
+            0xDFFF7F, 0x7CA500, 0x91A552, 0x5F7F00, 0x6F7F3F, 0x394C00, 0x424C26, 0x1C2600, 0x212613, 0x7FFF00,
+            0xBFFF7F, 0x52A500, 0x7CA552, 0x3F7F00, 0x5F7F3F, 0x264C00, 0x394C26, 0x132600, 0x1C2613, 0x3FFF00,
+            0x9FFF7F, 0x29A500, 0x67A552, 0x1F7F00, 0x4F7F3F, 0x134C00, 0x2F4C26, 0x092600, 0x172613, 0x00FF00,
+            0x7FFF7F, 0x00A500, 0x52A552, 0x007F00, 0x3F7F3F, 0x004C00, 0x264C26, 0x002600, 0x132613, 0x00FF3F,
+            0x7FFF9F, 0x00A529, 0x52A567, 0x007F1F, 0x3F7F4F, 0x004C13, 0x264C2F, 0x002609, 0x135817, 0x00FF7F,
+            0x7FFFBF, 0x00A552, 0x52A57C, 0x007F3F, 0x3F7F5F, 0x004C26, 0x264C39, 0x002613, 0x13581C, 0x00FFBF,
+            0x7FFFDF, 0x00A57C, 0x52A591, 0x007F5F, 0x3F7F6F, 0x004C39, 0x264C42, 0x00261C, 0x135858, 0x00FFFF,
+            0x7FFFFF, 0x00A5A5, 0x52A5A5, 0x007F7F, 0x3F7F7F, 0x004C4C, 0x264C4C, 0x002626, 0x135858, 0x00BFFF,
+            0x7FDFFF, 0x007CA5, 0x5291A5, 0x005F7F, 0x3F6F7F, 0x00394C, 0x26427E, 0x001C26, 0x135858, 0x007FFF,
+            0x7FBFFF, 0x0052A5, 0x527CA5, 0x003F7F, 0x3F5F7F, 0x00264C, 0x26397E, 0x001326, 0x131C58, 0x003FFF,
+            0x7F9FFF, 0x0029A5, 0x5267A5, 0x001F7F, 0x3F4F7F, 0x00134C, 0x262F7E, 0x000926, 0x131758, 0x0000FF,
+            0x7F7FFF, 0x0000A5, 0x5252A5, 0x00007F, 0x3F3F7F, 0x00004C, 0x26267E, 0x000026, 0x131358, 0x3F00FF,
+            0x9F7FFF, 0x2900A5, 0x6752A5, 0x1F007F, 0x4F3F7F, 0x13004C, 0x2F267E, 0x090026, 0x171358, 0x7F00FF,
+            0xBF7FFF, 0x5200A5, 0x7C52A5, 0x3F007F, 0x5F3F7F, 0x26004C, 0x39267E, 0x130026, 0x1C1358, 0xBF00FF,
+            0xDF7FFF, 0x7C00A5, 0x9152A5, 0x5F007F, 0x6F3F7F, 0x39004C, 0x42264C, 0x1C0026, 0x581358, 0xFF00FF,
+            0xFF7FFF, 0xA500A5, 0xA552A5, 0x7F007F, 0x7F3F7F, 0x4C004C, 0x4C264C, 0x260026, 0x581358, 0xFF00BF,
+            0xFF7FDF, 0xA5007C, 0xA55291, 0x7F005F, 0x7F3F6F, 0x4C0039, 0x4C2642, 0x26001C, 0x581358, 0xFF007F,
+            0xFF7FBF, 0xA50052, 0xA5527C, 0x7F003F, 0x7F3F5F, 0x4C0026, 0x4C2639, 0x260013, 0x58131C, 0xFF003F,
+            0xFF7F9F, 0xA50029, 0xA55267, 0x7F001F, 0x7F3F4F, 0x4C0013, 0x4C262F, 0x260009, 0x581317, 0x333333,
+            0x505050, 0x696969, 0x828282, 0xBEBEBE, 0xFFFFFF,
+        };
+
+        private static readonly Dictionary<short, AciColorItem> ByIndex = new Dictionary<short, AciColorItem>();
+
+        /// <summary>全部 255 种 ACI 颜色（按颜色号 1~255 排列）。</summary>
         public static ReadOnlyCollection<AciColorItem> All { get; }
 
         static AciColors()
         {
+            var names = new[] { "红", "黄", "绿", "青", "蓝", "洋红", "白", "深灰", "浅灰" };
             var list = new List<AciColorItem>(255);
-
-            // 1–9: 标准色
-            list.Add(new AciColorItem(1, "红", 255, 0, 0));
-            list.Add(new AciColorItem(2, "黄", 255, 255, 0));
-            list.Add(new AciColorItem(3, "绿", 0, 255, 0));
-            list.Add(new AciColorItem(4, "青", 0, 255, 255));
-            list.Add(new AciColorItem(5, "蓝", 0, 0, 255));
-            list.Add(new AciColorItem(6, "洋红", 255, 0, 255));
-            list.Add(new AciColorItem(7, "白", 255, 255, 255));
-            list.Add(new AciColorItem(8, "深灰", 128, 128, 128));
-            list.Add(new AciColorItem(9, "浅灰", 192, 192, 192));
-
-            // 10–249: HSL 色轮分布
-            var hueTable = new[] { 0, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300, 320, 340, 10, 30, 50, 70, 90, 110 };
-            var satTable = new[] { 1.0, 0.85, 0.7 };
-            var lumTable = new[] { 0.55, 0.70, 0.85, 0.40, 0.25, 0.6, 0.5, 0.35 };
-
-            int idx = 10;
-            foreach (var h in hueTable)
+            for (var i = 1; i <= 255; i++)
             {
-                foreach (var l in lumTable)
-                {
-                    if (idx > 249) break;
-                    var rgb = HslToRgb(h / 360.0, 0.8, l);
-                    list.Add(new AciColorItem((short)idx, $"{idx}", rgb.r, rgb.g, rgb.b));
-                    idx++;
-                }
-                if (idx > 249) break;
+                var rgb = Rgb[i - 1];
+                var name = i <= 9 ? names[i - 1] : i >= 250 ? "灰度" : "色轮";
+                var item = new AciColorItem((short)i, name, (byte)((rgb >> 16) & 0xFF), (byte)((rgb >> 8) & 0xFF), (byte)(rgb & 0xFF));
+                list.Add(item);
+                ByIndex[(short)i] = item;
             }
-
-            // 250–255: 灰度
-            list.Add(new AciColorItem(250, "250", 51, 51, 51));
-            list.Add(new AciColorItem(251, "251", 91, 91, 91));
-            list.Add(new AciColorItem(252, "252", 132, 132, 132));
-            list.Add(new AciColorItem(253, "253", 173, 173, 173));
-            list.Add(new AciColorItem(254, "254", 214, 214, 214));
-            list.Add(new AciColorItem(255, "255", 255, 255, 255));
-
             All = new ReadOnlyCollection<AciColorItem>(list);
         }
 
-        /// <summary>根据 ACI 索引查找颜色项，找不到则返回索引 7（白色）。</summary>
-        public static AciColorItem Find(short index)
-        {
-            // 列表下标 0 对应索引 1
-            var i = index - 1;
-            if (i >= 0 && i < All.Count) return All[i];
-            return All[6]; // 默认白色
-        }
+        /// <summary>按 ACI 颜色号查找；不在 1~255（如 0=随块、256=随层）时返回 null，由调用方保留原值。</summary>
+        public static AciColorItem Find(short index) => ByIndex.TryGetValue(index, out var item) ? item : null;
 
-        private static (byte r, byte g, byte b) HslToRgb(double h, double s, double l)
-        {
-            double r, g, b;
-            if (s == 0) { r = g = b = l; }
-            else
-            {
-                double HueToRgb(double p, double q, double t)
-                {
-                    if (t < 0) t += 1;
-                    if (t > 1) t -= 1;
-                    if (t < 1.0 / 6) return p + (q - p) * 6 * t;
-                    if (t < 1.0 / 2) return q;
-                    if (t < 2.0 / 3) return p + (q - p) * (2.0 / 3 - t) * 6;
-                    return p;
-                }
-                var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-                var p = 2 * l - q;
-                r = HueToRgb(p, q, h + 1.0 / 3);
-                g = HueToRgb(p, q, h);
-                b = HueToRgb(p, q, h - 1.0 / 3);
-            }
-            return ((byte)(r * 255), (byte)(g * 255), (byte)(b * 255));
-        }
+        /// <summary>是否为可在下拉中选择的 ACI 颜色号（1~255）。</summary>
+        public static bool IsValid(short index) => index >= 1 && index <= 255;
     }
 }

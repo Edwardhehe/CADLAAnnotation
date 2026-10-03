@@ -80,7 +80,8 @@
                             <CheckBox x:Name="AutoCloseOrthoCheck" Content="绘制时暂时关闭正交（ORTHO）"/>
                             <CheckBox x:Name="AutoCloseSnapCheck" Content="绘制时暂时关闭对象捕捉（OSNAP）"/>
                             <CheckBox x:Name="DoubleClickEditCheck" Content="双击已创建的批注进行编辑"/>
-                            <CheckBox x:Name="ViewTopIsNorthCheck" Content="视图上方为北（否则批注随视图扭转）"/>
+                            <CheckBox x:Name="ViewTopIsNorthCheck" Content="视图上方为北（预留）" IsEnabled="False"
+                                      ToolTip="当前版本批注始终按当前 UCS 摆放，尚未实现随视图扭转；本项仅保留设置值"/>
                         </StackPanel>
 
                         <Rectangle Style="{StaticResource SectionSeparator}"/>
@@ -235,13 +236,13 @@
                             <ComboBox x:Name="TextColorCombo" Grid.Row="3" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
                             <TextBlock Grid.Row="4" Grid.Column="0" Text="边框颜色" Style="{StaticResource FieldLabel}"/>
                             <ComboBox x:Name="BoxColorCombo" Grid.Row="4" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
-                            <TextBlock Grid.Row="5" Grid.Column="0" Text="回复颜色" Style="{StaticResource FieldLabel}"/>
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="已回复颜色" Style="{StaticResource FieldLabel}" ToolTip="状态为「已回复」的批注文字颜色"/>
                             <ComboBox x:Name="ReplyColorCombo" Grid.Row="5" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
                             <TextBlock Grid.Row="6" Grid.Column="0" Text="截屏背景（预留）" Style="{StaticResource FieldLabel}"/>
                             <ComboBox x:Name="ScreenshotBackgroundColorCombo" Grid.Row="6" Grid.Column="1"
                                       ItemTemplate="{StaticResource AciColorTemplate}" IsEnabled="False"
                                       ToolTip="当前版本尚未提供截屏批注功能"/>
-                            <TextBlock Grid.Row="7" Grid.Column="0" Text="通过颜色" Style="{StaticResource FieldLabel}"/>
+                            <TextBlock Grid.Row="7" Grid.Column="0" Text="已完成颜色" Style="{StaticResource FieldLabel}" ToolTip="状态为「已完成」的批注文字颜色"/>
                             <ComboBox x:Name="PassColorCombo" Grid.Row="7" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
                         </Grid>
                         <CheckBox x:Name="ScreenshotBackgroundOnceReplyCheck" Content="截屏背景规则（预留）"

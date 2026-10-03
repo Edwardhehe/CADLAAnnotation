@@ -251,9 +251,10 @@ namespace GMAnnotation.Views
             if (n < min || n > max) throw new InvalidOperationException(name + "超出允许范围。");
             return n;
         }
-        /// <summary>在颜色 ComboBox 中按 ACI 索引选中对应项。</summary>
-        private static void SelectColor(ComboBox combo, short index) => combo.SelectedItem = AciColors.Find(index);
-        /// <summary>获取颜色 ComboBox 当前选中项的 ACI 索引，未选中时返回 7（白色）。</summary>
-        private static short SelectedColor(ComboBox combo) => (combo.SelectedItem as AciColorItem)?.Index ?? 7;
+        /// <summary>在颜色 ComboBox 中按 ACI <b>颜色号</b>选中对应项；原值记在 Tag 里，
+        /// 不在 1~255 的旧值（如 0/256）不选中任何项，保存时原样写回，不会被改成 7。</summary>
+        private static void SelectColor(ComboBox combo, short index) { combo.Tag = index; combo.SelectedItem = AciColors.Find(index); }
+        /// <summary>获取颜色 ComboBox 当前选中项的 ACI 颜色号；未选中时返回加载时的原值（没有原值才用 7）。</summary>
+        private static short SelectedColor(ComboBox combo) => (combo.SelectedItem as AciColorItem)?.Index ?? (combo.Tag is short original ? original : (short)7);
     }
 }

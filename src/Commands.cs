@@ -103,7 +103,14 @@ namespace GMAnnotation
                 }
 
                 AnnotationService.Create(doc, data, effective, first, second, placement.Point);
-                if (settings.AutoNumber) { settings.NextNumber++; SettingsStore.Save(settings); }
+                if (settings.AutoNumber)
+                {
+                    // 只回写编号：重新读取最新设置再保存（与面板 FinalizeAnnotation 一致），
+                    // 避免把批注窗口里刚切换的「立即入库」「输入建议」等开关用命令开始时的旧快照覆盖回去。
+                    var fresh = SettingsStore.Load();
+                    fresh.NextNumber = settings.NextNumber + 1;
+                    SettingsStore.Save(fresh);
+                }
                 doc.Editor.WriteMessage("\nGM批注已创建: " + data.Number);
                 AnnotationListPanel.RefreshIfOpen();
             }
