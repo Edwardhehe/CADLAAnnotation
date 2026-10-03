@@ -138,7 +138,8 @@
                             <TextBox x:Name="TextHeightText" Grid.Row="2" Grid.Column="1"/>
                         </Grid>
                         <TextBlock x:Name="TextSizeHintText" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"/>
-                        <CheckBox x:Name="FixedWidthCheck" Content="固定文字宽度"
+                        <CheckBox x:Name="FixedWidthCheck" Content="固定文字宽度（不勾选：文字框按文字实际宽度自适应）"
+                                  ToolTip="不勾选：框宽随文字收紧，单行约 18 个字高后换行；勾选：框宽至少为「固定宽度值」，文字更长时自动加宽"
                                   Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="120,4,0,2"/>
                         <Grid>
                             <Grid.ColumnDefinitions>

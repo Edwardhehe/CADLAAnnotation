@@ -3141,7 +3141,7 @@ namespace GMAnnotation
                         tr.Abort();
                     }
 
-                    width = Math.Max(Math.Max(probe.ActualWidth, requestedWidth), minWidth) + margin * 2.0;
+                    width = Math.Max(FitTextInnerWidth(settings, probe.ActualWidth, requestedWidth, settings.TextHeight), minWidth) + margin * 2.0;
                     var measured = probe.ActualHeight;
                     var estimated = EstimateBoxHeight(data, settings);
                     var contentH = measured > 1e-6 ? Math.Max(measured, estimated) : estimated;
@@ -3166,9 +3166,25 @@ namespace GMAnnotation
             var measuredH = 0.0;
             try { measuredW = text.ActualWidth; } catch { }
             try { measuredH = text.ActualHeight; } catch { }
-            width = Math.Max(Math.Max(measuredW, text.Width), minWidth) + margin * 2.0;
+            width = Math.Max(FitTextInnerWidth(settings, measuredW, text.Width, text.TextHeight), minWidth) + margin * 2.0;
             var contentH = measuredH > 1e-6 ? Math.Max(measuredH, estimated) : estimated;
             height = Math.Max(contentH, settings.TextHeight * 2.0) + margin * 2.0;
+        }
+
+        /// <summary>
+        /// 文字框内宽（不含边距）。
+        /// <para>• 勾选「固定文字宽度」：至少为折行宽度（= 固定宽度值，首行更长时已被加宽），文字更宽时随实测加宽；</para>
+        /// <para>• 未勾选：按文字实测宽度收紧，折行宽度（约 18 个字高）只作为换行上限，不再把框撑到折行宽度
+        /// （否则首行信息全部关闭、只有一行短正文时，框右侧会留出大片空白）。</para>
+        /// 量不到实测宽度时退回折行宽度，保证框一定包住文字。
+        /// </summary>
+        internal static double FitTextInnerWidth(AnnotationSettings settings, double measuredWidth, double wrapWidth, double textHeight)
+        {
+            if (double.IsNaN(measuredWidth) || measuredWidth <= 1e-6) return Math.Max(0.0, wrapWidth);
+            if (settings != null && settings.FixedWidth) return Math.Max(measuredWidth, wrapWidth);
+            var fit = measuredWidth + Math.Max(0.0, textHeight) * 0.25; // 少量余量：部分字体实测宽略小于渲染宽，防止末字压框
+            if (wrapWidth > 1e-6) fit = Math.Min(fit, wrapWidth);
+            return Math.Max(fit, measuredWidth);
         }
 
         /// <summary>
@@ -3487,11 +3503,13 @@ namespace GMAnnotation
             if(table.Has(name)){text.TextStyleId=table[name];}
             else
             {
-                PluginLog.Warning("TextStyle",$"文字样式「{name}」在图中不存在，已回退为默认样式。");
-                // 每张图每个样式名只在命令行提醒一次，避免批量操作刷屏。
+                // 每张图每个样式名只在日志和命令行提醒一次，避免批量操作/预览刷屏。
                 var key=db.GetHashCode()+"|"+name;
                 if(WarnedTextStyles.Add(key))
+                {
+                    PluginLog.Warning("TextStyle",$"文字样式「{name}」在图中不存在，已回退为默认样式。");
                     try{ActiveDocument()?.Editor.WriteMessage($"\n提示：图中没有文字样式「{name}」，批注文字已改用默认样式（可在 GM_PZ_SETTINGS 的「文字样式」中改选）。");}catch{}
+                }
             }
         }
         private static readonly HashSet<string> WarnedTextStyles=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
