@@ -308,6 +308,14 @@ namespace GMAnnotation.Views
         {
             if(string.IsNullOrWhiteSpace(ContentTextBox.Text)){MessageBox.Show(this,"请输入批注内容。","GM批注",MessageBoxButton.OK,MessageBoxImage.Information);ContentTextBox.Focus();return;}
             if(string.IsNullOrWhiteSpace(NumberTextBox.Text)){MessageBox.Show(this,"批注编号不能为空。","GM批注",MessageBoxButton.OK,MessageBoxImage.Information);return;}
+            // 手工改出的编号与本图其他批注重复时提醒（可坚持使用）。
+            Document activeDoc=null;
+            try{activeDoc=CadApplication.DocumentManager.MdiActiveDocument;}catch{}
+            if(AnnotationService.IsNumberUsedByOther(activeDoc,NumberTextBox.Text,Value.Id,out var usedBy))
+            {
+                var answer=MessageBox.Show(this,"编号「"+NumberTextBox.Text.Trim()+"」已被本图中另一条批注使用"+(string.IsNullOrEmpty(usedBy)?"":"（"+usedBy+"）")+"。\n\n仍要使用这个编号吗？","GM批注 · 编号重复",MessageBoxButton.YesNo,MessageBoxImage.Warning);
+                if(answer!=MessageBoxResult.Yes){NumberTextBox.Focus();NumberTextBox.SelectAll();return;}
+            }
             CaptureInto(Value);
             // 记住本图的图号与"立即入库"开关，下次自动带出。
             AnnotationHistoryStore.SetDrawingNo(_drawingPath,Value.DrawingNo);

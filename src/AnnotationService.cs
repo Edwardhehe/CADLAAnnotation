@@ -693,6 +693,8 @@ namespace GMAnnotation
                     var entity = tr.GetObject(oid, OpenMode.ForWrite, false) as Entity;
                     if(entity==null)continue;
                     entity.Layer=targetLayer;
+                    // 内嵌数据分片随主数据一起刷新：否则复制/粘贴或编组丢失后，回退读取到的是创建时的旧内容。
+                    if(TryGetRole(entity,out var memberRole))RewriteAnnotationXData(entity,id,memberRole,data);
                     if (entity is MText text)
                     {
                         text.Contents=FormatText(data,existingSettings);
@@ -1783,15 +1785,31 @@ namespace GMAnnotation
                     var name = entry.Key as string;
                     if (string.IsNullOrEmpty(name) || !name.StartsWith(GroupPrefix, StringComparison.Ordinal)) continue;
                     if (!(tr.GetObject(entry.Value, OpenMode.ForRead) is Group group)) continue;
-                    if (TryReadMaster(group, tr, out var data) && !string.IsNullOrWhiteSpace(data.Number))
+                    if (TryReadMaster(group, tr, out var data))
                     {
-                        var number = data.Number.Trim();
-                        var numericPart = number.StartsWith("GM-", StringComparison.OrdinalIgnoreCase) ? number.Substring(3) : number;
-                        if (int.TryParse(numericPart, out var parsed) && parsed > max) max = parsed;
+                        var parsed = ParseNumber(data.Number);
+                        if (parsed > max) max = parsed;
                     }
                 }
             }
             return max + 1;
+        }
+
+        /// <summary>编号是否已被本图中其他批注（Id 不同）使用；用于手工改编号时的重号提醒。读取失败按"未占用"处理。</summary>
+        public static bool IsNumberUsedByOther(Document doc, string number, string selfId, out string usedBy)
+        {
+            usedBy = null;
+            if (doc == null || doc.IsDisposed || string.IsNullOrWhiteSpace(number)) return false;
+            try
+            {
+                var key = number.Trim();
+                var hit = GetAllAnnotations(doc).FirstOrDefault(a => !string.Equals(a.Id, selfId, StringComparison.Ordinal) &&
+                    string.Equals((a.Number ?? "").Trim(), key, StringComparison.OrdinalIgnoreCase));
+                if (hit == null) return false;
+                usedBy = ContentPreview(hit.Content, 30);
+                return true;
+            }
+            catch (System.Exception ex) { PluginLog.Warning("Number.CheckDuplicate", ex.Message); return false; }
         }
 
         /// <summary>将本机设置中的下一个编号同步到当前 DWG。</summary>
@@ -2169,22 +2187,126 @@ namespace GMAnnotation
             return ObjectId.Null;
         }
 
-        /// <summary>重写实体 XData 中的批注 Id，保留角色与内嵌数据分片。</summary>
-        private static void RewriteAnnotationId(Entity e, string newId)
+        /// <summary>复制修复用的编号分配器：从图中现有最大 GM 编号 +1 起递增，并避开已占用编号。</summary>
+        internal sealed class NumberAllocator
         {
-            var rb = e.GetXDataForApplication(AnnotationCodec.AppName); if (rb == null) return;
-            var newRb = new ResultBuffer(); var first = true;
-            foreach (var tv in rb.AsArray())
+            private int _next;
+            public readonly HashSet<string> Used;
+            public NumberAllocator(int next, HashSet<string> used) { _next = Math.Max(1, next); Used = used ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase); }
+            public string Next()
             {
-                if (tv.TypeCode == (int)DxfCode.ExtendedDataRegAppName) { newRb.Add(tv); continue; }
-                if (first) { newRb.Add(new TypedValue((int)DxfCode.ExtendedDataAsciiString, newId)); first = false; }
-                else newRb.Add(tv);
+                string candidate;
+                do { candidate = "GM-" + (_next++).ToString("D3"); } while (!Used.Add(candidate));
+                return candidate;
             }
-            e.XData = newRb;
         }
 
-        /// <summary>修复同一批注 Id 下的孤儿实体：分配新 Id、重建编组并写入主数据。返回是否发生修复。</summary>
-        private static bool RepairBatch(Transaction tr, DBDictionary groups, string id, List<Entity> entities, List<string> warnings, List<AnnotationData> repairedOut = null)
+        /// <summary>对象尚未以写方式打开时才 UpgradeOpen（重复 UpgradeOpen 在部分宿主上会抛异常）。</summary>
+        private static void EnsureWrite(DBObject o) { if (o != null && !o.IsWriteEnabled) o.UpgradeOpen(); }
+
+        /// <summary>解析编号里的数字部分（"GM-012" / "12"）；不是数字编号返回 -1。</summary>
+        internal static int ParseNumber(string number)
+        {
+            if (string.IsNullOrWhiteSpace(number)) return -1;
+            var n = number.Trim();
+            var numericPart = n.StartsWith("GM-", StringComparison.OrdinalIgnoreCase) ? n.Substring(3) : n;
+            return int.TryParse(numericPart, out var parsed) ? parsed : -1;
+        }
+
+        /// <summary>按图中已有编组（正式批注）建编号分配器。</summary>
+        private static NumberAllocator CreateAllocator(Transaction tr, Database db, DBDictionary groups)
+        {
+            var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase); var max = 0;
+            foreach (var entry in groups)
+            {
+                var name = entry.Key as string;
+                if (string.IsNullOrEmpty(name) || !name.StartsWith(GroupPrefix, StringComparison.Ordinal)) continue;
+                if (!(tr.GetObject(entry.Value, OpenMode.ForRead) is Group group)) continue;
+                if (!TryReadMaster(group, tr, out var data) || string.IsNullOrWhiteSpace(data.Number)) continue;
+                used.Add(data.Number.Trim());
+                var parsed = ParseNumber(data.Number); if (parsed > max) max = parsed;
+            }
+            return new NumberAllocator(max + 1, used);
+        }
+
+        /// <summary>
+        /// 把同一批注 Id 下的孤儿实体（复制/粘贴产物）分成"各自独立的副本"：
+        /// 只在同一空间内合并；先按 COPY 生成的匿名编组归并，再按几何相接（文字在框内、引线端点连着框/云线）归并；
+        /// 任何一簇最多只能有一个文字和一个文字框——多次复制出的副本不会被并成同一条批注。
+        /// </summary>
+        private static List<List<Entity>> ClusterOrphans(Transaction tr, List<Entity> orphans)
+        {
+            var n = orphans.Count;
+            var parent = new int[n]; var texts = new int[n]; var boxes = new int[n];
+            var roles = new string[n]; var extents = new Extents3d?[n];
+            for (var i = 0; i < n; i++)
+            {
+                parent[i] = i;
+                roles[i] = TryGetRole(orphans[i], out var r) ? r : "";
+                texts[i] = roles[i] == "text" ? 1 : 0; boxes[i] = roles[i] == "box" ? 1 : 0;
+                try { extents[i] = orphans[i].GeometricExtents; } catch { extents[i] = null; }
+            }
+            int Find(int x) { while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+            bool Union(int a, int b)
+            {
+                var ra = Find(a); var rb = Find(b); if (ra == rb) return true;
+                if (orphans[a].OwnerId != orphans[b].OwnerId) return false;
+                if (texts[ra] + texts[rb] > 1 || boxes[ra] + boxes[rb] > 1) return false;
+                parent[rb] = ra; texts[ra] += texts[rb]; boxes[ra] += boxes[rb]; return true;
+            }
+            // ① COPY 产生的匿名编组（"*A…"）：同一匿名编组里的成员原本就是同一份副本。
+            var byAnonymous = new Dictionary<ObjectId, List<int>>();
+            for (var i = 0; i < n; i++)
+            {
+                ObjectIdCollection reactors = null;
+                try { reactors = orphans[i].GetPersistentReactorIds(); } catch { }
+                if (reactors == null) continue;
+                foreach (ObjectId rid in reactors)
+                {
+                    if (!rid.IsValid || rid.IsErased) continue;
+                    if (!(tr.GetObject(rid, OpenMode.ForRead, false) is Group g)) continue;
+                    var gname = g.Name ?? "";
+                    if (!gname.StartsWith("*", StringComparison.Ordinal)) continue;
+                    if (!byAnonymous.TryGetValue(rid, out var list)) { list = new List<int>(); byAnonymous[rid] = list; }
+                    list.Add(i);
+                }
+            }
+            foreach (var list in byAnonymous.Values) for (var k = 1; k < list.Count; k++) Union(list[0], list[k]);
+            // ② 几何相接：先"文字-框"，再"引线-框"，再"引线-云线"。
+            bool Touch(int a, int b)
+            {
+                if (!extents[a].HasValue || !extents[b].HasValue) return false;
+                var ea = extents[a].Value; var eb = extents[b].Value;
+                var diag = Math.Max(ea.MinPoint.DistanceTo(ea.MaxPoint), eb.MinPoint.DistanceTo(eb.MaxPoint));
+                var tol = Math.Max(1e-6, diag * 1e-4);
+                return ea.MinPoint.X <= eb.MaxPoint.X + tol && eb.MinPoint.X <= ea.MaxPoint.X + tol &&
+                       ea.MinPoint.Y <= eb.MaxPoint.Y + tol && eb.MinPoint.Y <= ea.MaxPoint.Y + tol;
+            }
+            var passes = new[] { new[] { "text", "box" }, new[] { "leader", "box" }, new[] { "leader", "cloud" } };
+            foreach (var pass in passes)
+                for (var i = 0; i < n; i++)
+                    for (var j = 0; j < n; j++)
+                    {
+                        if (i == j || roles[i] != pass[0] || roles[j] != pass[1]) continue;
+                        if (orphans[i].OwnerId != orphans[j].OwnerId || Find(i) == Find(j)) continue;
+                        if (Touch(i, j)) Union(i, j);
+                    }
+            var clusters = new Dictionary<int, List<Entity>>();
+            for (var i = 0; i < n; i++)
+            {
+                var root = Find(i);
+                if (!clusters.TryGetValue(root, out var list)) { list = new List<Entity>(); clusters[root] = list; }
+                list.Add(orphans[i]);
+            }
+            // 带文字的簇排在前面（原图不存在时由它沿用原 Id/编号）。
+            return clusters.Values.OrderByDescending(c => c.Count(e => TryGetRole(e, out var r) && r == "text")).ThenByDescending(c => c.Count).ToList();
+        }
+
+        /// <summary>修复同一批注 Id 下的孤儿实体（复制/粘贴产物）：按副本分簇，每一簇各自重建编组并写入主数据。
+        /// 原批注（编组仍在本图）保留原 Id 与编号，每个副本分配新 Id 和不重复的新编号；
+        /// 原编组不在本图时（跨图粘贴），第一份副本沿用原 Id 与编号（编号已被占用时才换号），其余副本换新。
+        /// 返回修复出的批注条数。</summary>
+        private static int RepairBatch(Transaction tr, DBDictionary groups, string id, List<Entity> entities, List<string> warnings, NumberAllocator allocator, List<KeyValuePair<AnnotationData, string>> repairedOut = null)
         {
             var groupName = GroupPrefix + id;
             Group group = null; var memberSet = new HashSet<ObjectId>();
@@ -2195,36 +2317,81 @@ namespace GMAnnotation
             }
             var orphans = new List<Entity>();
             foreach (var e in entities) if (!memberSet.Contains(e.ObjectId)) orphans.Add(e);
-            if (orphans.Count == 0) return false;
-            // 数据来源：优先实体内嵌分片（复制场景），其次原编组主数据（同图复制旧版批注）。
-            AnnotationData data = null;
-            foreach (var e in orphans) { if (TryReadEmbedded(e, out var d)) { data = d; break; } }
-            if (data == null && group != null) TryReadMaster(group, tr, out data);
-            if (data == null) { warnings?.Add("批注(Id=" + id + ")缺少内嵌数据且原编组不存在，无法自动恢复，请重新标注。"); return false; }
-            var newId = Guid.NewGuid().ToString("N"); data.Id = newId;
-            var newIds = new ObjectIdCollection();
-            foreach (var e in orphans) { e.UpgradeOpen(); RewriteAnnotationId(e, newId); newIds.Add(e.ObjectId); }
-            groups.UpgradeOpen();
-            var newGroup = new Group("GM批注 " + data.Number, true);
-            groups.SetAt(GroupPrefix + newId, newGroup); tr.AddNewlyCreatedDBObject(newGroup, true); newGroup.Append(newIds);
-            WriteMaster(newGroup, tr, data);
-            repairedOut?.Add(data);
-            return true;
+            if (orphans.Count == 0) return 0;
+            AnnotationData masterData = null;
+            if (group != null) TryReadMaster(group, tr, out masterData);
+            var repaired = 0; var keepOriginal = group == null;
+            foreach (var cluster in ClusterOrphans(tr, orphans))
+            {
+                // 数据来源：优先实体内嵌分片（复制场景），其次原编组主数据（同图复制旧版批注）。
+                AnnotationData data = null;
+                foreach (var e in cluster) { if (TryReadEmbedded(e, out var d)) { data = d; break; } }
+                if (data == null && masterData != null) TryReadMaster(group, tr, out data);
+                if (data == null) { warnings?.Add("批注(Id=" + id + ")缺少内嵌数据且原编组不存在，无法自动恢复，请重新标注。"); continue; }
+                var oldNumber = data.Number;
+                string note;
+                if (keepOriginal && !allocator.Used.Contains((data.Number ?? "").Trim()) && !string.IsNullOrWhiteSpace(data.Number))
+                {
+                    // 跨图粘贴的第一份：沿用原 Id 与编号。
+                    keepOriginal = false;
+                    data.Id = id;
+                    allocator.Used.Add(data.Number.Trim());
+                    note = "编组不随复制迁移，已重建编组（沿用编号 " + data.Number + "）";
+                }
+                else
+                {
+                    keepOriginal = false;
+                    data.Id = Guid.NewGuid().ToString("N");
+                    data.Number = allocator.Next();
+                    note = "复制产生的副本，已重建编组并重新编号：" + (oldNumber ?? "") + " → " + data.Number;
+                }
+                var newIds = new ObjectIdCollection();
+                foreach (var e in cluster)
+                {
+                    EnsureWrite(e);
+                    var role = TryGetRole(e, out var r) ? r : "";
+                    RewriteAnnotationXData(e, data.Id, role, data);
+                    newIds.Add(e.ObjectId);
+                }
+                EnsureWrite(groups);
+                var newGroup = new Group("GM批注 " + data.Number, true);
+                groups.SetAt(GroupPrefix + data.Id, newGroup); tr.AddNewlyCreatedDBObject(newGroup, true); newGroup.Append(newIds);
+                WriteMaster(newGroup, tr, data);
+                // 文字里显示的编号要跟着换。
+                if (oldNumber != data.Number) RefreshMemberTexts(tr, cluster, data);
+                repairedOut?.Add(new KeyValuePair<AnnotationData, string>(data, note));
+                repaired++;
+            }
+            return repaired;
+        }
+
+        /// <summary>副本换号后重写其文字内容（编号显示在首行）。设置读取失败时保持原文字。</summary>
+        private static void RefreshMemberTexts(Transaction tr, List<Entity> cluster, AnnotationData data)
+        {
+            try
+            {
+                var settings = SettingsForExisting(data);
+                foreach (var e in cluster) if (e is MText text) { EnsureWrite(text); text.Contents = FormatText(data, settings); }
+            }
+            catch (System.Exception ex) { PluginLog.Warning("Repair.RefreshText", ex.Message); }
         }
 
         /// <summary>全图扫描并修复复制/粘贴产生的批注，返回给命令行的报告文本（GM_PZ_REPAIR 命令）。</summary>
         public static string RepairOrphans(Document doc)
         {
-            var repaired = 0; var warnings = new List<string>(); var repairedData = new List<AnnotationData>();
+            var repaired = 0; var warnings = new List<string>(); var repairedData = new List<KeyValuePair<AnnotationData, string>>();
             using (doc.LockDocument()) using (var tr = doc.Database.TransactionManager.StartTransaction())
             {
                 var groups = (DBDictionary)tr.GetObject(doc.Database.GroupDictionaryId, OpenMode.ForRead);
                 var map = CollectAnnotatedEntities(tr, doc.Database);
-                foreach (var pair in map) if (RepairBatch(tr, groups, pair.Key, pair.Value, warnings, repairedData)) repaired++;
+                var allocator = CreateAllocator(tr, doc.Database, groups);
+                foreach (var pair in map) repaired += RepairBatch(tr, groups, pair.Key, pair.Value, warnings, allocator, repairedData);
                 tr.Commit();
             }
-            foreach (var data in repairedData) AnnotationHistoryStore.Record(doc, "复制修复", data, "编组不随复制迁移，已重建编组");
+            foreach (var item in repairedData) AnnotationHistoryStore.Record(doc, "复制修复", item.Key, item.Value);
             var report = repaired > 0 ? "已修复 " + repaired + " 条复制/粘贴产生的批注。" : "未发现需要修复的批注。";
+            var renumbered = repairedData.Where(x => x.Value.Contains("重新编号")).Select(x => x.Key.Number).ToList();
+            if (renumbered.Count > 0) report += "\n其中 " + renumbered.Count + " 条副本已重新编号：" + string.Join("、", renumbered.Take(20)) + (renumbered.Count > 20 ? "…" : "");
             foreach (var w in warnings) report += "\n" + w;
             return report;
         }
@@ -2496,6 +2663,13 @@ namespace GMAnnotation
                             traces.Add(new object[] { "合并删除", dup.Data, "内容与 " + master.Data.Number + " 完全相同，已并入该批注" });
                         }
                         if (newIds.Count > 0) masterGroup.Append(newIds);
+                        // 主批注自身成员的内嵌分片也按主数据重写一次（老批注编辑后分片可能还是创建时的旧数据）。
+                        foreach (var own in master.Entities)
+                        {
+                            if (own == null || own.IsErased || !TryGetRole(own, out var ownRole)) continue;
+                            EnsureWrite(own);
+                            RewriteAnnotationXData(own, master.Data.Id, ownRole, master.Data);
+                        }
                         if (absorbedNumbers.Count == 0) continue;
                         mergedBuckets++;
                         traces.Add(new object[] { "合并", master.Data, "并入 " + string.Join("、", absorbedNumbers.ToArray()) + "（共 " + absorbedNumbers.Count + " 条）" });
@@ -2614,10 +2788,15 @@ namespace GMAnnotation
                     if (!TryReadEmbedded(entity, out _)) return;
                     var groups = (DBDictionary)tr.GetObject(entity.Database.GroupDictionaryId, OpenMode.ForRead);
                     var map = CollectAnnotatedEntities(tr, entity.Database);
-                    var repairedData = new List<AnnotationData>();
-                    if (map.TryGetValue(id, out var list)) RepairBatch(tr, groups, id, list, null, repairedData);
+                    var repairedData = new List<KeyValuePair<AnnotationData, string>>();
+                    var allocator = CreateAllocator(tr, entity.Database, groups);
+                    if (map.TryGetValue(id, out var list)) RepairBatch(tr, groups, id, list, null, allocator, repairedData);
                     tr.Commit();
-                    foreach (var data in repairedData) AnnotationHistoryStore.Record(doc, "复制修复", data, "编组不随复制迁移，已重建编组");
+                    foreach (var item in repairedData)
+                    {
+                        AnnotationHistoryStore.Record(doc, "复制修复", item.Key, item.Value);
+                        if (item.Value.Contains("重新编号")) doc.Editor.WriteMessage("\n" + item.Value + "。");
+                    }
                 }
             }
             catch (System.Exception ex) { PluginLog.Error("AutoRepairIfNeeded", ex); }
