@@ -38,7 +38,7 @@ namespace GMAnnotation
         }
 
         /// <summary>按钮清单（快捷栏已取消，工具栏是唯一入口）。
-        /// 注意"批"指向 GM_PZ_DRAW（直接绘制、不弹出批注面板），与菜单里的"绘制批注"（GM_PZ_NOTE，弹面板）不同。</summary>
+        /// 注意"批"指向 GM_PZ_DRAW（直接绘制、不弹出批注面板）；菜单里的"绘制批注"是 GM_PZ_NOTE（按面板当前设置开始）。</summary>
         private static readonly ToolbarButtonSpec[] Buttons =
         {
             new ToolbarButtonSpec { Glyph = "批", Name = "批注", Help = "绘制批注：框选云线范围 → 放文字框 → 填写内容（不弹出批注面板）", Command = "GM_PZ_DRAW" },

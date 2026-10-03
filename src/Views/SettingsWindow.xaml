@@ -303,8 +303,8 @@
                         <TextBlock Text="命令速查" Style="{StaticResource SectionHeader}"/>
                         <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,10"
                                    FontFamily="Consolas, Microsoft YaHei UI">
-                            GM_PZ_DRAW     — 绘制批注（工具栏"批"键，不弹批注面板）<LineBreak/>
-                            GM_PZ_NOTE     — 批注面板（面板内选类型/形式/设置）<LineBreak/>
+                            GM_PZ_NOTE     — 绘制批注（菜单「绘制批注」：按面板当前设置开始，面板已开不重复开）<LineBreak/>
+                            GM_PZ_DRAW     — 直接绘制批注（工具栏"批"键，不弹批注面板）<LineBreak/>
                             GM_PZ_EDIT     — 编辑批注（双击或命令）<LineBreak/>
                             GM_PZ_MOVE     — 移动批注文字框<LineBreak/>
                             GM_PZ_DELETE   — 删除批注（支持 UNDO）<LineBreak/>

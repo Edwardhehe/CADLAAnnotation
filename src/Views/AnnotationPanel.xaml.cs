@@ -20,7 +20,7 @@ using CadApplication = Autodesk.AutoCAD.ApplicationServices.Core.Application;
 namespace GMAnnotation.Views
 {
     /// <summary>浮动批注面板：选择批注类型、形式和设置，开始批注时统一生效，支持连续批注。
-    /// 从菜单"绘制批注（面板）"（GM_PZ_NOTE）打开时会立即按面板当前设置开始批注。</summary>
+    /// 从菜单"绘制批注"（GM_PZ_NOTE）打开时会立即按面板当前设置开始批注。</summary>
     internal partial class AnnotationPanel : Window
     {
         private static AnnotationPanel _instance;

@@ -160,32 +160,38 @@ namespace GMAnnotation
                     TryInvoke(first, "Delete");
                 }
 
+                // 菜单按使用频率与逻辑分组（分隔线隔开）：
+                // 绘制 → 编辑 → 显示/查询 → 导出/数据 → 设置/工具栏/自动加载 → 关于。
+                // 「绘制批注」只保留一项（GM_PZ_NOTE：按面板当前设置开始，面板已开时不重复开会话）；
+                // GM_PZ_DRAW 命令仍保留（工具栏"批"键、用户脚本、命令行习惯）。
                 var index = 0;
-                AddCommandMenuItem(menu, index++, "绘制批注（面板）", "GM_PZ_NOTE");
-                AddCommandMenuItem(menu, index++, "绘制批注", "GM_PZ_DRAW");
+                AddCommandMenuItem(menu, index++, "绘制批注", "GM_PZ_NOTE");
+                AddCommandMenuItem(menu, index++, "单绘云线", "GM_PZ_CLOUD");
+                AddCommandMenuItem(menu, index++, "增补云线", "GM_PZ_ADDCLOUD");
+                TryInvoke(menu, "AddSeparator", index++);
                 AddCommandMenuItem(menu, index++, "编辑批注", "GM_PZ_EDIT");
                 AddCommandMenuItem(menu, index++, "移动批注", "GM_PZ_MOVE");
                 AddCommandMenuItem(menu, index++, "删除批注", "GM_PZ_DELETE");
-                AddCommandMenuItem(menu, index++, "隐藏批注", "GM_PZ_HIDE");
-                AddCommandMenuItem(menu, index++, "显示批注", "GM_PZ_SHOW");
                 AddCommandMenuItem(menu, index++, "合并批注", "GM_PZ_MERGE");
-                AddCommandMenuItem(menu, index++, "过滤批注", "GM_PZ_FILTER");
                 AddCommandMenuItem(menu, index++, "格式刷", "GM_PZ_FORMAT");
                 AddCommandMenuItem(menu, index++, "刷新批注文字", "GM_PZ_REFRESH");
-                AddCommandMenuItem(menu, index++, "单绘云线", "GM_PZ_CLOUD");
-                AddCommandMenuItem(menu, index++, "增补云线", "GM_PZ_ADDCLOUD");
+                TryInvoke(menu, "AddSeparator", index++);
                 AddCommandMenuItem(menu, index++, "批注列表", "GM_PZ_LIST");
+                AddCommandMenuItem(menu, index++, "过滤批注", "GM_PZ_FILTER");
+                AddCommandMenuItem(menu, index++, "隐藏批注", "GM_PZ_HIDE");
+                AddCommandMenuItem(menu, index++, "显示批注", "GM_PZ_SHOW");
                 AddCommandMenuItem(menu, index++, "批注汇总", "GM_PZ_SUMMARY");
                 AddCommandMenuItem(menu, index++, "批注清单", "GM_PZ_LEGEND");
-                AddCommandMenuItem(menu, index++, "批注历史", "GM_PZ_HISTORY");
-                AddCommandMenuItem(menu, index++, "知识库", "GM_PZ_KB");
+                TryInvoke(menu, "AddSeparator", index++);
                 AddCommandMenuItem(menu, index++, "导出Word", "GM_PZ_WORD");
                 AddCommandMenuItem(menu, index++, "导出批注", "GM_PZ_EXPORT");
                 AddCommandMenuItem(menu, index++, "导入批注", "GM_PZ_IMPORT");
+                AddCommandMenuItem(menu, index++, "批注历史", "GM_PZ_HISTORY");
+                AddCommandMenuItem(menu, index++, "知识库", "GM_PZ_KB");
                 AddCommandMenuItem(menu, index++, "修复批注", "GM_PZ_REPAIR");
-                AddCommandMenuItem(menu, index++, "显示/隐藏工具栏", "GM_PZ_TOOLBAR");
                 TryInvoke(menu, "AddSeparator", index++);
                 AddCommandMenuItem(menu, index++, "批注设置", "GM_PZ_SETTINGS");
+                AddCommandMenuItem(menu, index++, "显示/隐藏工具栏", "GM_PZ_TOOLBAR");
                 AddCommandMenuItem(menu, index++, "安装自动加载", "GM_PZ_INSTALL_AUTOLOAD");
                 AddCommandMenuItem(menu, index++, "卸载自动加载", "GM_PZ_UNINSTALL_AUTOLOAD");
                 AddCommandMenuItem(menu, index++, "重新加载菜单", "GM_PZ_MENU");

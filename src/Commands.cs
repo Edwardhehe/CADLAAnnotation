@@ -23,8 +23,8 @@ namespace GMAnnotation
     /// <summary>CAD 命令集合：绘制/编辑/删除批注、设置、重载菜单。</summary>
     public sealed class Commands
     {
-        /// <summary>绘制批注（面板）：打开浮动批注面板并<b>立即</b>按面板当前设置开始批注（无需再点"开始批注"）。
-        /// 面板已打开时只按其当前设置再开始一次；面板保持可用，可随时改设置后点"开始批注"或再次点菜单。</summary>
+        /// <summary>绘制批注（菜单「GM批注 → 绘制批注」，原「绘制批注（面板）」）：打开浮动批注面板并<b>立即</b>按面板当前设置开始批注。
+        /// 面板已打开时不重复创建；批注进行中再次点菜单只提示、不另开会话。面板保持可用，可随时改设置后点"开始批注"。</summary>
         [CommandMethod("GM_PZ_NOTE", CommandFlags.Modal)]
         public void CreateAnnotation()
         {
@@ -38,7 +38,7 @@ namespace GMAnnotation
             AnnotationPanel.RunQueuedAnnotation();
         }
 
-        /// <summary>绘制批注（工具栏的"批"键，原称"直接绘制批注"）：<b>不弹出批注面板</b>，按当前设置直接进入 CAD 交互——
+        /// <summary>直接绘制批注（工具栏的"批"键；菜单里已与 GM_PZ_NOTE 合并为一项，本命令保留供工具栏/脚本/命令行使用）：<b>不弹出批注面板</b>，按当前设置直接进入 CAD 交互——
         /// 框选云线范围 → 拖放文字框位置 → 填写批注内容 → 生成。
         /// 编号自增、留痕、知识库入库与面板流程完全一致（都走 AnnotationService.Create）。</summary>
         [CommandMethod("GM_PZ_DRAW", CommandFlags.Modal)]
