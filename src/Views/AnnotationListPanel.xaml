@@ -13,8 +13,7 @@
 
     <DockPanel>
         <!-- 底部状态栏 -->
-        <Border DockPanel.Dock="Bottom" Padding="12,8" Background="{DynamicResource SurfaceBrush}"
-                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
+        <Border DockPanel.Dock="Bottom" Padding="8,4,8,6">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -28,22 +27,30 @@
 
         <ListView x:Name="AnnotationList" SelectionMode="Single"
                   MouseDoubleClick="List_DoubleClick"
-                  BorderThickness="0" Margin="0">
-            <!-- 状态着色：已完成=绿色、已回复=黄色（颜色取深色，浅底与选中蓝底都能看清） -->
+                  AlternationCount="2" Margin="0">
+            <!-- 状态着色：已完成=绿色（LA 提示绿 #239137）、已回复=黄色；选中行统一 #337AB7 白字 -->
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
                     <Style.Triggers>
-                        <DataTrigger Binding="{Binding Status}" Value="已完成">
-                            <Setter Property="Foreground" Value="#1E8E3E"/>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding Status}" Value="已回复">
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding Status}" Value="已完成"/>
+                                <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="False"/>
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Foreground" Value="#239137"/>
+                        </MultiDataTrigger>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding Status}" Value="已回复"/>
+                                <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="False"/>
+                            </MultiDataTrigger.Conditions>
                             <Setter Property="Foreground" Value="#D19A00"/>
-                        </DataTrigger>
+                        </MultiDataTrigger>
                     </Style.Triggers>
                 </Style>
             </ListView.ItemContainerStyle>
             <ListView.ContextMenu>
-                <ContextMenu FontSize="12">
+                <ContextMenu>
                     <MenuItem Header="删除" Click="Delete_Click"/>
                 </ContextMenu>
             </ListView.ContextMenu>

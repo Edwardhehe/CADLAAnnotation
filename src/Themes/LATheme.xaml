@@ -1,381 +1,288 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- ═══════════════ 调色板 ═══════════════ -->
-    <SolidColorBrush x:Key="PrimaryBrush" Color="#2563EB"/>
-    <SolidColorBrush x:Key="PrimaryHoverBrush" Color="#1D4ED8"/>
-    <SolidColorBrush x:Key="PrimaryLightBrush" Color="#EFF6FF"/>
-    <SolidColorBrush x:Key="BackgroundBrush" Color="#F8FAFC"/>
-    <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="BorderBrush" Color="#E2E8F0"/>
-    <SolidColorBrush x:Key="BorderStrongBrush" Color="#CBD5E1"/>
-    <SolidColorBrush x:Key="TextBrush" Color="#1E293B"/>
-    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#64748B"/>
-    <SolidColorBrush x:Key="TextMutedBrush" Color="#94A3B8"/>
-    <SolidColorBrush x:Key="SuccessBrush" Color="#16A34A"/>
-    <SolidColorBrush x:Key="WarningBrush" Color="#D97706"/>
-
     <!--
-      排版体系（全部窗口统一，所有 Views 都合并本字典）：
-      - 字体：Microsoft YaHei UI；正文 / 控件 12，分区标题 13 SemiBold，辅助说明 11
-      - 控件高度：输入框 / 下拉 / 按钮 28；行距：输入控件上下各 3
-      - 标签列宽：设置窗口 120，对话框 72，窄面板 64（右对齐标签用 FieldLabel，窄面板左对齐用 FieldLabelLeft）
-      - 按钮：主按钮 PrimaryButton / 次按钮 SecondaryButton（最小宽 80）；工具条、行内按钮 CompactButton（最小宽 64）
-      - 窗口：Style="{DynamicResource GMWindow}"（派生窗口类型不会套用隐式 Window 样式，必须显式引用）
+      界面风格与 LA 批量打印（LA.BatchPlot，src/Common/Views/WpfUi.xaml 及各窗口）保持一致：
+      - 字体 Microsoft YaHei UI，全部文字 11（标题、表头只加粗，不放大）；TextFormattingMode=Display、UseLayoutRounding
+      - 窗口底色 SystemColors.Control（#F0F0F0），控件使用系统原生外观（不自绘圆角）
+      - 按钮：PluginButtonStyle（Padding 6,0，最小高 22，工具条 / 行内按钮）；对话框底栏按钮最小宽 82、高 28；主操作按钮 #0078D7 / 边框 #005FAA / 白字
+      - 分区：GroupBox（Padding 8，下间距 4），分区内小标题加粗；说明文字 DimGray
+      - 表格：PluginGridStyle（白底黑边、网格线 #DCDCDC、斑马纹 #FAFAFA、表头 #F5F7FA 加粗高 29、行高 24、选中 #337AB7 白字）
+      - 分隔线：#E0E0E0（区块）/ #CDCDCD（工具条竖线）
+      窗口统一引用 Style="{DynamicResource GMWindow}"（派生窗口类型不会套用隐式 Window 样式）。
     -->
 
-    <!-- ═══════════════ 窗口 ═══════════════ -->
+    <!-- ═══════════════ 调色板（取自 LA 批量打印） ═══════════════ -->
+    <SolidColorBrush x:Key="PrimaryBrush" Color="#0078D7"/>
+    <SolidColorBrush x:Key="PrimaryHoverBrush" Color="#005FAA"/>
+    <SolidColorBrush x:Key="PrimaryLightBrush" Color="#E5F1FB"/>
+    <SolidColorBrush x:Key="SelectionBrush" Color="#337AB7"/>
+    <SolidColorBrush x:Key="BackgroundBrush" Color="{x:Static SystemColors.ControlColor}"/>
+    <SolidColorBrush x:Key="SurfaceBrush" Color="{x:Static SystemColors.ControlColor}"/>
+    <SolidColorBrush x:Key="BorderBrush" Color="#E0E0E0"/>
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="#CDCDCD"/>
+    <SolidColorBrush x:Key="GridLineBrush" Color="#DCDCDC"/>
+    <SolidColorBrush x:Key="TextBrush" Color="{x:Static SystemColors.ControlTextColor}"/>
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="DimGray"/>
+    <SolidColorBrush x:Key="TextMutedBrush" Color="DimGray"/>
+    <SolidColorBrush x:Key="TitleBrush" Color="#1A73E8"/>
+    <SolidColorBrush x:Key="SuccessBrush" Color="#239137"/>
+    <SolidColorBrush x:Key="InfoBrush" Color="Navy"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="#D97706"/>
+
+    <!-- ═══════════════ LA 批量打印原样式（WpfUi.xaml 移植） ═══════════════ -->
+    <Style x:Key="PluginButtonStyle" TargetType="Button">
+        <Setter Property="FontFamily" Value="Microsoft YaHei UI"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Padding" Value="6,0"/>
+        <Setter Property="MinHeight" Value="22"/>
+    </Style>
+
+    <!-- 对应 LA 的 UiLayout.StyleGrid：白底、细边框、浅蓝选中、斑马纹、加粗表头。 -->
+    <Style x:Key="PluginGridStyle" TargetType="DataGrid">
+        <Setter Property="AutoGenerateColumns" Value="False"/>
+        <Setter Property="CanUserAddRows" Value="False"/>
+        <Setter Property="CanUserDeleteRows" Value="False"/>
+        <Setter Property="CanUserResizeRows" Value="False"/>
+        <Setter Property="SelectionMode" Value="Extended"/>
+        <Setter Property="SelectionUnit" Value="FullRow"/>
+        <Setter Property="HeadersVisibility" Value="Column"/>
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="BorderBrush" Value="Black"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="HorizontalGridLinesBrush" Value="#DCDCDC"/>
+        <Setter Property="VerticalGridLinesBrush" Value="#DCDCDC"/>
+        <Setter Property="RowBackground" Value="White"/>
+        <Setter Property="AlternatingRowBackground" Value="#FAFAFA"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontFamily" Value="Microsoft YaHei UI"/>
+        <Setter Property="ColumnHeaderHeight" Value="29"/>
+        <Setter Property="RowHeight" Value="24"/>
+        <Setter Property="ColumnHeaderStyle">
+            <Setter.Value>
+                <Style TargetType="DataGridColumnHeader">
+                    <Setter Property="FontWeight" Value="Bold"/>
+                    <Setter Property="Background" Value="#F5F7FA"/>
+                    <Setter Property="Foreground" Value="Black"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                    <Setter Property="Padding" Value="4,0"/>
+                </Style>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="CellStyle">
+            <Setter.Value>
+                <Style TargetType="DataGridCell">
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Padding" Value="4,0"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="DataGridCell">
+                                <Border Padding="{TemplateBinding Padding}"
+                                        Background="{TemplateBinding Background}">
+                                    <ContentPresenter VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                    <Style.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="#337AB7"/>
+                            <Setter Property="Foreground" Value="White"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 常用标签样式：垂直居中，同 WinForms Label 默认布局。 -->
+    <Style x:Key="FieldLabelStyle" TargetType="Label">
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Padding" Value="0"/>
+    </Style>
+
+    <!-- ═══════════════ 窗口（同 LA 各窗口根元素属性） ═══════════════ -->
     <Style x:Key="GMWindow" TargetType="Window">
         <Setter Property="FontFamily" Value="Microsoft YaHei UI"/>
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-        <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Foreground" Value="{x:Static SystemColors.ControlTextBrush}"/>
+        <Setter Property="Background" Value="{x:Static SystemColors.ControlBrush}"/>
         <Setter Property="UseLayoutRounding" Value="True"/>
-        <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
     </Style>
 
     <Style TargetType="TextBlock">
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
-    <!-- ═══════════════ 输入控件 ═══════════════ -->
+    <!-- ═══════════════ 输入控件：系统原生外观，仅统一高度与垂直居中 ═══════════════ -->
     <Style TargetType="TextBox">
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Padding" Value="8,4"/>
-        <Setter Property="Margin" Value="0,3"/>
-        <Setter Property="MinHeight" Value="28"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="MinHeight" Value="22"/>
+        <Setter Property="Margin" Value="0,4"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="TextBox">
-                    <Border x:Name="border" Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="4" Padding="{TemplateBinding Padding}">
-                        <ScrollViewer x:Name="PART_ContentHost"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsFocused" Value="True">
-                            <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
-                            <Setter TargetName="border" Property="BorderThickness" Value="1.5"/>
-                        </Trigger>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource BorderStrongBrush}"/>
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="border" Property="Opacity" Value="0.55"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
     </Style>
 
     <Style TargetType="ComboBox">
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Padding" Value="6,3"/>
-        <Setter Property="Margin" Value="0,3"/>
-        <Setter Property="MinHeight" Value="28"/>
-        <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="MinHeight" Value="22"/>
+        <Setter Property="Margin" Value="0,4"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>
 
     <Style TargetType="DatePicker">
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Margin" Value="0,3"/>
-        <Setter Property="MinHeight" Value="28"/>
+        <Setter Property="MinHeight" Value="22"/>
+        <Setter Property="Margin" Value="0,4"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
     </Style>
 
     <Style TargetType="CheckBox">
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Margin" Value="0,4"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="Margin" Value="0,0,0,2"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="Padding" Value="4,0,0,0"/>
     </Style>
 
     <Style TargetType="RadioButton">
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Margin" Value="0,3,12,3"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="Margin" Value="0,2,12,2"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="Padding" Value="4,0,0,0"/>
     </Style>
 
-    <!-- ═══════════════ Tab 标签 ═══════════════ -->
-    <Style TargetType="TabControl">
-        <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="0,0,0,1"/>
-        <Setter Property="Padding" Value="0"/>
-        <Setter Property="FontSize" Value="12"/>
-    </Style>
-    <Style TargetType="TabItem">
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Padding" Value="14,7"/>
-        <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="BorderBrush" Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0,0,0,2"/>
-        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="TabItem">
-                    <Border Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            Padding="{TemplateBinding Padding}" Cursor="Hand">
-                        <ContentPresenter ContentSource="Header" VerticalAlignment="Center"
-                                          TextElement.FontSize="12"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
-                            <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
-                            <Setter Property="FontWeight" Value="SemiBold"/>
-                        </Trigger>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" Value="{StaticResource PrimaryLightBrush}"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+    <!-- ═══════════════ 分组框（LA 设置窗口：Padding 8，下间距 4） ═══════════════ -->
+    <Style TargetType="GroupBox">
+        <Setter Property="Padding" Value="8"/>
+        <Setter Property="Margin" Value="0,0,0,4"/>
     </Style>
 
     <!-- ═══════════════ 按钮 ═══════════════ -->
-    <Style x:Key="PrimaryButton" TargetType="Button">
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="MinWidth" Value="80"/>
-        <Setter Property="Height" Value="28"/>
+    <!-- 对话框底部按钮（确定 / 取消 / 保存 …）：同 LA 设置窗口底栏，原生按钮，最小宽 82、高 28（LA 底栏行高 30） -->
+    <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource PluginButtonStyle}">
+        <Setter Property="MinWidth" Value="82"/>
+        <Setter Property="MinHeight" Value="28"/>
         <Setter Property="Margin" Value="6,0,0,0"/>
-        <Setter Property="Padding" Value="14,0"/>
-        <Setter Property="Background" Value="{StaticResource PrimaryBrush}"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <!-- 默认按钮：外观同 LA「保存」「打印」，原生按钮（IsDefault 时系统自动加强调边框） -->
+    <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}"/>
+
+    <!-- 主操作按钮：同 LA 主窗口「开始打印」 -->
+    <Style x:Key="AccentButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+        <Setter Property="Background" Value="#0078D7"/>
         <Setter Property="Foreground" Value="White"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}"
-                            CornerRadius="5" Padding="{TemplateBinding Padding}"
-                            BorderThickness="{TemplateBinding BorderThickness}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" Value="{StaticResource PrimaryHoverBrush}"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter Property="Background" Value="#1E40AF"/>
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Opacity" Value="0.55"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+        <Setter Property="BorderBrush" Value="#005FAA"/>
     </Style>
 
-    <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
-        <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}"
-                            CornerRadius="5" Padding="{TemplateBinding Padding}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
-                            <Setter Property="BorderBrush" Value="{StaticResource BorderStrongBrush}"/>
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Opacity" Value="0.55"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+    <!-- 工具条 / 行内小按钮：同 LA「设置」「浏览...」 -->
+    <Style x:Key="CompactButton" TargetType="Button" BasedOn="{StaticResource PluginButtonStyle}">
+        <Setter Property="MinWidth" Value="56"/>
+        <Setter Property="Margin" Value="4,0,0,0"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
-    <!-- 工具条 / 行内小按钮：与次按钮同外观，最小宽度更小 -->
-    <Style x:Key="CompactButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
-        <Setter Property="MinWidth" Value="64"/>
-        <Setter Property="Padding" Value="10,0"/>
+    <!-- 工具条竖分隔线（LA 主窗口动作行） -->
+    <Style x:Key="ToolbarSeparator" TargetType="Rectangle">
+        <Setter Property="Width" Value="1"/>
+        <Setter Property="Height" Value="14"/>
+        <Setter Property="Fill" Value="#CDCDCD"/>
+        <Setter Property="Margin" Value="8,0,4,0"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
-    <!-- ═══════════════ 分组框 ═══════════════ -->
-    <Style TargetType="GroupBox">
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-        <Setter Property="Padding" Value="10,8"/>
-        <Setter Property="HeaderTemplate">
-            <Setter.Value>
-                <DataTemplate>
-                    <TextBlock Text="{Binding}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
-                </DataTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
+    <!-- ═══════════════ 表格：隐式套用 LA 的 PluginGridStyle ═══════════════ -->
+    <Style TargetType="DataGrid" BasedOn="{StaticResource PluginGridStyle}"/>
 
-    <!-- ═══════════════ 表格（历史记录 / 知识库） ═══════════════ -->
-    <Style TargetType="DataGrid">
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="RowBackground" Value="{StaticResource SurfaceBrush}"/>
-        <Setter Property="AlternatingRowBackground" Value="#F8FAFC"/>
-        <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="VerticalGridLinesBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="GridLinesVisibility" Value="Horizontal"/>
-        <Setter Property="HeadersVisibility" Value="Column"/>
-        <Setter Property="MinRowHeight" Value="26"/>
-        <Setter Property="ColumnHeaderHeight" Value="30"/>
-    </Style>
-
-    <Style TargetType="DataGridColumnHeader">
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
-        <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="0,0,1,1"/>
-        <Setter Property="Padding" Value="8,0"/>
-        <Setter Property="VerticalContentAlignment" Value="Center"/>
-    </Style>
-
-    <Style TargetType="DataGridCell">
-        <Setter Property="Padding" Value="6,3"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="DataGridCell">
-                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}"
-                            SnapsToDevicePixels="True">
-                        <ContentPresenter VerticalAlignment="Center" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
-                    </Border>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-        <Style.Triggers>
-            <Trigger Property="IsSelected" Value="True">
-                <Setter Property="Background" Value="#DBEAFE"/>
-                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-                <Setter Property="BorderBrush" Value="#DBEAFE"/>
-            </Trigger>
-        </Style.Triggers>
-    </Style>
-
-    <!-- ═══════════════ 列表 ═══════════════ -->
+    <!-- ═══════════════ 列表（ListView 与表格同色：白底、表头 #F5F7FA 加粗、选中 #337AB7） ═══════════════ -->
     <Style TargetType="ListView">
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="BorderBrush" Value="Black"/>
+        <Setter Property="BorderThickness" Value="1"/>
     </Style>
 
+    <!-- 行模板自绘（GridView 行），保证选中色 #337AB7 白字不被系统主题的浅蓝覆盖；斑马纹 #FAFAFA 同表格 -->
     <Style TargetType="ListViewItem">
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Padding" Value="6,5"/>
+        <Setter Property="MinHeight" Value="24"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Background" Value="White"/>
         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="Margin" Value="0"/>
-        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListViewItem">
+                    <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
+                            BorderBrush="#DCDCDC" BorderThickness="0,0,0,1" SnapsToDevicePixels="True">
+                        <GridViewRowPresenter Columns="{TemplateBinding GridView.ColumnCollection}"
+                                              Content="{TemplateBinding Content}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
         <Style.Triggers>
+            <Trigger Property="ItemsControl.AlternationIndex" Value="1">
+                <Setter Property="Background" Value="#FAFAFA"/>
+            </Trigger>
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="{StaticResource PrimaryLightBrush}"/>
+                <Setter Property="Background" Value="#E5F1FB"/>
             </Trigger>
             <Trigger Property="IsSelected" Value="True">
-                <Setter Property="Background" Value="#DBEAFE"/>
-                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                <Setter Property="Background" Value="#337AB7"/>
+                <Setter Property="Foreground" Value="White"/>
             </Trigger>
         </Style.Triggers>
     </Style>
 
     <Style TargetType="GridViewColumnHeader">
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
-        <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="0,0,1,1"/>
-        <Setter Property="Padding" Value="8,6"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Background" Value="#F5F7FA"/>
+        <Setter Property="Foreground" Value="Black"/>
+        <Setter Property="MinHeight" Value="29"/>
+        <Setter Property="Padding" Value="4,0"/>
         <Setter Property="HorizontalContentAlignment" Value="Left"/>
     </Style>
 
     <!-- ═══════════════ 标签与排版 ═══════════════ -->
-    <!-- 对话框表单：右对齐标签 -->
+    <!-- 表单标签：LA 设置窗口为左对齐 TextBlock、垂直居中 -->
     <Style x:Key="FieldLabel" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="12"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-        <Setter Property="Margin" Value="0,0,10,0"/>
+        <Setter Property="Margin" Value="0,0,8,0"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
-        <Setter Property="TextAlignment" Value="Right"/>
-    </Style>
-
-    <!-- 窄面板表单：左对齐标签 -->
-    <Style x:Key="FieldLabelLeft" TargetType="TextBlock" BasedOn="{StaticResource FieldLabel}">
         <Setter Property="TextAlignment" Value="Left"/>
+    </Style>
+
+    <Style x:Key="FieldLabelLeft" TargetType="TextBlock" BasedOn="{StaticResource FieldLabel}">
         <Setter Property="Margin" Value="0,0,6,0"/>
-        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
     </Style>
 
+    <!-- 小标题：LA「手动输入」「快捷操作」——字号不变，仅加粗 -->
     <Style x:Key="SectionHeader" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="13"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-        <Setter Property="Margin" Value="0,10,0,6"/>
-    </Style>
-
-    <Style x:Key="SectionSeparator" TargetType="Rectangle">
-        <Setter Property="Height" Value="1"/>
-        <Setter Property="Fill" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="FontWeight" Value="Bold"/>
         <Setter Property="Margin" Value="0,8,0,4"/>
     </Style>
 
+    <!-- 区块分隔线：LA 关于页 #E0E0E0 -->
+    <Style x:Key="SectionSeparator" TargetType="Rectangle">
+        <Setter Property="Height" Value="1"/>
+        <Setter Property="Fill" Value="#E0E0E0"/>
+        <Setter Property="Margin" Value="0,8,0,8"/>
+    </Style>
+
+    <!-- 说明文字：LA 统一 DimGray，同字号 -->
     <Style x:Key="Caption" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="11"/>
-        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+        <Setter Property="Foreground" Value="DimGray"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
-        <Setter Property="Margin" Value="0,0,0,4"/>
-        <Setter Property="LineHeight" Value="18"/>
+        <Setter Property="Margin" Value="0,0,0,2"/>
     </Style>
 
     <Style x:Key="StatusText" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="11"/>
-        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+        <Setter Property="Foreground" Value="DimGray"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
     </Style>
 
     <!-- ═══════════════ 颜色模板 ═══════════════ -->
     <DataTemplate x:Key="AciColorTemplate">
         <StackPanel Orientation="Horizontal">
-            <Rectangle Width="18" Height="12" Fill="{Binding Brush}"
-                       Stroke="{StaticResource BorderStrongBrush}" StrokeThickness="0.5"
-                       RadiusX="2" RadiusY="2" Margin="0,0,8,0" VerticalAlignment="Center"/>
-            <TextBlock Text="{Binding Display}" VerticalAlignment="Center" FontSize="12"/>
+            <Rectangle Width="16" Height="10" Fill="{Binding Brush}"
+                       Stroke="#FFAAAAAA" StrokeThickness="1"
+                       Margin="0,0,6,0" VerticalAlignment="Center"/>
+            <TextBlock Text="{Binding Display}" VerticalAlignment="Center"/>
         </StackPanel>
     </DataTemplate>
 

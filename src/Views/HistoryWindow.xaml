@@ -11,9 +11,9 @@
         <ResourceDictionary Source="../Themes/LATheme.xaml"/>
     </Window.Resources>
 
-    <DockPanel Margin="12,10,12,12">
+    <DockPanel Margin="10,6,10,10">
         <!-- 顶部过滤栏 -->
-        <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+        <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="220"/>
@@ -24,7 +24,7 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="关键字" Style="{StaticResource FieldLabelLeft}"/>
+            <TextBlock Grid.Column="0" Text="关键字:" Style="{StaticResource FieldLabelLeft}"/>
             <TextBox x:Name="FilterBox" Grid.Column="1"
                      TextChanged="Filter_TextChanged"/>
             <CheckBox x:Name="CurrentDrawingOnly" Grid.Column="2" Content="仅当前图" Margin="12,0,0,0"

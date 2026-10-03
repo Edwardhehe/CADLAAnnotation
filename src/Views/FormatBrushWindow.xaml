@@ -13,9 +13,9 @@
         <ResourceDictionary Source="../Themes/LATheme.xaml"/>
     </Window.Resources>
 
-    <DockPanel Margin="16,12">
+    <DockPanel Margin="10">
         <!-- 底部：说明在左，按钮在右（与其他窗口一致：取消 / 确定） -->
-        <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button Content="取消" IsCancel="True" Style="{StaticResource SecondaryButton}"/>
                 <Button Content="确定" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Ok_Click"/>
@@ -28,7 +28,7 @@
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="8"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
@@ -60,7 +60,7 @@
                     </Grid>
                 </GroupBox>
 
-                <GroupBox Header="云线样式" Margin="0,10,0,0">
+                <GroupBox Header="云线样式">
                     <StackPanel Orientation="Horizontal">
                         <RadioButton x:Name="StyleEven" Content="等宽" IsChecked="True" Margin="0,0,18,0" VerticalContentAlignment="Center"/>
                         <RadioButton x:Name="StyleGradient" Content="渐变" VerticalContentAlignment="Center"/>

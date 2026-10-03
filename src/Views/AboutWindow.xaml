@@ -3,7 +3,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="关于 GM批注"
-        Width="380" SizeToContent="Height"
+        Width="370" MinWidth="330" SizeToContent="Height"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
         WindowStyle="ToolWindow"
@@ -12,52 +12,47 @@
         <ResourceDictionary Source="../Themes/LATheme.xaml"/>
     </Window.Resources>
 
-    <DockPanel Margin="20,18,20,14">
-        <!-- 底部按钮 -->
-        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button x:Name="CopyQqButton" Content="QQ 群" Style="{StaticResource SecondaryButton}" Margin="0"
-                    Click="CopyQq_Click" IsCancel="False"/>
-            <Button Content="确定" Style="{StaticResource PrimaryButton}" IsDefault="True" Click="Ok_Click"/>
-        </StackPanel>
+    <!-- 版式同 LA 批量打印「关于」：产品名与正文同字号仅加粗，分隔线 #E0E0E0，标签 DimGray -->
+    <Grid Margin="16,12,16,10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-        <StackPanel>
-            <!-- 产品名 + 版本 -->
-            <TextBlock x:Name="ProductNameText" Text="GM批注"
-                       FontSize="20" FontWeight="Bold"
-                       Foreground="{StaticResource PrimaryBrush}"
-                       HorizontalAlignment="Center"
-                       TextAlignment="Center"/>
+        <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,10">
+            <TextBlock x:Name="ProductNameText" Text="GM批注" FontWeight="Bold"
+                       Foreground="{StaticResource TitleBrush}" HorizontalAlignment="Center"/>
             <TextBlock x:Name="VersionText" Text="V0.0.0"
-                       FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"
-                       HorizontalAlignment="Center"
-                       TextAlignment="Center"
-                       Margin="0,6,0,14"/>
-
-            <Rectangle Style="{StaticResource SectionSeparator}" Margin="0,0,0,12"/>
-
-            <!-- 联系信息 -->
-            <Grid Margin="8,0,8,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="60"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <TextBlock Grid.Row="0" Grid.Column="0" Text="设计" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,8"/>
-                <TextBlock x:Name="DesignerText" Grid.Row="0" Grid.Column="1" Foreground="{StaticResource TextBrush}" Margin="0,0,0,8"/>
-
-                <TextBlock Grid.Row="1" Grid.Column="0" Text="邮箱" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,8"/>
-                <TextBlock x:Name="EmailText" Grid.Row="1" Grid.Column="1" Foreground="{StaticResource TextBrush}" Margin="0,0,0,8"/>
-
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="QQ群" Foreground="{StaticResource TextSecondaryBrush}"/>
-                <TextBlock x:Name="QqGroupText" Grid.Row="2" Grid.Column="1" Foreground="{StaticResource TextBrush}"/>
-            </Grid>
-
-            <Rectangle Style="{StaticResource SectionSeparator}" Margin="0,12,0,0"/>
+                       Foreground="DimGray" HorizontalAlignment="Center" Margin="0,4,0,0"/>
         </StackPanel>
-    </DockPanel>
+
+        <Border Grid.Row="1" Height="1" Background="#FFE0E0E0" Margin="0,0,0,10"/>
+
+        <StackPanel Grid.Row="2" Margin="8,0">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <TextBlock Text="设计：" Foreground="DimGray" Width="48"/>
+                <TextBlock x:Name="DesignerText"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <TextBlock Text="邮箱：" Foreground="DimGray" Width="48"/>
+                <TextBlock x:Name="EmailText"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <TextBlock Text="QQ群：" Foreground="DimGray" Width="48"/>
+                <TextBlock x:Name="QqGroupText"/>
+            </StackPanel>
+        </StackPanel>
+
+        <Border Grid.Row="3" Height="1" Background="#FFE0E0E0" Margin="0,8,0,10"/>
+
+        <StackPanel Grid.Row="4" HorizontalAlignment="Right" Orientation="Horizontal">
+            <Button x:Name="CopyQqButton" Content="QQ 群" MinWidth="76" Margin="0,0,4,0"
+                    Style="{StaticResource PluginButtonStyle}" Click="CopyQq_Click"/>
+            <Button Content="确定" MinWidth="76"
+                    Style="{StaticResource PluginButtonStyle}" IsDefault="True" Click="Ok_Click"/>
+        </StackPanel>
+    </Grid>
 </Window>

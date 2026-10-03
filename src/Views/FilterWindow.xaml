@@ -14,8 +14,7 @@
 
     <DockPanel>
         <!-- 顶部说明 -->
-        <Border DockPanel.Dock="Top" Padding="12,8" Background="{DynamicResource SurfaceBrush}"
-                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
+        <Border DockPanel.Dock="Top" Padding="10,8,10,6">
             <StackPanel>
                 <TextBlock x:Name="CountText" Text="共 0 种内容" Style="{StaticResource StatusText}"/>
                 <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
@@ -26,8 +25,7 @@
         </Border>
 
         <!-- 底部按钮 -->
-        <Border DockPanel.Dock="Bottom" Padding="12,8" Background="{DynamicResource SurfaceBrush}"
-                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
+        <Border DockPanel.Dock="Bottom" Padding="10,6,10,8">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -53,7 +51,7 @@
 
         <ListView x:Name="GroupList" SelectionMode="Single"
                   MouseDoubleClick="List_DoubleClick"
-                  BorderThickness="0" Margin="0">
+                  AlternationCount="2" Margin="10,0,10,0">
             <ListView.View>
                 <GridView>
                     <GridViewColumn Header="条数" Width="52" DisplayMemberBinding="{Binding Count}"/>

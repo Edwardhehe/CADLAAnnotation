@@ -11,9 +11,9 @@
         <ResourceDictionary Source="../Themes/LATheme.xaml"/>
     </Window.Resources>
 
-    <DockPanel Margin="12,10,12,12">
+    <DockPanel Margin="10">
         <!-- 底部：计数 / 数据文件 / 关闭 -->
-        <Grid DockPanel.Dock="Bottom" Margin="0,8,0,0">
+        <Grid DockPanel.Dock="Bottom" Margin="0,6,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -31,13 +31,13 @@
             <!-- ============ 页签一：条目（规范条文表，可直接编辑） ============ -->
             <TabItem Header="知识库条目">
                 <DockPanel Margin="8">
-                    <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="180"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="关键字" Style="{StaticResource FieldLabelLeft}"/>
+                        <TextBlock Grid.Column="0" Text="关键字:" Style="{StaticResource FieldLabelLeft}"/>
                         <TextBox x:Name="EntryFilterBox" Grid.Column="1"
                                  TextChanged="Filter_Changed"
                                  ToolTip="按 专业/属性/规范名称/规范编号/条款/内容 过滤"/>
@@ -63,7 +63,7 @@
                     <DataGrid x:Name="EntryGrid" AutoGenerateColumns="False"
                               CanUserAddRows="False" CanUserDeleteRows="False"
                               SelectionMode="Extended" SelectionUnit="FullRow"
-                              EnableRowVirtualization="True"
+                              EnableRowVirtualization="True" RowHeight="NaN" MinRowHeight="24"
                               CellEditEnding="EntryGrid_CellEditEnding"
                               PreviewMouseLeftButtonDown="EntryGrid_PreviewMouseLeftButtonDown">
                         <DataGrid.Columns>
@@ -98,14 +98,14 @@
             <!-- ============ 页签二：常用批注语 ============ -->
             <TabItem Header="常用批注语">
                 <DockPanel Margin="8">
-                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,4">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="180"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="关键字" Style="{StaticResource FieldLabelLeft}"/>
+                            <TextBlock Grid.Column="0" Text="关键字:" Style="{StaticResource FieldLabelLeft}"/>
                             <TextBox x:Name="PhraseFilterBox" Grid.Column="1"
                                      TextChanged="Filter_Changed" ToolTip="按常用批注语内容过滤"/>
                             <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
@@ -122,7 +122,7 @@
                             </StackPanel>
                         </Grid>
                         <DockPanel Margin="0,6,0,0">
-                            <TextBlock Text="新常用语" Style="{StaticResource FieldLabelLeft}"/>
+                            <TextBlock Text="新常用语:" Style="{StaticResource FieldLabelLeft}"/>
                             <Button DockPanel.Dock="Right" Content="替换选中" Style="{StaticResource CompactButton}"
                                     Click="PhraseReplace_Click"
                                     ToolTip="用左侧输入框的内容替换列表中选中的那一条常用批注语"/>
@@ -138,7 +138,7 @@
                     <DataGrid x:Name="PhraseGrid" AutoGenerateColumns="False" IsReadOnly="True"
                               CanUserAddRows="False" CanUserDeleteRows="False"
                               SelectionMode="Extended" SelectionUnit="FullRow"
-                              EnableRowVirtualization="True" MouseDoubleClick="PhraseGrid_MouseDoubleClick">
+                              EnableRowVirtualization="True" RowHeight="NaN" MinRowHeight="24" MouseDoubleClick="PhraseGrid_MouseDoubleClick">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="加入时间" Binding="{Binding TimeString}" Width="130"/>
                             <DataGridTextColumn Header="常用批注语" Binding="{Binding Text}" Width="*" MinWidth="240">

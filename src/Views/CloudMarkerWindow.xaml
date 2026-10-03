@@ -10,8 +10,8 @@
         <ResourceDictionary Source="../Themes/LATheme.xaml"/>
     </Window.Resources>
 
-    <DockPanel Margin="16,12">
-        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+    <DockPanel Margin="10">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
             <Button Content="取消" IsCancel="True" Style="{StaticResource SecondaryButton}"/>
             <Button Content="确定" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Ok_Click"/>
         </StackPanel>
@@ -19,126 +19,133 @@
         <StackPanel>
             <CheckBox x:Name="EnabledCheck" Content="单绘云线时在云线右下角（内侧）加标记" Margin="0,0,0,8"/>
 
-            <TextBlock Text="标记内容与尺寸" Style="{StaticResource SectionHeader}" Margin="0,0,0,6"/>
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="72"/>
-                    <ColumnDefinition Width="110"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-                <TextBlock Grid.Row="0" Text="文字" Style="{StaticResource FieldLabel}"/>
-                <TextBox x:Name="MarkerTextBox" Grid.Row="0" Grid.Column="1" MaxLength="20"/>
-                <CheckBox x:Name="AutoIncrementCheck" Grid.Row="0" Grid.Column="2" Content="每画一个自动递增" Margin="10,0,0,0"
-                          VerticalAlignment="Center" ToolTip="A→B→…→Z→AA，1→2，A9→A10；不含字母/数字结尾时保持不变"/>
-                <TextBlock Grid.Row="1" Text="字高(mm)" Style="{StaticResource FieldLabel}"/>
-                <TextBox x:Name="TextHeightBox" Grid.Row="1" Grid.Column="1"/>
-                <TextBlock Grid.Row="2" Text="框高(mm)" Style="{StaticResource FieldLabel}"/>
-                <TextBox x:Name="BoxHeightBox" Grid.Row="2" Grid.Column="1"/>
-                <TextBlock Grid.Row="2" Grid.Column="2" Text="建议字高 2 倍" Style="{StaticResource Caption}" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Row="3" Text="框宽(mm)" Style="{StaticResource FieldLabel}"/>
-                <TextBox x:Name="BoxWidthBox" Grid.Row="3" Grid.Column="1"/>
-                <TextBlock Grid.Row="3" Grid.Column="2" Text="建议字高 5~10 倍，仅第二排长形有效" Style="{StaticResource Caption}" Margin="10,0,0,0" VerticalAlignment="Center"/>
-            </Grid>
+            <GroupBox Header="标记内容与尺寸">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="80"/>
+                            <ColumnDefinition Width="130"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="文字" Style="{StaticResource FieldLabel}"/>
+                        <TextBox x:Name="MarkerTextBox" Grid.Row="0" Grid.Column="1" MaxLength="20"/>
+                        <CheckBox x:Name="AutoIncrementCheck" Grid.Row="0" Grid.Column="2" Content="每画一个自动递增" Margin="10,0,0,0"
+                                  VerticalAlignment="Center" ToolTip="A→B→…→Z→AA，1→2，A9→A10；不含字母/数字结尾时保持不变"/>
+                        <TextBlock Grid.Row="1" Text="字高(mm)" Style="{StaticResource FieldLabel}"/>
+                        <TextBox x:Name="TextHeightBox" Grid.Row="1" Grid.Column="1"/>
+                        <TextBlock Grid.Row="2" Text="框高(mm)" Style="{StaticResource FieldLabel}"/>
+                        <TextBox x:Name="BoxHeightBox" Grid.Row="2" Grid.Column="1"/>
+                        <TextBlock Grid.Row="2" Grid.Column="2" Text="建议字高 2 倍" Style="{StaticResource Caption}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="3" Text="框宽(mm)" Style="{StaticResource FieldLabel}"/>
+                        <TextBox x:Name="BoxWidthBox" Grid.Row="3" Grid.Column="1"/>
+                        <TextBlock Grid.Row="3" Grid.Column="2" Text="建议字高 5~10 倍，仅第二排长形有效" Style="{StaticResource Caption}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                    </Grid>
+                </StackPanel>
+            </GroupBox>
 
-            <Rectangle Style="{StaticResource SectionSeparator}"/>
-            <TextBlock Text="形状" Style="{StaticResource SectionHeader}" Margin="0,0,0,6"/>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                        <RadioButton GroupName="MarkerShape" Tag="圆" ToolTip="圆" Width="42" Height="36" Margin="0,0,6,0"
-                                     Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
-                            <Grid Width="24" Height="24">
-                                <Ellipse Width="22" Height="22" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
-                                <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
-                            </Grid>
-                        </RadioButton>
-                        <RadioButton GroupName="MarkerShape" Tag="矩形" ToolTip="矩形" Width="42" Height="36" Margin="0,0,6,0"
-                                     Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
-                            <Grid Width="24" Height="24">
-                                <Path Data="M2,2 L22,2 22,22 2,22 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
-                                <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
-                            </Grid>
-                        </RadioButton>
-                        <RadioButton GroupName="MarkerShape" Tag="六边形" ToolTip="六边形" Width="42" Height="36" Margin="0,0,6,0"
-                                     Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
-                            <Grid Width="24" Height="24">
-                                <Path Data="M1,12 L6.8,2 17.2,2 23,12 17.2,22 6.8,22 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
-                                <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
-                            </Grid>
-                        </RadioButton>
-                        <RadioButton GroupName="MarkerShape" Tag="八边形" ToolTip="八边形" Width="42" Height="36" Margin="0,0,6,0"
-                                     Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
-                            <Grid Width="24" Height="24">
-                                <Path Data="M7.9,2 L16.1,2 22,7.9 22,16.1 16.1,22 7.9,22 2,16.1 2,7.9 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
-                                <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
-                            </Grid>
-                        </RadioButton>
-                        <RadioButton GroupName="MarkerShape" Tag="菱形" ToolTip="菱形" Width="42" Height="36" Margin="0,0,6,0"
-                                     Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
-                            <Grid Width="24" Height="24">
-                                <Path Data="M12,1 L23,12 12,23 1,12 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
-                                <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
-                            </Grid>
-                        </RadioButton>
-            </StackPanel>
-            <StackPanel Orientation="Horizontal">
-                        <RadioButton GroupName="MarkerShape" Tag="椭圆" ToolTip="椭圆" Width="58" Height="36" Margin="0,0,6,0"
-                                     Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
-                            <Grid Width="40" Height="20">
-                                <Ellipse Width="38" Height="18" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
-                                <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
-                            </Grid>
-                        </RadioButton>
-                        <RadioButton GroupName="MarkerShape" Tag="长矩形" ToolTip="长矩形" Width="58" Height="36" Margin="0,0,6,0"
-                                     Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
-                            <Grid Width="40" Height="20">
-                                <Path Data="M1,1 L39,1 39,19 1,19 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
-                                <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
-                            </Grid>
-                        </RadioButton>
-                        <RadioButton GroupName="MarkerShape" Tag="长六边形" ToolTip="长六边形" Width="58" Height="36" Margin="0,0,6,0"
-                                     Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
-                            <Grid Width="40" Height="20">
-                                <Path Data="M1,10 L6.4,1 33.6,1 39,10 33.6,19 6.4,19 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
-                                <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
-                            </Grid>
-                        </RadioButton>
-                        <RadioButton GroupName="MarkerShape" Tag="长八边形" ToolTip="长八边形" Width="58" Height="36" Margin="0,0,6,0"
-                                     Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
-                            <Grid Width="40" Height="20">
-                                <Path Data="M6.3,1 L33.7,1 39,6.3 39,13.7 33.7,19 6.3,19 1,13.7 1,6.3 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
-                                <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
-                            </Grid>
-                        </RadioButton>
-                        <RadioButton GroupName="MarkerShape" Tag="平行四边形" ToolTip="平行四边形" Width="58" Height="36" Margin="0,0,6,0"
-                                     Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
-                            <Grid Width="40" Height="20">
-                                <Path Data="M1,19 L32.7,19 39,1 7.3,1 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
-                                <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
-                            </Grid>
-                        </RadioButton>
-            </StackPanel>
-            <TextBlock x:Name="ShapeNameText" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+            <GroupBox Header="形状">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <RadioButton GroupName="MarkerShape" Tag="圆" ToolTip="圆" Width="40" Height="34" Margin="0,0,6,0"
+                                             Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
+                                    <Grid Width="24" Height="24">
+                                        <Ellipse Width="22" Height="22" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
+                                        <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                                    </Grid>
+                                </RadioButton>
+                                <RadioButton GroupName="MarkerShape" Tag="矩形" ToolTip="矩形" Width="40" Height="34" Margin="0,0,6,0"
+                                             Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
+                                    <Grid Width="24" Height="24">
+                                        <Path Data="M2,2 L22,2 22,22 2,22 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
+                                        <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                                    </Grid>
+                                </RadioButton>
+                                <RadioButton GroupName="MarkerShape" Tag="六边形" ToolTip="六边形" Width="40" Height="34" Margin="0,0,6,0"
+                                             Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
+                                    <Grid Width="24" Height="24">
+                                        <Path Data="M1,12 L6.8,2 17.2,2 23,12 17.2,22 6.8,22 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
+                                        <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                                    </Grid>
+                                </RadioButton>
+                                <RadioButton GroupName="MarkerShape" Tag="八边形" ToolTip="八边形" Width="40" Height="34" Margin="0,0,6,0"
+                                             Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
+                                    <Grid Width="24" Height="24">
+                                        <Path Data="M7.9,2 L16.1,2 22,7.9 22,16.1 16.1,22 7.9,22 2,16.1 2,7.9 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
+                                        <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                                    </Grid>
+                                </RadioButton>
+                                <RadioButton GroupName="MarkerShape" Tag="菱形" ToolTip="菱形" Width="40" Height="34" Margin="0,0,6,0"
+                                             Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
+                                    <Grid Width="24" Height="24">
+                                        <Path Data="M12,1 L23,12 12,23 1,12 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
+                                        <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                                    </Grid>
+                                </RadioButton>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                                <RadioButton GroupName="MarkerShape" Tag="椭圆" ToolTip="椭圆" Width="56" Height="34" Margin="0,0,6,0"
+                                             Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
+                                    <Grid Width="40" Height="20">
+                                        <Ellipse Width="38" Height="18" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
+                                        <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                                    </Grid>
+                                </RadioButton>
+                                <RadioButton GroupName="MarkerShape" Tag="长矩形" ToolTip="长矩形" Width="56" Height="34" Margin="0,0,6,0"
+                                             Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
+                                    <Grid Width="40" Height="20">
+                                        <Path Data="M1,1 L39,1 39,19 1,19 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
+                                        <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                                    </Grid>
+                                </RadioButton>
+                                <RadioButton GroupName="MarkerShape" Tag="长六边形" ToolTip="长六边形" Width="56" Height="34" Margin="0,0,6,0"
+                                             Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
+                                    <Grid Width="40" Height="20">
+                                        <Path Data="M1,10 L6.4,1 33.6,1 39,10 33.6,19 6.4,19 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
+                                        <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                                    </Grid>
+                                </RadioButton>
+                                <RadioButton GroupName="MarkerShape" Tag="长八边形" ToolTip="长八边形" Width="56" Height="34" Margin="0,0,6,0"
+                                             Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
+                                    <Grid Width="40" Height="20">
+                                        <Path Data="M6.3,1 L33.7,1 39,6.3 39,13.7 33.7,19 6.3,19 1,13.7 1,6.3 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
+                                        <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                                    </Grid>
+                                </RadioButton>
+                                <RadioButton GroupName="MarkerShape" Tag="平行四边形" ToolTip="平行四边形" Width="56" Height="34" Margin="0,0,6,0"
+                                             Style="{StaticResource {x:Type ToggleButton}}" Checked="Shape_Checked">
+                                    <Grid Width="40" Height="20">
+                                        <Path Data="M1,19 L32.7,19 39,1 7.3,1 Z" Stroke="{StaticResource TextBrush}" StrokeThickness="1.2"/>
+                                        <TextBlock Text="A" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                                    </Grid>
+                                </RadioButton>
+                    </StackPanel>
+                    <TextBlock x:Name="ShapeNameText" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                </StackPanel>
+            </GroupBox>
 
-            <Rectangle Style="{StaticResource SectionSeparator}"/>
-            <TextBlock Text="颜色" Style="{StaticResource SectionHeader}" Margin="0,0,0,6"/>
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <CheckBox x:Name="FollowCloudColorCheck" Content="与云线同色" VerticalAlignment="Center"
-                          Checked="FollowColor_Changed" Unchecked="FollowColor_Changed"/>
-                <ComboBox x:Name="ColorCombo" Grid.Column="1" Margin="12,0,0,0" ItemTemplate="{StaticResource AciColorTemplate}"/>
-            </Grid>
+            <GroupBox Header="颜色">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <CheckBox x:Name="FollowCloudColorCheck" Content="与云线同色" VerticalAlignment="Center"
+                                  Checked="FollowColor_Changed" Unchecked="FollowColor_Changed"/>
+                        <ComboBox x:Name="ColorCombo" Grid.Column="1" Margin="12,0,0,0" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                    </Grid>
 
-            <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap">
-                尺寸按打印毫米填写，落图时与批注字高使用同一套换算：开了字体自适应就随云线大小自动缩放，选了固定比例 1:N 就 ×N（布局图纸空间按 1:1）。标记与云线同图层，并与云线编成一组（选中云线即可一起移动/复制/删除）。
-            </TextBlock>
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap">
+                        尺寸按打印毫米填写，落图时与批注字高使用同一套换算：开了字体自适应就随云线大小自动缩放，选了固定比例 1:N 就 ×N（布局图纸空间按 1:1）。标记与云线同图层，并与云线编成一组（选中云线即可一起移动/复制/删除）。
+                    </TextBlock>
+                </StackPanel>
+            </GroupBox>
         </StackPanel>
     </DockPanel>
 </Window>

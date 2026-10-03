@@ -2,345 +2,366 @@
         x:ClassModifier="internal"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="GM批注设置" Width="660" Height="560"
-        MinWidth="620" MinHeight="440"
+        Title="GM批注设置" Width="700" Height="600"
+        MinWidth="640" MinHeight="460"
         ResizeMode="CanResizeWithGrip" WindowStartupLocation="CenterScreen" Style="{DynamicResource GMWindow}">
     <Window.Resources>
         <ResourceDictionary Source="../Themes/LATheme.xaml"/>
     </Window.Resources>
 
     <DockPanel>
-        <!-- 底部按钮栏 -->
-        <Border DockPanel.Dock="Bottom" Background="{StaticResource SurfaceBrush}"
-                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"
-                Padding="14,10">
-            <DockPanel LastChildFill="False">
-                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-                    <Button Content="恢复默认" Style="{StaticResource CompactButton}" Margin="0" Click="Reset_Click"
-                            ToolTip="把界面上的各项恢复为默认值（不含下一个编号）；点「保存设置」后才生效"/>
-                    <Button Content="导入…" Style="{StaticResource CompactButton}" Click="Import_Click"
-                            ToolTip="从导出的设置文件读入到界面；点「保存设置」后才生效"/>
-                    <Button Content="导出…" Style="{StaticResource CompactButton}" Click="Export_Click"
-                            ToolTip="把界面上的当前值导出为设置文件（可在其他电脑导入）"/>
-                    <Button Content="打开数据目录" Style="{StaticResource CompactButton}" Click="OpenFolder_Click"
-                            ToolTip="%AppData%\GMAnnotation（设置、历史记录、知识库、日志）"/>
-                </StackPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Content="取消" IsCancel="True" Style="{StaticResource SecondaryButton}" Click="Cancel_Click"/>
-                    <Button Content="保存设置" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Save_Click"/>
-                </StackPanel>
-            </DockPanel>
-        </Border>
+        <!-- 底部按钮栏（同 LA 设置窗口：无分隔条，按钮行高 30，外边距 10） -->
+        <DockPanel DockPanel.Dock="Bottom" LastChildFill="False" Height="30" Margin="10,6,10,8">
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Content="恢复默认" Style="{StaticResource SecondaryButton}" MinWidth="96" Margin="0" Click="Reset_Click"
+                        ToolTip="把界面上的各项恢复为默认值（不含下一个编号）；点「保存设置」后才生效"/>
+                <Button Content="导入…" Style="{StaticResource SecondaryButton}" Click="Import_Click"
+                        ToolTip="从导出的设置文件读入到界面；点「保存设置」后才生效"/>
+                <Button Content="导出…" Style="{StaticResource SecondaryButton}" Click="Export_Click"
+                        ToolTip="把界面上的当前值导出为设置文件（可在其他电脑导入）"/>
+                <Button Content="打开数据目录" Style="{StaticResource SecondaryButton}" MinWidth="96" Click="OpenFolder_Click"
+                        ToolTip="%AppData%\GMAnnotation（设置、历史记录、知识库、日志）"/>
+            </StackPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Content="取消" IsCancel="True" Style="{StaticResource SecondaryButton}" Click="Cancel_Click"/>
+                <Button Content="保存设置" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Save_Click"/>
+            </StackPanel>
+        </DockPanel>
 
-        <TabControl Margin="8,6,8,0">
+        <TabControl Margin="10,10,10,0">
 
             <!-- ═══════════ 外形与云线 ═══════════ -->
             <TabItem Header="外形与云线">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,10">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="10,10,10,0">
                     <StackPanel>
-                        <TextBlock Text="云线外形" Style="{StaticResource SectionHeader}" Margin="0,0,0,6"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="132"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="批注外形" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="ShapeCombo" Grid.Row="0" Grid.Column="1"/>
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="云线样式" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="CloudStyleCombo" Grid.Row="1" Grid.Column="1"/>
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="云线半径(mm)" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="CloudRadiusText" Grid.Row="2" Grid.Column="1"/>
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="云线/引线线宽(mm)" Style="{StaticResource FieldLabel}" ToolTip="云线与引线共用此线宽；渐变云线按逐段宽度绘制"/>
-                            <TextBox x:Name="LineWidthText" Grid.Row="3" Grid.Column="1"/>
-                        </Grid>
-                        <CheckBox x:Name="CloudAutoFitCheck" Content="云线自适应"
-                                  Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="132,4,0,2"/>
+                        <GroupBox Header="云线外形">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="145"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="批注外形" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="ShapeCombo" Width="240" HorizontalAlignment="Left" Grid.Row="0" Grid.Column="1"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="云线样式" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="CloudStyleCombo" Width="240" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="1"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="云线半径(mm)" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="CloudRadiusText" Width="130" HorizontalAlignment="Left" Grid.Row="2" Grid.Column="1"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="云线/引线线宽(mm)" Style="{StaticResource FieldLabel}" ToolTip="云线与引线共用此线宽；渐变云线按逐段宽度绘制"/>
+                                    <TextBox x:Name="LineWidthText" Width="130" HorizontalAlignment="Left" Grid.Row="3" Grid.Column="1"/>
+                                </Grid>
+                                <CheckBox x:Name="CloudAutoFitCheck" Content="云线自适应"
+                                          Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="145,4,0,2"/>
+                            </StackPanel>
+                        </GroupBox>
 
-                        <Rectangle Style="{StaticResource SectionSeparator}"/>
+                        <GroupBox Header="比例选型与自适应">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="145"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="比例选型" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="ScaleRatioCombo" Width="240" HorizontalAlignment="Left" Grid.Row="0" Grid.Column="1" IsEditable="True"
+                                              SelectionChanged="ScaleRatio_Changed"
+                                              ToolTip="出图比例 1:N。选中后字高 = 打印字高(mm) × N、云线半径 = 打印云线半径(mm) × N，并自动取消两个自适应勾选"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="字高占云线 %" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="AutoTextViewPercentText" Width="130" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="1"/>
+                                </Grid>
+                                <CheckBox x:Name="FontAutoFitCheck" Content="字体自适应（字高按云线尺寸比例自动调整，比例不参与）"
+                                          Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="0,6,0,0"/>
+                                <TextBlock x:Name="ScaleHintText" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
 
-                        <TextBlock Text="比例选型与自适应" Style="{StaticResource SectionHeader}"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="132"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="比例选型" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="ScaleRatioCombo" Grid.Row="0" Grid.Column="1" IsEditable="True"
-                                      SelectionChanged="ScaleRatio_Changed"
-                                      ToolTip="出图比例 1:N。选中后字高 = 打印字高(mm) × N、云线半径 = 打印云线半径(mm) × N，并自动取消两个自适应勾选"/>
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="字高占云线 %" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="AutoTextViewPercentText" Grid.Row="1" Grid.Column="1"/>
-                        </Grid>
-                        <CheckBox x:Name="FontAutoFitCheck" Content="字体自适应（字高按云线尺寸比例自动调整，比例不参与）"
-                                  Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="0,6,0,0"/>
-                        <TextBlock x:Name="ScaleHintText" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                        <GroupBox Header="绘图辅助">
+                            <StackPanel>
+                                <StackPanel>
+                                    <CheckBox x:Name="AutoCloseOrthoCheck" Content="绘制时暂时关闭正交（ORTHO）"/>
+                                    <CheckBox x:Name="AutoCloseSnapCheck" Content="绘制时暂时关闭对象捕捉（OSNAP）"/>
+                                    <CheckBox x:Name="DoubleClickEditCheck" Content="双击已创建的批注进行编辑"/>
+                                    <CheckBox x:Name="ViewTopIsNorthCheck" Content="视图上方为北（预留）" IsEnabled="False"
+                                              ToolTip="当前版本批注始终按当前 UCS 摆放，尚未实现随视图扭转；本项仅保留设置值"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
 
-                        <Rectangle Style="{StaticResource SectionSeparator}"/>
-
-                        <TextBlock Text="绘图辅助" Style="{StaticResource SectionHeader}"/>
-                        <StackPanel>
-                            <CheckBox x:Name="AutoCloseOrthoCheck" Content="绘制时暂时关闭正交（ORTHO）"/>
-                            <CheckBox x:Name="AutoCloseSnapCheck" Content="绘制时暂时关闭对象捕捉（OSNAP）"/>
-                            <CheckBox x:Name="DoubleClickEditCheck" Content="双击已创建的批注进行编辑"/>
-                            <CheckBox x:Name="ViewTopIsNorthCheck" Content="视图上方为北（预留）" IsEnabled="False"
-                                      ToolTip="当前版本批注始终按当前 UCS 摆放，尚未实现随视图扭转；本项仅保留设置值"/>
-                        </StackPanel>
-
-                        <Rectangle Style="{StaticResource SectionSeparator}"/>
-
-                        <TextBlock Text="云线标记（单绘云线）" Style="{StaticResource SectionHeader}"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <CheckBox x:Name="CloudMarkerEnabledCheck" Content="单绘云线时在右下角内侧加标记（框 + 文字）"
-                                      VerticalAlignment="Center" Checked="CloudMarkerEnabled_Changed" Unchecked="CloudMarkerEnabled_Changed"/>
-                            <Button Grid.Column="1" Content="标记设置…" Style="{StaticResource CompactButton}" Click="CloudMarkerSettings_Click"/>
-                        </Grid>
-                        <TextBlock x:Name="CloudMarkerSummaryText" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0"/>
-                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,2,0,0"
-                                   Text="作用于 GM_PZ_CLOUD 及面板/GM_PZ_DRAW 的「仅绘云线」；命令行也可用 M 开关、S 设置。标记尺寸与批注字高同一套比例/自适应换算。"/>
+                        <GroupBox Header="云线标记（单绘云线）">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox x:Name="CloudMarkerEnabledCheck" Content="单绘云线时在右下角内侧加标记（框 + 文字）"
+                                              VerticalAlignment="Center" Checked="CloudMarkerEnabled_Changed" Unchecked="CloudMarkerEnabled_Changed"/>
+                                    <Button Grid.Column="1" Content="标记设置…" Style="{StaticResource CompactButton}" Click="CloudMarkerSettings_Click"/>
+                                </Grid>
+                                <TextBlock x:Name="CloudMarkerSummaryText" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                           Text="作用于 GM_PZ_CLOUD 及面板/GM_PZ_DRAW 的「仅绘云线」；命令行也可用 M 开关、S 设置。标记尺寸与批注字高同一套比例/自适应换算。"/>
+                            </StackPanel>
+                        </GroupBox>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- ═══════════ 批注文字 ═══════════ -->
             <TabItem Header="批注文字">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,10">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="10,10,10,0">
                     <StackPanel>
-                        <TextBlock Text="文字尺寸" Style="{StaticResource SectionHeader}" Margin="0,0,0,6"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="132"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="首行字高(mm)" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="HeaderHeightText" Grid.Row="0" Grid.Column="1"/>
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="次行字高(mm)" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="SecondLineHeightText" Grid.Row="1" Grid.Column="1"/>
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="正文字高(mm)" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="TextHeightText" Grid.Row="2" Grid.Column="1"/>
-                        </Grid>
-                        <TextBlock x:Name="TextSizeHintText" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"/>
-                        <CheckBox x:Name="FixedWidthCheck" Content="固定文字宽度（不勾选：文字框按文字实际宽度自适应）"
-                                  ToolTip="不勾选：框宽随文字收紧，单行约 18 个字高后换行；勾选：框宽至少为「固定宽度值」，文字更长时自动加宽"
-                                  Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="132,4,0,2"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="132"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="固定宽度值(mm)" Style="{StaticResource FieldLabel}"
-                                       ToolTip="打印尺寸，随比例/自适应换算；首行（日期/专业/批注人）比该宽度长时会自动加宽，避免折行"/>
-                            <TextBox x:Name="FixedWidthValueText" Grid.Column="1"/>
-                        </Grid>
+                        <GroupBox Header="文字尺寸">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="145"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="首行字高(mm)" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="HeaderHeightText" Width="130" HorizontalAlignment="Left" Grid.Row="0" Grid.Column="1"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="次行字高(mm)" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="SecondLineHeightText" Width="130" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="1"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="正文字高(mm)" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="TextHeightText" Width="130" HorizontalAlignment="Left" Grid.Row="2" Grid.Column="1"/>
+                                </Grid>
+                                <TextBlock x:Name="TextSizeHintText" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                <CheckBox x:Name="FixedWidthCheck" Content="固定文字宽度（不勾选：文字框按文字实际宽度自适应）"
+                                          ToolTip="不勾选：框宽随文字收紧，单行约 18 个字高后换行；勾选：框宽至少为「固定宽度值」，文字更长时自动加宽"
+                                          Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="145,4,0,2"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="145"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="固定宽度值(mm)" Style="{StaticResource FieldLabel}"
+                                               ToolTip="打印尺寸，随比例/自适应换算；首行（日期/专业/批注人）比该宽度长时会自动加宽，避免折行"/>
+                                    <TextBox x:Name="FixedWidthValueText" Width="130" HorizontalAlignment="Left" Grid.Column="1"/>
+                                </Grid>
+                            </StackPanel>
+                        </GroupBox>
 
-                        <Rectangle Style="{StaticResource SectionSeparator}"/>
+                        <GroupBox Header="批注信息">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="145"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="默认批注人" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="DefaultAuthorText" Width="240" HorizontalAlignment="Left" Grid.Row="0" Grid.Column="1"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="默认角色" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="DefaultRoleCombo" Width="240" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="1" IsEditable="True"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="默认专业" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="DefaultDisciplineCombo" Width="240" HorizontalAlignment="Left" Grid.Row="2" Grid.Column="1" IsEditable="True"/>
+                                </Grid>
+                                <CheckBox x:Name="AutoNumberCheck" Content="自动编号" Margin="145,6,0,2"/>
+                            </StackPanel>
+                        </GroupBox>
 
-                        <TextBlock Text="批注信息" Style="{StaticResource SectionHeader}"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="132"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="默认批注人" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="DefaultAuthorText" Grid.Row="0" Grid.Column="1"/>
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="默认角色" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="DefaultRoleCombo" Grid.Row="1" Grid.Column="1" IsEditable="True"/>
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="默认专业" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="DefaultDisciplineCombo" Grid.Row="2" Grid.Column="1" IsEditable="True"/>
-                        </Grid>
-                        <CheckBox x:Name="AutoNumberCheck" Content="自动编号" Margin="132,6,0,2"/>
-
-                        <Rectangle Style="{StaticResource SectionSeparator}"/>
-
-                        <TextBlock Text="批注框内显示内容" Style="{StaticResource SectionHeader}"/>
-                        <StackPanel>
-                            <CheckBox Content="批注内容（必选）" IsChecked="True" IsEnabled="False"/>
-                            <CheckBox x:Name="ShowDateCheck" Content="日期"/>
-                            <CheckBox x:Name="ShowDisciplineCheck" Content="专业"/>
-                            <CheckBox x:Name="ShowAuthorCheck" Content="批注人"/>
-                            <CheckBox x:Name="ShowRoleCheck" Content="角色"/>
-                            <CheckBox x:Name="ShowDrawingNoCheck" Content="图号"/>
-                            <CheckBox x:Name="ShowStatusCheck" Content="状态"/>
-                        </StackPanel>
+                        <GroupBox Header="批注框内显示内容">
+                            <StackPanel>
+                                <StackPanel>
+                                    <CheckBox Content="批注内容（必选）" IsChecked="True" IsEnabled="False"/>
+                                    <CheckBox x:Name="ShowDateCheck" Content="日期"/>
+                                    <CheckBox x:Name="ShowDisciplineCheck" Content="专业"/>
+                                    <CheckBox x:Name="ShowAuthorCheck" Content="批注人"/>
+                                    <CheckBox x:Name="ShowRoleCheck" Content="角色"/>
+                                    <CheckBox x:Name="ShowDrawingNoCheck" Content="图号"/>
+                                    <CheckBox x:Name="ShowStatusCheck" Content="状态"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- ═══════════ 图层与颜色 ═══════════ -->
             <TabItem Header="图层与颜色">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,10">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="10,10,10,0">
                     <StackPanel>
-                        <TextBlock Text="图层设置" Style="{StaticResource SectionHeader}" Margin="0,0,0,6"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="132"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="图层基础名称" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="LayerNameText" Grid.Row="0" Grid.Column="1"/>
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="文字样式" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="TextStyleCombo" Grid.Row="1" Grid.Column="1" IsEditable="True"
-                                      ToolTip="列出当前 DWG 中的可用文字样式"/>
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="连接符" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="ConnectorCombo" Grid.Row="2" Grid.Column="1" IsEditable="True"/>
-                        </Grid>
-                        <StackPanel Margin="0,4,0,0">
-                            <CheckBox x:Name="LayerAppendDateCheck" Content="图层名添加日期"/>
-                            <CheckBox x:Name="LayerAppendNameCheck" Content="图层名添加批注人姓名"/>
-                            <CheckBox x:Name="DateBeforeNameCheck" Content="日期排列在姓名前"/>
-                            <CheckBox x:Name="PlottableCheck" Content="批注图层参与打印（新建或再次使用该图层时应用，已有的其他批注图层不改）"/>
-                        </StackPanel>
+                        <GroupBox Header="图层设置">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="145"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="图层基础名称" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="LayerNameText" Width="240" HorizontalAlignment="Left" Grid.Row="0" Grid.Column="1"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="文字样式" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="TextStyleCombo" Width="240" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="1" IsEditable="True"
+                                              ToolTip="列出当前 DWG 中的可用文字样式"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="连接符" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="ConnectorCombo" Width="240" HorizontalAlignment="Left" Grid.Row="2" Grid.Column="1" IsEditable="True"/>
+                                </Grid>
+                                <StackPanel Margin="0,4,0,0">
+                                    <CheckBox x:Name="LayerAppendDateCheck" Content="图层名添加日期"/>
+                                    <CheckBox x:Name="LayerAppendNameCheck" Content="图层名添加批注人姓名"/>
+                                    <CheckBox x:Name="DateBeforeNameCheck" Content="日期排列在姓名前"/>
+                                    <CheckBox x:Name="PlottableCheck" Content="批注图层参与打印（新建或再次使用该图层时应用，已有的其他批注图层不改）"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
 
-                        <Rectangle Style="{StaticResource SectionSeparator}"/>
+                        <GroupBox Header="颜色设置">
+                            <StackPanel>
+                                <CheckBox x:Name="SameColorsCheck" Content="所有元素使用统一颜色"
+                                          Checked="Dependency_Changed" Unchecked="Dependency_Changed"/>
+                                <Grid Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="145"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="统一颜色" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="ColorIndexCombo" Width="240" HorizontalAlignment="Left" Grid.Row="0" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="云线颜色" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="CloudColorCombo" Width="240" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="引线颜色" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="LeaderColorCombo" Width="240" HorizontalAlignment="Left" Grid.Row="2" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="文字颜色" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="TextColorCombo" Width="240" HorizontalAlignment="Left" Grid.Row="3" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="边框颜色" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="BoxColorCombo" Width="240" HorizontalAlignment="Left" Grid.Row="4" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="已回复颜色" Style="{StaticResource FieldLabel}" ToolTip="状态为「已回复」的批注文字颜色"/>
+                                    <ComboBox x:Name="ReplyColorCombo" Width="240" HorizontalAlignment="Left" Grid.Row="5" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="截屏背景（预留）" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="ScreenshotBackgroundColorCombo" Width="240" HorizontalAlignment="Left" Grid.Row="6" Grid.Column="1"
+                                              ItemTemplate="{StaticResource AciColorTemplate}" IsEnabled="False"
+                                              ToolTip="当前版本尚未提供截屏批注功能"/>
+                                    <TextBlock Grid.Row="7" Grid.Column="0" Text="已完成颜色" Style="{StaticResource FieldLabel}" ToolTip="状态为「已完成」的批注文字颜色"/>
+                                    <ComboBox x:Name="PassColorCombo" Width="240" HorizontalAlignment="Left" Grid.Row="7" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
+                                </Grid>
+                                <CheckBox x:Name="ScreenshotBackgroundOnceReplyCheck" Content="截屏背景规则（预留）"
+                                          Margin="145,4,0,2" IsEnabled="False" ToolTip="当前版本尚未提供截屏批注功能"/>
+                            </StackPanel>
+                        </GroupBox>
 
-                        <TextBlock Text="颜色设置" Style="{StaticResource SectionHeader}"/>
-                        <CheckBox x:Name="SameColorsCheck" Content="所有元素使用统一颜色"
-                                  Checked="Dependency_Changed" Unchecked="Dependency_Changed"/>
-                        <Grid Margin="0,4,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="132"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="统一颜色" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="ColorIndexCombo" Grid.Row="0" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="云线颜色" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="CloudColorCombo" Grid.Row="1" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="引线颜色" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="LeaderColorCombo" Grid.Row="2" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="文字颜色" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="TextColorCombo" Grid.Row="3" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
-                            <TextBlock Grid.Row="4" Grid.Column="0" Text="边框颜色" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="BoxColorCombo" Grid.Row="4" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
-                            <TextBlock Grid.Row="5" Grid.Column="0" Text="已回复颜色" Style="{StaticResource FieldLabel}" ToolTip="状态为「已回复」的批注文字颜色"/>
-                            <ComboBox x:Name="ReplyColorCombo" Grid.Row="5" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
-                            <TextBlock Grid.Row="6" Grid.Column="0" Text="截屏背景（预留）" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="ScreenshotBackgroundColorCombo" Grid.Row="6" Grid.Column="1"
-                                      ItemTemplate="{StaticResource AciColorTemplate}" IsEnabled="False"
-                                      ToolTip="当前版本尚未提供截屏批注功能"/>
-                            <TextBlock Grid.Row="7" Grid.Column="0" Text="已完成颜色" Style="{StaticResource FieldLabel}" ToolTip="状态为「已完成」的批注文字颜色"/>
-                            <ComboBox x:Name="PassColorCombo" Grid.Row="7" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
-                        </Grid>
-                        <CheckBox x:Name="ScreenshotBackgroundOnceReplyCheck" Content="截屏背景规则（预留）"
-                                  Margin="132,4,0,2" IsEnabled="False" ToolTip="当前版本尚未提供截屏批注功能"/>
-
-                        <Rectangle Style="{StaticResource SectionSeparator}"/>
-
-                        <TextBlock Text="审批标记（预留）" Style="{StaticResource SectionHeader}"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="132"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="对勾颜色" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="CheckColorCombo" Grid.Row="0" Grid.Column="1"
-                                      ItemTemplate="{StaticResource AciColorTemplate}" IsEnabled="False"
-                                      ToolTip="当前版本尚未生成审批标记实体"/>
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="对勾高度" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="CheckHeightText" Grid.Row="1" Grid.Column="1" IsEnabled="False"
-                                     ToolTip="当前版本尚未生成审批标记实体"/>
-                        </Grid>
+                        <GroupBox Header="审批标记（预留）">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="145"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="对勾颜色" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="CheckColorCombo" Width="240" HorizontalAlignment="Left" Grid.Row="0" Grid.Column="1"
+                                              ItemTemplate="{StaticResource AciColorTemplate}" IsEnabled="False"
+                                              ToolTip="当前版本尚未生成审批标记实体"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="对勾高度" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="CheckHeightText" Width="130" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="1" IsEnabled="False"
+                                             ToolTip="当前版本尚未生成审批标记实体"/>
+                                </Grid>
+                            </StackPanel>
+                        </GroupBox>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- ═══════════ 说明 ═══════════ -->
             <TabItem Header="说明">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="18,12">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="10,10,10,0">
                     <StackPanel>
-                        <TextBlock Text="关于 GM 批注" Style="{StaticResource SectionHeader}" Margin="0,0,0,6"/>
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,10">
-                            • 设置保存在本机（%AppData%\GMAnnotation\settings.xml）<LineBreak/>
-                            • 批注数据编码后存储在 DWG 图形内，随图纸传递<LineBreak/>
-                            • 启用字体自适应后，字高按云线对角线尺寸 × 百分比自动计算<LineBreak/>
-                            • 未启用自适应时：字高 = 打印字高(mm) × N，云线半径 = 打印云线半径(mm) × N（布局图纸空间中按 1:1）<LineBreak/>
-                            • 从下拉选比例（1:N）会自动取消两个自适应；手填比例时在保存时询问<LineBreak/>
-                            • 创建批注/云线时，命令行会显示本次实际采用的字高和云线半径<LineBreak/>
-                            • 设置文件损坏时会先备份为 settings.xml.bad-时间戳，按默认值运行，点「保存设置」才重建
-                        </TextBlock>
+                        <GroupBox Header="关于 GM 批注">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,10">
+                                    • 设置保存在本机（%AppData%\GMAnnotation\settings.xml）<LineBreak/>
+                                    • 批注数据编码后存储在 DWG 图形内，随图纸传递<LineBreak/>
+                                    • 启用字体自适应后，字高按云线对角线尺寸 × 百分比自动计算<LineBreak/>
+                                    • 未启用自适应时：字高 = 打印字高(mm) × N，云线半径 = 打印云线半径(mm) × N（布局图纸空间中按 1:1）<LineBreak/>
+                                    • 从下拉选比例（1:N）会自动取消两个自适应；手填比例时在保存时询问<LineBreak/>
+                                    • 创建批注/云线时，命令行会显示本次实际采用的字高和云线半径<LineBreak/>
+                                    • 设置文件损坏时会先备份为 settings.xml.bad-时间戳，按默认值运行，点「保存设置」才重建
+                                </TextBlock>
+                            </StackPanel>
+                        </GroupBox>
 
-                        <TextBlock Text="命令速查" Style="{StaticResource SectionHeader}"/>
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,10"
-                                   FontFamily="Consolas, Microsoft YaHei UI">
-                            GM_PZ_NOTE     — 绘制批注（菜单「绘制批注」：按面板当前设置开始，面板已开不重复开）<LineBreak/>
-                            GM_PZ_DRAW     — 直接绘制批注（工具栏"批"键，不弹批注面板）<LineBreak/>
-                            GM_PZ_EDIT     — 编辑批注（双击或命令）<LineBreak/>
-                            GM_PZ_MOVE     — 移动批注文字框<LineBreak/>
-                            GM_PZ_DELETE   — 删除批注（支持 UNDO）<LineBreak/>
-                            GM_PZ_HIDE     — 隐藏批注（数据保留在图内）<LineBreak/>
-                            GM_PZ_SHOW     — 显示批注<LineBreak/>
-                            GM_PZ_MERGE    — 合并批注（内容完全一致者并成一条）<LineBreak/>
-                            GM_PZ_FILTER   — 过滤批注（只显示内容一致的批注，其余隐藏）<LineBreak/>
-                            GM_PZ_REFRESH  — 按当前设置刷新全图批注文字版式<LineBreak/>
-                            GM_PZ_CLOUD    — 仅绘制云线（M 开关 / S 设置右下角标记）<LineBreak/>
-                            GM_PZ_ADDCLOUD — 增补云线<LineBreak/>
-                            GM_PZ_LIST     — 打开批注列表并定位<LineBreak/>
-                            GM_PZ_SUMMARY  — 批注汇总<LineBreak/>
-                            GM_PZ_LEGEND   — 批注清单（全图批注生成清单表画在图上，列与批注列表一致）<LineBreak/>
-                            GM_PZ_FORMAT   — 格式刷（选源批注 → 调样式对话框 → 连续刷其他批注）<LineBreak/>
-                            GM_PZ_HISTORY  — 批注历史记录（留痕）<LineBreak/>
-                            GM_PZ_KB       — 知识库（批注条目 + 常用批注语，独立体系）<LineBreak/>
-                            GM_PZ_EXPORT   — 导出批注<LineBreak/>
-                            GM_PZ_WORD     — 导出批注到 Word（时间、云线范围截图、批注文字）<LineBreak/>
-                            GM_PZ_IMPORT   — 导入批注<LineBreak/>
-                            GM_PZ_REPAIR   — 修复复制产生的批注<LineBreak/>
-                            GM_PZ_TOOLBAR  — 显示/隐藏 GM批注工具栏（不存在时创建）<LineBreak/>
-                            GM_PZ_TOOLBAR_SHOW — 打开 GM批注工具栏（启动 CAD 时默认不显示）<LineBreak/>
-                            GM_PZ_TOOLBAR_HIDE — 隐藏 GM批注工具栏<LineBreak/>
-                            GMPANEL        — GM_PZ_TOOLBAR_SHOW 的简短别名<LineBreak/>
-                            GM_PZ_INSTALL_AUTOLOAD   — 为当前 CAD 安装启动自动加载<LineBreak/>
-                            GM_PZ_UNINSTALL_AUTOLOAD — 卸载启动自动加载<LineBreak/>
-                            GM_PZ_AUTOLOAD — 在安装与卸载自动加载之间切换（兼容旧菜单）<LineBreak/>
-                            GM_PZ_SETTINGS — 打开本设置窗口<LineBreak/>
-                            GM_PZ_MENU     — 重新加载菜单<LineBreak/>
-                            GM_PZ_ABOUT    — 关于 GM批注
-                        </TextBlock>
+                        <GroupBox Header="命令速查">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,10"
+                                           FontFamily="Consolas, Microsoft YaHei UI">
+                                    GM_PZ_NOTE     — 绘制批注（菜单「绘制批注」：按面板当前设置开始，面板已开不重复开）<LineBreak/>
+                                    GM_PZ_DRAW     — 直接绘制批注（工具栏"批"键，不弹批注面板）<LineBreak/>
+                                    GM_PZ_EDIT     — 编辑批注（双击或命令）<LineBreak/>
+                                    GM_PZ_MOVE     — 移动批注文字框<LineBreak/>
+                                    GM_PZ_DELETE   — 删除批注（支持 UNDO）<LineBreak/>
+                                    GM_PZ_HIDE     — 隐藏批注（数据保留在图内）<LineBreak/>
+                                    GM_PZ_SHOW     — 显示批注<LineBreak/>
+                                    GM_PZ_MERGE    — 合并批注（内容完全一致者并成一条）<LineBreak/>
+                                    GM_PZ_FILTER   — 过滤批注（只显示内容一致的批注，其余隐藏）<LineBreak/>
+                                    GM_PZ_REFRESH  — 按当前设置刷新全图批注文字版式<LineBreak/>
+                                    GM_PZ_CLOUD    — 仅绘制云线（M 开关 / S 设置右下角标记）<LineBreak/>
+                                    GM_PZ_ADDCLOUD — 增补云线<LineBreak/>
+                                    GM_PZ_LIST     — 打开批注列表并定位<LineBreak/>
+                                    GM_PZ_SUMMARY  — 批注汇总<LineBreak/>
+                                    GM_PZ_LEGEND   — 批注清单（全图批注生成清单表画在图上，列与批注列表一致）<LineBreak/>
+                                    GM_PZ_FORMAT   — 格式刷（选源批注 → 调样式对话框 → 连续刷其他批注）<LineBreak/>
+                                    GM_PZ_HISTORY  — 批注历史记录（留痕）<LineBreak/>
+                                    GM_PZ_KB       — 知识库（批注条目 + 常用批注语，独立体系）<LineBreak/>
+                                    GM_PZ_EXPORT   — 导出批注<LineBreak/>
+                                    GM_PZ_WORD     — 导出批注到 Word（时间、云线范围截图、批注文字）<LineBreak/>
+                                    GM_PZ_IMPORT   — 导入批注<LineBreak/>
+                                    GM_PZ_REPAIR   — 修复复制产生的批注<LineBreak/>
+                                    GM_PZ_TOOLBAR  — 显示/隐藏 GM批注工具栏（不存在时创建）<LineBreak/>
+                                    GM_PZ_TOOLBAR_SHOW — 打开 GM批注工具栏（启动 CAD 时默认不显示）<LineBreak/>
+                                    GM_PZ_TOOLBAR_HIDE — 隐藏 GM批注工具栏<LineBreak/>
+                                    GMPANEL        — GM_PZ_TOOLBAR_SHOW 的简短别名<LineBreak/>
+                                    GM_PZ_INSTALL_AUTOLOAD   — 为当前 CAD 安装启动自动加载<LineBreak/>
+                                    GM_PZ_UNINSTALL_AUTOLOAD — 卸载启动自动加载<LineBreak/>
+                                    GM_PZ_AUTOLOAD — 在安装与卸载自动加载之间切换（兼容旧菜单）<LineBreak/>
+                                    GM_PZ_SETTINGS — 打开本设置窗口<LineBreak/>
+                                    GM_PZ_MENU     — 重新加载菜单<LineBreak/>
+                                    GM_PZ_ABOUT    — 关于 GM批注
+                                </TextBlock>
+                            </StackPanel>
+                        </GroupBox>
 
-                        <TextBlock Text="颜色索引参考" Style="{StaticResource SectionHeader}"/>
-                        <TextBlock Style="{StaticResource Caption}">
-                            1:红  2:黄  3:绿  4:青  5:蓝  6:洋红  7:白  8-9:灰  10-249:色轮  250-255:灰度
-                        </TextBlock>
+                        <GroupBox Header="颜色索引参考">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Caption}">
+                                    1:红  2:黄  3:绿  4:青  5:蓝  6:洋红  7:白  8-9:灰  10-249:色轮  250-255:灰度
+                                </TextBlock>
+                            </StackPanel>
+                        </GroupBox>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
