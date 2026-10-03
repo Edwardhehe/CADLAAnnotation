@@ -16,22 +16,22 @@
     <SolidColorBrush x:Key="WarningBrush" Color="#D97706"/>
 
     <!--
-      字号体系（全应用统一）：
-      - 正文 / 控件：12
-      - 分区标题：12 SemiBold
-      - 辅助说明：11
-      - 控件高度：28
+      排版体系（全部窗口统一，所有 Views 都合并本字典）：
+      - 字体：Microsoft YaHei UI；正文 / 控件 12，分区标题 13 SemiBold，辅助说明 11
+      - 控件高度：输入框 / 下拉 / 按钮 28；行距：输入控件上下各 3
+      - 标签列宽：设置窗口 120，对话框 72，窄面板 64（右对齐标签用 FieldLabel，窄面板左对齐用 FieldLabelLeft）
+      - 按钮：主按钮 PrimaryButton / 次按钮 SecondaryButton（最小宽 80）；工具条、行内按钮 CompactButton（最小宽 64）
+      - 窗口：Style="{DynamicResource GMWindow}"（派生窗口类型不会套用隐式 Window 样式，必须显式引用）
     -->
 
-    <!-- ═══════════════ 全局默认 ═══════════════ -->
-    <Style TargetType="Window">
+    <!-- ═══════════════ 窗口 ═══════════════ -->
+    <Style x:Key="GMWindow" TargetType="Window">
         <Setter Property="FontFamily" Value="Microsoft YaHei UI"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
         <Setter Property="UseLayoutRounding" Value="True"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
-        <Setter Property="WindowStartupLocation" Value="CenterScreen"/>
         <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
     </Style>
 
@@ -216,6 +216,76 @@
         </Setter>
     </Style>
 
+    <!-- 工具条 / 行内小按钮：与次按钮同外观，最小宽度更小 -->
+    <Style x:Key="CompactButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+        <Setter Property="MinWidth" Value="64"/>
+        <Setter Property="Padding" Value="10,0"/>
+    </Style>
+
+    <!-- ═══════════════ 分组框 ═══════════════ -->
+    <Style TargetType="GroupBox">
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="Padding" Value="10,8"/>
+        <Setter Property="HeaderTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <TextBlock Text="{Binding}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ═══════════════ 表格（历史记录 / 知识库） ═══════════════ -->
+    <Style TargetType="DataGrid">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="RowBackground" Value="{StaticResource SurfaceBrush}"/>
+        <Setter Property="AlternatingRowBackground" Value="#F8FAFC"/>
+        <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="VerticalGridLinesBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="GridLinesVisibility" Value="Horizontal"/>
+        <Setter Property="HeadersVisibility" Value="Column"/>
+        <Setter Property="MinRowHeight" Value="26"/>
+        <Setter Property="ColumnHeaderHeight" Value="30"/>
+    </Style>
+
+    <Style TargetType="DataGridColumnHeader">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+        <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+        <Setter Property="Padding" Value="8,0"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+
+    <Style TargetType="DataGridCell">
+        <Setter Property="Padding" Value="6,3"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="DataGridCell">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter VerticalAlignment="Center" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="#DBEAFE"/>
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                <Setter Property="BorderBrush" Value="#DBEAFE"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
     <!-- ═══════════════ 列表 ═══════════════ -->
     <Style TargetType="ListView">
         <Setter Property="FontSize" Value="12"/>
@@ -273,7 +343,7 @@
     </Style>
 
     <Style x:Key="SectionHeader" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontSize" Value="13"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         <Setter Property="Margin" Value="0,10,0,6"/>

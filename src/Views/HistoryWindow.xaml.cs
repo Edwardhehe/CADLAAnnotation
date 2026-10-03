@@ -56,6 +56,7 @@ namespace GMAnnotation.Views
         public HistoryWindow(string currentDrawing = null)
         {
             InitializeComponent();
+            Loaded += (s, e) => WindowSizing.FitToWorkArea(this);
             _currentDrawing = currentDrawing ?? "";
             // ?. 兜底：万一 XAML/BAML 与代码不匹配导致某个 x:Name 未连上，只是退化为"不按图过滤"，不抛空引用。
             if (CurrentDrawingOnly != null && string.IsNullOrEmpty(_currentDrawing)) CurrentDrawingOnly.IsChecked = false;

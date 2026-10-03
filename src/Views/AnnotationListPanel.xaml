@@ -6,15 +6,14 @@
         MinWidth="400" MinHeight="260"
         ResizeMode="CanResize"
         Topmost="True" ShowInTaskbar="False"
-        WindowStyle="ToolWindow"
-        Background="{DynamicResource BackgroundBrush}">
+        WindowStyle="ToolWindow" WindowStartupLocation="CenterScreen" Style="{DynamicResource GMWindow}">
     <Window.Resources>
         <ResourceDictionary Source="../Themes/LATheme.xaml"/>
     </Window.Resources>
 
     <DockPanel>
         <!-- 底部状态栏 -->
-        <Border DockPanel.Dock="Bottom" Padding="10,8" Background="{DynamicResource SurfaceBrush}"
+        <Border DockPanel.Dock="Bottom" Padding="12,8" Background="{DynamicResource SurfaceBrush}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -23,7 +22,7 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="CountText" Grid.Column="0" Text="共 0 条" Style="{StaticResource StatusText}"/>
                 <Button Grid.Column="1" Content="刷新" Style="{DynamicResource SecondaryButton}"
-                        Click="Refresh_Click" MinWidth="64" Margin="0"/>
+                        Click="Refresh_Click" Margin="0"/>
             </Grid>
         </Border>
 
@@ -32,7 +31,7 @@
                   BorderThickness="0" Margin="0">
             <!-- 状态着色：已完成=绿色、已回复=黄色（颜色取深色，浅底与选中蓝底都能看清） -->
             <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
+                <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding Status}" Value="已完成">
                             <Setter Property="Foreground" Value="#1E8E3E"/>

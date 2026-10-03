@@ -5,13 +5,12 @@
         Title="云线标记设置"
         Width="460" SizeToContent="Height"
         ResizeMode="NoResize" ShowInTaskbar="False"
-        WindowStyle="ToolWindow" WindowStartupLocation="CenterScreen"
-        Background="{DynamicResource BackgroundBrush}">
+        WindowStyle="ToolWindow" WindowStartupLocation="CenterScreen" Style="{DynamicResource GMWindow}">
     <Window.Resources>
         <ResourceDictionary Source="../Themes/LATheme.xaml"/>
     </Window.Resources>
 
-    <DockPanel Margin="14,12">
+    <DockPanel Margin="16,12">
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Content="取消" IsCancel="True" Style="{StaticResource SecondaryButton}"/>
             <Button Content="确定" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Ok_Click"/>
@@ -23,7 +22,7 @@
             <TextBlock Text="标记内容与尺寸" Style="{StaticResource SectionHeader}" Margin="0,0,0,6"/>
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="90"/>
+                    <ColumnDefinition Width="72"/>
                     <ColumnDefinition Width="110"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>

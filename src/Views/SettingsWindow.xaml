@@ -2,9 +2,9 @@
         x:ClassModifier="internal"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="GM批注设置" Width="640" Height="540"
-        MinWidth="560" MinHeight="440"
-        ResizeMode="CanResizeWithGrip">
+        Title="GM批注设置" Width="660" Height="560"
+        MinWidth="620" MinHeight="440"
+        ResizeMode="CanResizeWithGrip" WindowStartupLocation="CenterScreen" Style="{DynamicResource GMWindow}">
     <Window.Resources>
         <ResourceDictionary Source="../Themes/LATheme.xaml"/>
     </Window.Resources>
@@ -16,13 +16,13 @@
                 Padding="14,10">
             <DockPanel LastChildFill="False">
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-                    <Button Content="恢复默认" Style="{StaticResource SecondaryButton}" Click="Reset_Click"
+                    <Button Content="恢复默认" Style="{StaticResource CompactButton}" Margin="0" Click="Reset_Click"
                             ToolTip="把界面上的各项恢复为默认值（不含下一个编号）；点「保存设置」后才生效"/>
-                    <Button Content="导入…" Style="{StaticResource SecondaryButton}" Click="Import_Click"
+                    <Button Content="导入…" Style="{StaticResource CompactButton}" Click="Import_Click"
                             ToolTip="从导出的设置文件读入到界面；点「保存设置」后才生效"/>
-                    <Button Content="导出…" Style="{StaticResource SecondaryButton}" Click="Export_Click"
+                    <Button Content="导出…" Style="{StaticResource CompactButton}" Click="Export_Click"
                             ToolTip="把界面上的当前值导出为设置文件（可在其他电脑导入）"/>
-                    <Button Content="打开数据目录" Style="{StaticResource SecondaryButton}" Click="OpenFolder_Click"
+                    <Button Content="打开数据目录" Style="{StaticResource CompactButton}" Click="OpenFolder_Click"
                             ToolTip="%AppData%\GMAnnotation（设置、历史记录、知识库、日志）"/>
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
@@ -41,7 +41,7 @@
                         <TextBlock Text="云线外形" Style="{StaticResource SectionHeader}" Margin="0,0,0,6"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="132"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
@@ -60,14 +60,14 @@
                             <TextBox x:Name="LineWidthText" Grid.Row="3" Grid.Column="1"/>
                         </Grid>
                         <CheckBox x:Name="CloudAutoFitCheck" Content="云线自适应"
-                                  Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="120,4,0,2"/>
+                                  Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="132,4,0,2"/>
 
                         <Rectangle Style="{StaticResource SectionSeparator}"/>
 
                         <TextBlock Text="比例选型与自适应" Style="{StaticResource SectionHeader}"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="132"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
@@ -106,7 +106,7 @@
                             </Grid.ColumnDefinitions>
                             <CheckBox x:Name="CloudMarkerEnabledCheck" Content="单绘云线时在右下角内侧加标记（框 + 文字）"
                                       VerticalAlignment="Center" Checked="CloudMarkerEnabled_Changed" Unchecked="CloudMarkerEnabled_Changed"/>
-                            <Button Grid.Column="1" Content="标记设置…" Style="{StaticResource SecondaryButton}" Click="CloudMarkerSettings_Click"/>
+                            <Button Grid.Column="1" Content="标记设置…" Style="{StaticResource CompactButton}" Click="CloudMarkerSettings_Click"/>
                         </Grid>
                         <TextBlock x:Name="CloudMarkerSummaryText" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                         <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,2,0,0"
@@ -122,7 +122,7 @@
                         <TextBlock Text="文字尺寸" Style="{StaticResource SectionHeader}" Margin="0,0,0,6"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="132"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
@@ -140,10 +140,10 @@
                         <TextBlock x:Name="TextSizeHintText" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                         <CheckBox x:Name="FixedWidthCheck" Content="固定文字宽度（不勾选：文字框按文字实际宽度自适应）"
                                   ToolTip="不勾选：框宽随文字收紧，单行约 18 个字高后换行；勾选：框宽至少为「固定宽度值」，文字更长时自动加宽"
-                                  Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="120,4,0,2"/>
+                                  Checked="Dependency_Changed" Unchecked="Dependency_Changed" Margin="132,4,0,2"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="132"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="固定宽度值(mm)" Style="{StaticResource FieldLabel}"
@@ -156,7 +156,7 @@
                         <TextBlock Text="批注信息" Style="{StaticResource SectionHeader}"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="132"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
@@ -171,7 +171,7 @@
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="默认专业" Style="{StaticResource FieldLabel}"/>
                             <ComboBox x:Name="DefaultDisciplineCombo" Grid.Row="2" Grid.Column="1" IsEditable="True"/>
                         </Grid>
-                        <CheckBox x:Name="AutoNumberCheck" Content="自动编号" Margin="120,6,0,2"/>
+                        <CheckBox x:Name="AutoNumberCheck" Content="自动编号" Margin="132,6,0,2"/>
 
                         <Rectangle Style="{StaticResource SectionSeparator}"/>
 
@@ -196,7 +196,7 @@
                         <TextBlock Text="图层设置" Style="{StaticResource SectionHeader}" Margin="0,0,0,6"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="132"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
@@ -226,7 +226,7 @@
                                   Checked="Dependency_Changed" Unchecked="Dependency_Changed"/>
                         <Grid Margin="0,4,0,0">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="132"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
@@ -259,14 +259,14 @@
                             <ComboBox x:Name="PassColorCombo" Grid.Row="7" Grid.Column="1" ItemTemplate="{StaticResource AciColorTemplate}"/>
                         </Grid>
                         <CheckBox x:Name="ScreenshotBackgroundOnceReplyCheck" Content="截屏背景规则（预留）"
-                                  Margin="120,4,0,2" IsEnabled="False" ToolTip="当前版本尚未提供截屏批注功能"/>
+                                  Margin="132,4,0,2" IsEnabled="False" ToolTip="当前版本尚未提供截屏批注功能"/>
 
                         <Rectangle Style="{StaticResource SectionSeparator}"/>
 
                         <TextBlock Text="审批标记（预留）" Style="{StaticResource SectionHeader}"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="132"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>

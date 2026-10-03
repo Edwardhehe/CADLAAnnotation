@@ -7,15 +7,14 @@
         MinWidth="460" MinHeight="280"
         ResizeMode="CanResize"
         Topmost="True" ShowInTaskbar="False"
-        WindowStyle="ToolWindow"
-        Background="{DynamicResource BackgroundBrush}">
+        WindowStyle="ToolWindow" WindowStartupLocation="CenterScreen" Style="{DynamicResource GMWindow}">
     <Window.Resources>
         <ResourceDictionary Source="../Themes/LATheme.xaml"/>
     </Window.Resources>
 
     <DockPanel>
         <!-- 顶部说明 -->
-        <Border DockPanel.Dock="Top" Padding="10,8" Background="{DynamicResource SurfaceBrush}"
+        <Border DockPanel.Dock="Top" Padding="12,8" Background="{DynamicResource SurfaceBrush}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
             <StackPanel>
                 <TextBlock x:Name="CountText" Text="共 0 种内容" Style="{StaticResource StatusText}"/>
@@ -27,7 +26,7 @@
         </Border>
 
         <!-- 底部按钮 -->
-        <Border DockPanel.Dock="Bottom" Padding="10,8" Background="{DynamicResource SurfaceBrush}"
+        <Border DockPanel.Dock="Bottom" Padding="12,8" Background="{DynamicResource SurfaceBrush}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -38,16 +37,16 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Button Grid.Column="0" Content="仅显示所选" MinWidth="96" Margin="0"
+                <Button Grid.Column="0" Content="仅显示所选" Margin="0"
                         Style="{DynamicResource SecondaryButton}" Click="Apply_Click"/>
-                <Button Grid.Column="1" Content="显示全部" MinWidth="80" Margin="8,0,0,0"
+                <Button Grid.Column="1" Content="显示全部"
                         Style="{DynamicResource SecondaryButton}" Click="ShowAll_Click"/>
-                <Button Grid.Column="2" Content="合并批注" MinWidth="104" Margin="8,0,0,0"
+                <Button Grid.Column="2" Content="合并批注"
                         Style="{DynamicResource SecondaryButton}" Click="Merge_Click"
                         ToolTip="把当前图里内容完全相同的批注合并成一条（保留编号最小者，其余云线并入）"/>
-                <Button Grid.Column="4" Content="刷新" MinWidth="64" Margin="0"
+                <Button Grid.Column="4" Content="刷新" Margin="0"
                         Style="{DynamicResource SecondaryButton}" Click="Refresh_Click"/>
-                <Button Grid.Column="5" Content="关闭" MinWidth="64" Margin="8,0,0,0"
+                <Button Grid.Column="5" Content="关闭"
                         Style="{DynamicResource SecondaryButton}" Click="Close_Click"/>
             </Grid>
         </Border>

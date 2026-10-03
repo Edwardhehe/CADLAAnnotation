@@ -6,11 +6,12 @@
         Width="1100" Height="640"
         MinWidth="880" MinHeight="460"
         ShowInTaskbar="False"
-        WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
-        FontFamily="Microsoft YaHei, 微软雅黑"
-        FontSize="12">
-    <DockPanel Margin="12,10,12,10">
+        WindowStartupLocation="CenterOwner" Style="{DynamicResource GMWindow}">
+    <Window.Resources>
+        <ResourceDictionary Source="../Themes/LATheme.xaml"/>
+    </Window.Resources>
+
+    <DockPanel Margin="12,10,12,12">
         <!-- 底部：计数 / 数据文件 / 关闭 -->
         <Grid DockPanel.Dock="Bottom" Margin="0,8,0,0">
             <Grid.ColumnDefinitions>
@@ -18,10 +19,11 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                <TextBlock x:Name="CountText" Foreground="#555555" Text=""/>
-                <TextBlock x:Name="FileText" Foreground="#8A8A8A" FontSize="11" Margin="0,2,0,0" Text=""/>
+                <TextBlock x:Name="CountText" Style="{StaticResource StatusText}" Text=""/>
+                <TextBlock x:Name="FileText" Style="{StaticResource StatusText}" Foreground="{StaticResource TextMutedBrush}"
+                           Margin="0,2,0,0" Text="" TextTrimming="CharacterEllipsis"/>
             </StackPanel>
-            <Button x:Name="CloseButton" Grid.Column="1" Content="关闭" Width="64" Height="26"
+            <Button x:Name="CloseButton" Grid.Column="1" Content="关闭" Style="{StaticResource SecondaryButton}"
                     VerticalAlignment="Center" Click="Close_Click"/>
         </Grid>
 
@@ -35,36 +37,33 @@
                             <ColumnDefinition Width="180"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="关键字: " VerticalAlignment="Center"/>
-                        <TextBox x:Name="EntryFilterBox" Grid.Column="1" Height="26" VerticalContentAlignment="Center"
+                        <TextBlock Grid.Column="0" Text="关键字" Style="{StaticResource FieldLabelLeft}"/>
+                        <TextBox x:Name="EntryFilterBox" Grid.Column="1"
                                  TextChanged="Filter_Changed"
                                  ToolTip="按 专业/属性/规范名称/规范编号/条款/内容 过滤"/>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button Content="新增" Width="56" Height="26" Margin="8,0,0,0" Click="EntryAdd_Click"
+                            <Button Content="新增" Style="{StaticResource CompactButton}" Click="EntryAdd_Click"
                                     ToolTip="在列表末尾新增一条空白条目，然后在表格里直接填写"/>
-                            <Button Content="刷新" Width="56" Height="26" Margin="8,0,0,0" Click="Refresh_Click"/>
-                            <Button Content="填入内容" Width="72" Height="26" Margin="8,0,0,0" Click="EntryApply_Click"
+                            <Button Content="刷新" Style="{StaticResource CompactButton}" Click="Refresh_Click"/>
+                            <Button Content="填入内容" Style="{StaticResource CompactButton}" Click="EntryApply_Click"
                                     ToolTip="把选中条目的「内容」填进批注窗口的内容框（替换原有内容；需从批注窗口打开知识库）"/>
-                            <Button Content="导出CSV" Width="72" Height="26" Margin="8,0,0,0" Click="EntryExport_Click"
+                            <Button Content="导出CSV" Style="{StaticResource CompactButton}" Click="EntryExport_Click"
                                     ToolTip="导出为 CSV（列序与列表一致：序号,专业,属性,规范名称,规范编号,条款,内容）——该文件本身就是导入模板"/>
-                            <Button Content="导入CSV" Width="72" Height="26" Margin="8,0,0,0" Click="EntryImport_Click"
+                            <Button Content="导入CSV" Style="{StaticResource CompactButton}" Click="EntryImport_Click"
                                     ToolTip="从 CSV 导入（表头需含 专业/属性/规范名称/规范编号/条款/内容；同一「规范编号+条款」按更新处理）"/>
-                            <Button Content="删除选中" Width="72" Height="26" Margin="8,0,0,0" Click="EntryDelete_Click"
+                            <Button Content="删除选中" Style="{StaticResource CompactButton}" Click="EntryDelete_Click"
                                     ToolTip="删除表格中所选的条目（删除前自动备份）"/>
-                            <Button Content="清空条目" Width="72" Height="26" Margin="8,0,0,0" Click="EntryClear_Click"
+                            <Button Content="清空条目" Style="{StaticResource CompactButton}" Click="EntryClear_Click"
                                     ToolTip="清空全部条目（常用批注语保留，清空前自动备份）"/>
                         </StackPanel>
                     </Grid>
 
-                    <TextBlock DockPanel.Dock="Bottom" Margin="0,6,0,0" Foreground="#8A8A8A" FontSize="11"
-                               TextWrapping="Wrap"
+                    <TextBlock DockPanel.Dock="Bottom" Margin="0,6,0,0" Style="{StaticResource Caption}"
                                Text="表格可直接编辑（改完自动保存，内容列可换行）；双击一行或选中后点「填入内容」可把该条内容填进批注窗口的内容框。序号按文件顺序从 1 编号，仅供定位，导出时重排、导入时忽略。导入按「规范编号+条款」判重。知识库与「批注历史记录」是两套独立体系，互不影响。"/>
                     <DataGrid x:Name="EntryGrid" AutoGenerateColumns="False"
-                              HeadersVisibility="Column" GridLinesVisibility="Horizontal"
                               CanUserAddRows="False" CanUserDeleteRows="False"
                               SelectionMode="Extended" SelectionUnit="FullRow"
-                              EnableRowVirtualization="True" AlternatingRowBackground="#F5F7FA"
-                              MinRowHeight="24" BorderBrush="#C0C0C0"
+                              EnableRowVirtualization="True"
                               CellEditEnding="EntryGrid_CellEditEnding"
                               PreviewMouseLeftButtonDown="EntryGrid_PreviewMouseLeftButtonDown">
                         <DataGrid.Columns>
@@ -74,7 +73,7 @@
                             <DataGridTextColumn Header="规范名称" Binding="{Binding SpecName, UpdateSourceTrigger=PropertyChanged}" Width="196"/>
                             <DataGridTextColumn Header="规范编号" Binding="{Binding SpecNumber, UpdateSourceTrigger=PropertyChanged}" Width="124"/>
                             <DataGridTextColumn Header="条款" Binding="{Binding Clause, UpdateSourceTrigger=PropertyChanged}" Width="86"/>
-                            <DataGridTextColumn Header="内容" Binding="{Binding Content, UpdateSourceTrigger=PropertyChanged}" Width="*">
+                            <DataGridTextColumn Header="内容" Binding="{Binding Content, UpdateSourceTrigger=PropertyChanged}" Width="*" MinWidth="240">
                                 <DataGridTextColumn.ElementStyle>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="TextWrapping" Value="Wrap"/>
@@ -106,46 +105,43 @@
                                 <ColumnDefinition Width="180"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="关键字: " VerticalAlignment="Center"/>
-                            <TextBox x:Name="PhraseFilterBox" Grid.Column="1" Height="26" VerticalContentAlignment="Center"
+                            <TextBlock Grid.Column="0" Text="关键字" Style="{StaticResource FieldLabelLeft}"/>
+                            <TextBox x:Name="PhraseFilterBox" Grid.Column="1"
                                      TextChanged="Filter_Changed" ToolTip="按常用批注语内容过滤"/>
                             <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button Content="刷新" Width="56" Height="26" Margin="8,0,0,0" Click="Refresh_Click"/>
-                                <Button Content="填入内容" Width="72" Height="26" Margin="8,0,0,0" Click="PhraseApply_Click"
+                                <Button Content="刷新" Style="{StaticResource CompactButton}" Click="Refresh_Click"/>
+                                <Button Content="填入内容" Style="{StaticResource CompactButton}" Click="PhraseApply_Click"
                                         ToolTip="把选中的常用批注语填进批注窗口的内容框（替换原有内容；需从批注窗口打开知识库）"/>
-                                <Button Content="导出CSV" Width="72" Height="26" Margin="8,0,0,0" Click="PhraseExport_Click"/>
-                                <Button Content="导入CSV" Width="72" Height="26" Margin="8,0,0,0" Click="PhraseImport_Click"
+                                <Button Content="导出CSV" Style="{StaticResource CompactButton}" Click="PhraseExport_Click"/>
+                                <Button Content="导入CSV" Style="{StaticResource CompactButton}" Click="PhraseImport_Click"
                                         ToolTip="从 CSV 导入：有「常用批注语」列就取该列，否则取第一列逐行读入（同内容只留一条）"/>
-                                <Button Content="删除选中" Width="72" Height="26" Margin="8,0,0,0" Click="PhraseDelete_Click"
+                                <Button Content="删除选中" Style="{StaticResource CompactButton}" Click="PhraseDelete_Click"
                                         ToolTip="删除所选的常用批注语（删除前自动备份）"/>
-                                <Button Content="清空常用语" Width="88" Height="26" Margin="8,0,0,0" Click="PhraseClear_Click"
+                                <Button Content="清空常用语" Style="{StaticResource CompactButton}" Click="PhraseClear_Click"
                                         ToolTip="清空全部常用批注语（条目保留，清空前自动备份）"/>
                             </StackPanel>
                         </Grid>
                         <DockPanel Margin="0,6,0,0">
-                            <TextBlock Text="新常用语: " VerticalAlignment="Center"/>
-                            <Button DockPanel.Dock="Right" Content="替换选中" Width="72" Height="26" Margin="8,0,0,0"
+                            <TextBlock Text="新常用语" Style="{StaticResource FieldLabelLeft}"/>
+                            <Button DockPanel.Dock="Right" Content="替换选中" Style="{StaticResource CompactButton}"
                                     Click="PhraseReplace_Click"
                                     ToolTip="用左侧输入框的内容替换列表中选中的那一条常用批注语"/>
-                            <Button DockPanel.Dock="Right" Content="添加" Width="60" Height="26" Margin="8,0,0,0"
+                            <Button DockPanel.Dock="Right" Content="添加" Style="{StaticResource CompactButton}"
                                     Click="PhraseAdd_Click"/>
-                            <TextBox x:Name="NewPhraseBox" Height="26" VerticalContentAlignment="Center"
+                            <TextBox x:Name="NewPhraseBox"
                                      AcceptsReturn="False" ToolTip="输入新的常用批注语后点「添加」"/>
                         </DockPanel>
                     </StackPanel>
 
-                    <TextBlock DockPanel.Dock="Bottom" Margin="0,6,0,0" Foreground="#8A8A8A" FontSize="11"
-                               TextWrapping="Wrap"
+                    <TextBlock DockPanel.Dock="Bottom" Margin="0,6,0,0" Style="{StaticResource Caption}"
                                Text="双击一条（或选中后点「填入内容」）可把它填进批注窗口的内容框；勾选批注窗口的「立即入库」后，新建/修改的批注会自动沉淀成条目（只填专业与内容）并并入常用批注语。"/>
                     <DataGrid x:Name="PhraseGrid" AutoGenerateColumns="False" IsReadOnly="True"
-                              HeadersVisibility="Column" GridLinesVisibility="Horizontal"
                               CanUserAddRows="False" CanUserDeleteRows="False"
                               SelectionMode="Extended" SelectionUnit="FullRow"
-                              EnableRowVirtualization="True" AlternatingRowBackground="#F5F7FA"
-                              MinRowHeight="24" BorderBrush="#C0C0C0" MouseDoubleClick="PhraseGrid_MouseDoubleClick">
+                              EnableRowVirtualization="True" MouseDoubleClick="PhraseGrid_MouseDoubleClick">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="加入时间" Binding="{Binding TimeString}" Width="130"/>
-                            <DataGridTextColumn Header="常用批注语" Binding="{Binding Text}" Width="*">
+                            <DataGridTextColumn Header="常用批注语" Binding="{Binding Text}" Width="*" MinWidth="240">
                                 <DataGridTextColumn.ElementStyle>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="TextWrapping" Value="Wrap"/>

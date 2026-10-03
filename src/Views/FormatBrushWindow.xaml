@@ -8,22 +8,21 @@
         ResizeMode="NoResize"
         Topmost="True" ShowInTaskbar="False"
         WindowStyle="ToolWindow"
-        WindowStartupLocation="CenterScreen"
-        Background="{DynamicResource BackgroundBrush}">
+        WindowStartupLocation="CenterScreen" Style="{DynamicResource GMWindow}">
     <Window.Resources>
         <ResourceDictionary Source="../Themes/LATheme.xaml"/>
     </Window.Resources>
 
-    <DockPanel Margin="12">
-        <!-- 底部按钮 -->
+    <DockPanel Margin="16,12">
+        <!-- 底部：说明在左，按钮在右（与其他窗口一致：取消 / 确定） -->
         <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
-            <Button Content="确定" Width="88" Height="28" IsDefault="True"
-                    Style="{StaticResource PrimaryButton}" Click="Ok_Click"/>
-            <Button Content="取消" Width="72" Height="28" IsCancel="True" Margin="8,0,0,0"
-                    Style="{StaticResource SecondaryButton}"/>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Content="取消" IsCancel="True" Style="{StaticResource SecondaryButton}"/>
+                <Button Content="确定" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Ok_Click"/>
+            </StackPanel>
             <TextBlock Text="先选好样式，确定后到图上连续点选要刷的批注（回车结束）"
                        VerticalAlignment="Center" Margin="0,0,12,0"
-                       Style="{StaticResource Caption}" TextAlignment="Right"/>
+                       Style="{StaticResource Caption}"/>
         </DockPanel>
 
         <Grid>
@@ -35,7 +34,7 @@
 
             <!-- 左列：批注文字 + 云线样式 -->
             <StackPanel Grid.Column="0">
-                <GroupBox Header="批注文字" Padding="10,8">
+                <GroupBox Header="批注文字">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" SharedSizeGroup="Label"/>
@@ -51,17 +50,17 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Text="首行字高" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"/>
-                        <ComboBox Grid.Row="0" Grid.Column="1" x:Name="HeaderHeightBox" IsEditable="True" Height="26"/>
+                        <ComboBox Grid.Row="0" Grid.Column="1" x:Name="HeaderHeightBox" IsEditable="True"/>
                         <TextBlock Grid.Row="2" Text="次行字高" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"/>
-                        <ComboBox Grid.Row="2" Grid.Column="1" x:Name="SecondLineHeightBox" IsEditable="True" Height="26"/>
+                        <ComboBox Grid.Row="2" Grid.Column="1" x:Name="SecondLineHeightBox" IsEditable="True"/>
                         <TextBlock Grid.Row="4" Text="批注字高" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"/>
-                        <ComboBox Grid.Row="4" Grid.Column="1" x:Name="TextHeightBox" IsEditable="True" Height="26"/>
+                        <ComboBox Grid.Row="4" Grid.Column="1" x:Name="TextHeightBox" IsEditable="True"/>
                         <TextBlock Grid.Row="6" Text="文字样式" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"/>
-                        <ComboBox Grid.Row="6" Grid.Column="1" x:Name="TextStyleBox" Height="26"/>
+                        <ComboBox Grid.Row="6" Grid.Column="1" x:Name="TextStyleBox"/>
                     </Grid>
                 </GroupBox>
 
-                <GroupBox Header="云线样式" Padding="10,8" Margin="0,10,0,0">
+                <GroupBox Header="云线样式" Margin="0,10,0,0">
                     <StackPanel Orientation="Horizontal">
                         <RadioButton x:Name="StyleEven" Content="等宽" IsChecked="True" Margin="0,0,18,0" VerticalContentAlignment="Center"/>
                         <RadioButton x:Name="StyleGradient" Content="渐变" VerticalContentAlignment="Center"/>
@@ -70,7 +69,7 @@
             </StackPanel>
 
             <!-- 右列：图层与颜色 -->
-            <GroupBox Grid.Column="2" Header="图层" Padding="10,8" VerticalAlignment="Top">
+            <GroupBox Grid.Column="2" Header="图层与颜色" VerticalAlignment="Top">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -88,18 +87,18 @@
                     </Grid.RowDefinitions>
 
                     <TextBlock Grid.Row="0" Text="图层名" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="0" Grid.Column="1" x:Name="LayerBox" IsEditable="True" Height="26"/>
+                    <ComboBox Grid.Row="0" Grid.Column="1" x:Name="LayerBox" IsEditable="True"/>
 
                     <TextBlock Grid.Row="2" Text="云线" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="2" Grid.Column="1" x:Name="CloudColorBox" Height="26" SelectionChanged="Color_SelectionChanged"/>
+                    <ComboBox Grid.Row="2" Grid.Column="1" x:Name="CloudColorBox" SelectionChanged="Color_SelectionChanged"/>
                     <Rectangle Grid.Row="2" Grid.Column="2" x:Name="CloudSwatch" Width="18" Height="16" Stroke="{DynamicResource BorderBrush}" Margin="4,0,0,0"/>
 
                     <TextBlock Grid.Row="4" Text="引线" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="4" Grid.Column="1" x:Name="LeaderColorBox" Height="26" SelectionChanged="Color_SelectionChanged"/>
+                    <ComboBox Grid.Row="4" Grid.Column="1" x:Name="LeaderColorBox" SelectionChanged="Color_SelectionChanged"/>
                     <Rectangle Grid.Row="4" Grid.Column="2" x:Name="LeaderSwatch" Width="18" Height="16" Stroke="{DynamicResource BorderBrush}" Margin="4,0,0,0"/>
 
                     <TextBlock Grid.Row="6" Text="文字" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="6" Grid.Column="1" x:Name="TextColorBox" Height="26" SelectionChanged="Color_SelectionChanged"/>
+                    <ComboBox Grid.Row="6" Grid.Column="1" x:Name="TextColorBox" SelectionChanged="Color_SelectionChanged"/>
                     <Rectangle Grid.Row="6" Grid.Column="2" x:Name="TextSwatch" Width="18" Height="16" Stroke="{DynamicResource BorderBrush}" Margin="4,0,0,0"/>
                 </Grid>
             </GroupBox>

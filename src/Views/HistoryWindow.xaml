@@ -3,13 +3,15 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="批注历史记录"
-        Width="1000" Height="620"
+        Width="1180" Height="620"
+        MinWidth="760" MinHeight="360"
         ShowInTaskbar="False"
-        WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
-        FontFamily="Microsoft YaHei, 微软雅黑"
-        FontSize="12">
-    <DockPanel Margin="12,10,12,10">
+        WindowStartupLocation="CenterOwner" Style="{DynamicResource GMWindow}">
+    <Window.Resources>
+        <ResourceDictionary Source="../Themes/LATheme.xaml"/>
+    </Window.Resources>
+
+    <DockPanel Margin="12,10,12,12">
         <!-- 顶部过滤栏 -->
         <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
@@ -22,39 +24,36 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="关键字: " VerticalAlignment="Center"/>
-            <TextBox x:Name="FilterBox" Grid.Column="1" Height="26" VerticalContentAlignment="Center"
+            <TextBlock Grid.Column="0" Text="关键字" Style="{StaticResource FieldLabelLeft}"/>
+            <TextBox x:Name="FilterBox" Grid.Column="1"
                      TextChanged="Filter_TextChanged"/>
             <CheckBox x:Name="CurrentDrawingOnly" Grid.Column="2" Content="仅当前图" Margin="12,0,0,0"
                       VerticalAlignment="Center" IsChecked="True" Checked="Filter_TextChanged" Unchecked="Filter_TextChanged"/>
-            <TextBlock x:Name="CountText" Grid.Column="3" VerticalAlignment="Center" Margin="12,0,0,0"
-                       Foreground="#555555"/>
-            <Button x:Name="RefreshButton" Grid.Column="4" Content="刷新" Width="64" Height="26" Margin="8,0,0,0" Click="Refresh_Click"/>
-            <Button x:Name="ExportButton" Grid.Column="5" Content="导出CSV" Width="72" Height="26" Margin="8,0,0,0" Click="Export_Click"/>
-            <Button x:Name="CleanupButton" Grid.Column="6" Content="清理" Width="64" Height="26" Margin="8,0,0,0"
+            <TextBlock x:Name="CountText" Grid.Column="3" Margin="12,0,0,0" Style="{StaticResource StatusText}"/>
+            <Button x:Name="RefreshButton" Grid.Column="4" Content="刷新" Style="{StaticResource CompactButton}" Click="Refresh_Click"/>
+            <Button x:Name="ExportButton" Grid.Column="5" Content="导出CSV" Style="{StaticResource CompactButton}" Click="Export_Click"/>
+            <Button x:Name="CleanupButton" Grid.Column="6" Content="清理" Style="{StaticResource CompactButton}"
                     ToolTip="清理列表中的留痕记录（按当前过滤条件，清理前自动备份）" Click="Cleanup_Click"/>
-            <Button x:Name="CloseButton" Grid.Column="7" Content="关闭" Width="64" Height="26" Margin="8,0,0,0" Click="Close_Click"/>
+            <Button x:Name="CloseButton" Grid.Column="7" Content="关闭" Style="{StaticResource CompactButton}" Click="Close_Click"/>
         </Grid>
 
         <!-- 留痕列表 -->
         <DataGrid x:Name="HistoryGrid" AutoGenerateColumns="False" IsReadOnly="True"
-                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
                   CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single"
-                  EnableRowVirtualization="True" AlternatingRowBackground="#F5F7FA"
-                  RowHeight="24" BorderBrush="#C0C0C0">
+                  EnableRowVirtualization="True">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="时间" Binding="{Binding TimeString}" Width="130"/>
-                <DataGridTextColumn Header="操作" Binding="{Binding Action}" Width="66"/>
-                <DataGridTextColumn Header="图名" Binding="{Binding Drawing}" Width="130"/>
+                <DataGridTextColumn Header="时间" Binding="{Binding TimeString}" Width="140"/>
+                <DataGridTextColumn Header="操作" Binding="{Binding Action}" Width="56"/>
+                <DataGridTextColumn Header="图名" Binding="{Binding Drawing}" Width="120"/>
                 <DataGridTextColumn Header="图号" Binding="{Binding DrawingNo}" Width="80"/>
-                <DataGridTextColumn Header="编号" Binding="{Binding Number}" Width="76"/>
-                <DataGridTextColumn Header="批注日期" Binding="{Binding Date}" Width="86"/>
-                <DataGridTextColumn Header="专业" Binding="{Binding Discipline}" Width="60"/>
-                <DataGridTextColumn Header="批注人" Binding="{Binding Author}" Width="80"/>
-                <DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="66"/>
-                <DataGridTextColumn Header="批注内容" Binding="{Binding Content}" Width="*"/>
-                <DataGridTextColumn Header="变更明细" Binding="{Binding Changes}" Width="200"/>
-                <DataGridTextColumn Header="操作人" Binding="{Binding User}" Width="80"/>
+                <DataGridTextColumn Header="编号" Binding="{Binding Number}" Width="72"/>
+                <DataGridTextColumn Header="批注日期" Binding="{Binding Date}" Width="84"/>
+                <DataGridTextColumn Header="专业" Binding="{Binding Discipline}" Width="56"/>
+                <DataGridTextColumn Header="批注人" Binding="{Binding Author}" Width="64"/>
+                <DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="56"/>
+                <DataGridTextColumn Header="批注内容" Binding="{Binding Content}" Width="*" MinWidth="200"/>
+                <DataGridTextColumn Header="变更明细" Binding="{Binding Changes}" Width="160"/>
+                <DataGridTextColumn Header="操作人" Binding="{Binding User}" Width="64"/>
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>

@@ -3,8 +3,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="GM批注" Width="500" Height="520"
-        MinWidth="420" MinHeight="460"
-        ResizeMode="CanResizeWithGrip">
+        MinWidth="440" MinHeight="460"
+        ResizeMode="CanResizeWithGrip" WindowStartupLocation="CenterScreen" Style="{DynamicResource GMWindow}">
     <Window.Resources>
         <ResourceDictionary Source="../Themes/LATheme.xaml"/>
     </Window.Resources>
@@ -20,17 +20,17 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="知识库(K)" MinWidth="76" Height="28" Style="{StaticResource SecondaryButton}" Click="KnowledgeBase_Click"
+                    <Button Content="知识库(K)" Margin="0" Style="{StaticResource SecondaryButton}" Click="KnowledgeBase_Click"
                             ToolTip="打开知识库：批注条目 + 常用批注语，可挑一条填进上方内容框（与「批注历史记录」相互独立）"/>
-                    <Button x:Name="AppendCloudButton" Content="增补云线" MinWidth="76" Height="28" Margin="10,0,0,0"
+                    <Button x:Name="AppendCloudButton" Content="增补云线"
                             Style="{StaticResource SecondaryButton}" Click="AppendCloud_Click" Visibility="Collapsed"
                             ToolTip="给当前批注追加一条云线（连续框选，回车结束）：云线外形/弧瓣/图层/颜色/线宽与原批注完全一致，随后返回本窗口"/>
-                    <CheckBox x:Name="ArchiveCheckBox" Content="立即入库" Margin="14,0,0,0" VerticalAlignment="Center"
+                    <CheckBox x:Name="ArchiveCheckBox" Content="立即入库" Margin="12,0,0,0" VerticalAlignment="Center"
                               ToolTip="勾选后，创建/修改批注时把该条批注写入知识库（批注条目 + 常用批注语）"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Content="取消" IsCancel="True" Style="{StaticResource SecondaryButton}" Click="Cancel_Click"/>
-                    <Button x:Name="ConfirmButton" Content="创建批注" IsDefault="True" Margin="8,0,0,0"
+                    <Button x:Name="ConfirmButton" Content="创建批注" IsDefault="True"
                             Style="{StaticResource PrimaryButton}" Click="Confirm_Click"/>
                 </StackPanel>
             </Grid>
@@ -40,7 +40,7 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,14">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="68"/>
+                    <ColumnDefinition Width="72"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
@@ -69,7 +69,7 @@
                         <Border Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderStrongBrush}"
                                 BorderThickness="1" CornerRadius="6" Padding="2">
                             <DockPanel>
-                                <TextBlock DockPanel.Dock="Bottom" FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                                <TextBlock DockPanel.Dock="Bottom" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
                                            Margin="8,5,8,6" TextWrapping="Wrap"
                                            Text="↑↓ 选择 · 回车 / Tab 套用 · Esc 关闭 · 只替换当前行已输入部分，其余内容不动"/>
                                 <ListBox x:Name="SuggestList" Focusable="False" BorderThickness="0" Background="Transparent"
@@ -85,12 +85,12 @@
                                                 </Grid.ColumnDefinitions>
                                                 <Border Grid.Column="0" Background="{StaticResource PrimaryLightBrush}" CornerRadius="3"
                                                         Padding="5,1" Margin="0,1,7,0" VerticalAlignment="Top">
-                                                    <TextBlock Text="{Binding Source}" FontSize="10" Foreground="{StaticResource PrimaryBrush}"/>
+                                                    <TextBlock Text="{Binding Source}" FontSize="11" Foreground="{StaticResource PrimaryBrush}"/>
                                                 </Border>
                                                 <StackPanel Grid.Column="1">
                                                     <TextBlock Text="{Binding Preview}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
                                                     <TextBlock Text="{Binding Note}" Visibility="{Binding NoteVisibility}"
-                                                               FontSize="10" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                                               FontSize="11" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                                                Foreground="{StaticResource TextMutedBrush}"/>
                                                 </StackPanel>
                                             </Grid>
@@ -101,31 +101,32 @@
                         </Border>
                     </Popup>
                     <DockPanel Margin="0,6,0,0">
-                        <Button x:Name="ReplyButton" DockPanel.Dock="Left" Content="回复" MinWidth="64" Height="24"
-                                HorizontalAlignment="Left" Style="{StaticResource SecondaryButton}" Click="Reply_Click"
+                        <Button x:Name="ReplyButton" DockPanel.Dock="Left" Content="回复" Margin="0"
+                                HorizontalAlignment="Left" Style="{StaticResource CompactButton}" Click="Reply_Click"
                                 ToolTip="在批注内容末尾追加一条回复（分隔线 + 回复:时间 批注人 + 内容:），光标停在内容处直接输入"/>
                         <CheckBox x:Name="SuggestCheckBox" DockPanel.Dock="Left" Content="输入建议" Margin="12,0,0,0"
                                   VerticalAlignment="Center" Checked="Suggest_Toggled" Unchecked="Suggest_Toggled"
                                   ToolTip="输入时按「批注历史记录 / 常用批注语 / 知识库条目」实时给出补全与续写候选（Ctrl+空格 也可手动调出）"/>
-                        <TextBlock DockPanel.Dock="Left" Text="在下方追加回复，回复内容随批注一起显示在图上" Margin="10,0,0,0"
-                                   VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource BorderBrush}"/>
+                        <TextBlock Text="在下方追加回复，回复内容随批注一起显示在图上" Margin="10,0,0,0"
+                                   VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                                   TextTrimming="CharacterEllipsis" ToolTip="在下方追加回复，回复内容随批注一起显示在图上"/>
                     </DockPanel>
                 </StackPanel>
 
                 <TextBlock Grid.Row="1" Grid.Column="0" Text="历史" Style="{StaticResource FieldLabel}"/>
                 <DockPanel Grid.Row="1" Grid.Column="1">
-                    <Button x:Name="ClearHistoryButton" DockPanel.Dock="Right" Content="清除" MinWidth="64" Height="24"
-                            Margin="6,0,0,0" VerticalAlignment="Center"
-                            Style="{StaticResource SecondaryButton}" Click="ClearHistory_Click"
+                    <Button x:Name="ClearHistoryButton" DockPanel.Dock="Right" Content="清除"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource CompactButton}" Click="ClearHistory_Click"
                             ToolTip="清空此下拉中的最近批注内容（只清下拉候选，不删除批注历史记录）"/>
                     <ComboBox x:Name="HistoryComboBox" ToolTip="最近使用过的批注内容，选择后自动填入上方内容框"/>
                 </DockPanel>
 
                 <TextBlock Grid.Row="2" Grid.Column="0" Text="图号" Style="{StaticResource FieldLabel}"/>
                 <DockPanel Grid.Row="2" Grid.Column="1">
-                    <Button x:Name="PickDrawingNoButton" DockPanel.Dock="Right" Content="拾取文字" MinWidth="76" Height="24"
-                            Margin="6,0,0,0" VerticalAlignment="Center"
-                            Style="{StaticResource SecondaryButton}" Click="PickText_Click"
+                    <Button x:Name="PickDrawingNoButton" DockPanel.Dock="Right" Content="拾取文字"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource CompactButton}" Click="PickText_Click"
                             ToolTip="在图上点选单行文字 / 多行文字，提取其内容填入图号（自动去掉 图号： 前缀）"/>
                     <TextBox x:Name="DrawingNoTextBox" ToolTip="当前图纸的图号，随批注写入历史库；按图自动记忆"/>
                 </DockPanel>

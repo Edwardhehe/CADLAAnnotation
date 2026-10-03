@@ -6,8 +6,7 @@
         MinWidth="268" MinHeight="360"
         ResizeMode="CanResize"
         Topmost="True" ShowInTaskbar="False"
-        WindowStyle="ToolWindow"
-        Background="{DynamicResource BackgroundBrush}">
+        WindowStyle="ToolWindow" Style="{DynamicResource GMWindow}">
     <Window.Resources>
         <ResourceDictionary Source="../Themes/LATheme.xaml"/>
     </Window.Resources>
@@ -30,14 +29,14 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12,8">
             <StackPanel>
                 <!-- 批注类型 -->
-                <TextBlock Text="批注类型" Style="{StaticResource SectionHeader}" Margin="0,2,0,4"/>
+                <TextBlock Text="批注类型" Style="{StaticResource SectionHeader}" Margin="0,2,0,6"/>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                     <RadioButton x:Name="SingleModeRadio" Content="单独批注" IsChecked="True" GroupName="Mode"/>
                     <RadioButton x:Name="MultiModeRadio" Content="多对一批注" GroupName="Mode" Margin="0,3,0,3"/>
                 </StackPanel>
 
                 <!-- 批注形式 -->
-                <TextBlock Text="批注形式" Style="{StaticResource SectionHeader}" Margin="0,6,0,4"/>
+                <TextBlock Text="批注形式" Style="{StaticResource SectionHeader}" Margin="0,8,0,6"/>
                 <UniformGrid Columns="2" Margin="0,0,0,4">
                     <RadioButton x:Name="ShapeRectRadio" Content="矩形" IsChecked="True" GroupName="Shape"/>
                     <RadioButton x:Name="ShapePlineRadio" Content="PL 线" GroupName="Shape"/>
@@ -49,10 +48,10 @@
                 <Rectangle Style="{StaticResource SectionSeparator}"/>
 
                 <!-- 待应用设置 -->
-                <TextBlock Text="批注设置（开始批注时生效）" Style="{StaticResource SectionHeader}" Margin="0,4,0,6"/>
+                <TextBlock Text="批注设置（开始批注时生效）" Style="{StaticResource SectionHeader}" Margin="0,4,0,6" TextWrapping="Wrap"/>
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="56"/>
+                        <ColumnDefinition Width="64"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
@@ -83,7 +82,7 @@
                 <CheckBox x:Name="DoubleClickEditCheck" Content="双击编辑"/>
 
                 <Button Content="完整设置…" Style="{StaticResource SecondaryButton}" Click="Settings_Click"
-                        Margin="0,10,0,0" HorizontalAlignment="Right" MinWidth="88"/>
+                        Margin="0,10,0,2" HorizontalAlignment="Right"/>
             </StackPanel>
         </ScrollViewer>
     </DockPanel>
