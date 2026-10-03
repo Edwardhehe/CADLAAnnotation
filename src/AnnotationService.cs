@@ -1902,6 +1902,13 @@ namespace GMAnnotation
         }
 
         /// <summary>扫描当前 DWG 中现有批注编号，返回最大 GM 编号+1（无批注时=1）。</summary>
+        /// <summary>关闭自动编号时的预填编号：本图下一个空闲编号（GM-xxx），只作建议、不写入设置。</summary>
+        public static string SuggestNumber(Document doc)
+        {
+            try { return "GM-" + GetNextNumber(doc).ToString("D3"); }
+            catch (System.Exception ex) { PluginLog.Warning("Number.Suggest", ex.Message); return "GM-001"; }
+        }
+
         public static int GetNextNumber(Document doc)
         {
             if (doc == null || doc.IsDisposed) return 1;
@@ -3478,12 +3485,22 @@ namespace GMAnnotation
             if(string.IsNullOrWhiteSpace(name))return;
             var table=(TextStyleTable)tr.GetObject(db.TextStyleTableId,OpenMode.ForRead);
             if(table.Has(name)){text.TextStyleId=table[name];}
-            else PluginLog.Warning("TextStyle",$"文字样式「{name}」在图中不存在，已回退为默认样式。");
+            else
+            {
+                PluginLog.Warning("TextStyle",$"文字样式「{name}」在图中不存在，已回退为默认样式。");
+                // 每张图每个样式名只在命令行提醒一次，避免批量操作刷屏。
+                var key=db.GetHashCode()+"|"+name;
+                if(WarnedTextStyles.Add(key))
+                    try{ActiveDocument()?.Editor.WriteMessage($"\n提示：图中没有文字样式「{name}」，批注文字已改用默认样式（可在 GM_PZ_SETTINGS 的「文字样式」中改选）。");}catch{}
+            }
         }
+        private static readonly HashSet<string> WarnedTextStyles=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 #if ZWCAD
+        private static Document ActiveDocument()=>ZwSoft.ZwCAD.ApplicationServices.Core.Application.DocumentManager.MdiActiveDocument;
         private static object CadSystemVariable(string name)=>ZwSoft.ZwCAD.ApplicationServices.Core.Application.GetSystemVariable(name);
         private static void SetCadSystemVariable(string name,object value)=>ZwSoft.ZwCAD.ApplicationServices.Core.Application.SetSystemVariable(name,value);
 #else
+        private static Document ActiveDocument()=>Autodesk.AutoCAD.ApplicationServices.Core.Application.DocumentManager.MdiActiveDocument;
         private static object CadSystemVariable(string name)=>Autodesk.AutoCAD.ApplicationServices.Core.Application.GetSystemVariable(name);
         private static void SetCadSystemVariable(string name,object value)=>Autodesk.AutoCAD.ApplicationServices.Core.Application.SetSystemVariable(name,value);
 #endif

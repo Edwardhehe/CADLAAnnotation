@@ -32,11 +32,20 @@ namespace GMAnnotation
                 {
                     // 文件损坏：先备份，再用默认值运行；原文件保持不动，直到用户在设置窗口点「保存设置」。
                     IsCorrupt = true;
-                    BackupCorruptFile();
-                    PluginLog.Error("Settings.Load.Corrupt", ex);
+                    if (BackupCorruptFile()) PluginLog.Error("Settings.Load.Corrupt", ex); // 同一损坏版本只记一次，避免高频读取刷屏
                     return s;
                 }
                 IsCorrupt = false;
+                Read(x, s);
+            }
+            catch (Exception ex) { PluginLog.Error("Settings.Load",ex); }
+            return s;
+        }
+
+        /// <summary>从 XML 根节点读取全部设置项（缺项用默认值），读完做范围校验。</summary>
+        private static void Read(XElement x, AnnotationSettings s)
+        {
+            {
                 s.Shape = Get(x, "Shape", s.Shape); s.CloudStyle = Get(x, "CloudStyle", s.CloudStyle);
                 s.LayerName = Get(x, "LayerName", s.LayerName);
                 // 改名前版本的默认图层名为 "LA-批注"：升级后统一按新默认名 "GM-批注" 使用（用户自定义过的图层名不受影响）。
@@ -62,27 +71,77 @@ namespace GMAnnotation
                 s.CloudMarkerAutoIncrement=ParseBool(Get(x,"CloudMarkerAutoIncrement","false"),false);
                 s.CloudMarkerTextHeight=ParseDouble(Get(x,"CloudMarkerTextHeight","2.5"),2.5);s.CloudMarkerBoxHeight=ParseDouble(Get(x,"CloudMarkerBoxHeight","5"),5);s.CloudMarkerBoxWidth=ParseDouble(Get(x,"CloudMarkerBoxWidth","10"),10);
                 s.CloudMarkerShape=CloudMarker.Normalize(Get(x,"CloudMarkerShape",CloudMarker.DefaultShape));s.CloudMarkerColor=ParseShort(Get(x,"CloudMarkerColor","-1"),(short)-1);
+                s.SeparateColors=Get(x,"SeparateColors","");
             }
-            catch (Exception ex) { PluginLog.Error("Settings.Load",ex); }
-            return s;
+            Sanitize(s);
+        }
+
+        /// <summary>读入值的范围校验：明显非法（非数字、≤0、越界、未知选项）的项回退为默认值，避免在运行时才出错。
+        /// 颜色只纠正 0~256 以外的值（0=随块、256=随层 原样保留）。</summary>
+        private static void Sanitize(AnnotationSettings s)
+        {
+            var d = new AnnotationSettings();
+            double Pos(double v, double f) => double.IsNaN(v) || double.IsInfinity(v) || v <= 0 ? f : v;
+            short Aci(short v, short f) => v < 0 || v > 256 ? f : v;
+            s.TextHeight = Pos(s.TextHeight, d.TextHeight); s.HeaderHeight = Pos(s.HeaderHeight, d.HeaderHeight); s.SecondLineHeight = Pos(s.SecondLineHeight, d.SecondLineHeight);
+            s.CloudRadius = Pos(s.CloudRadius, d.CloudRadius);
+            if (double.IsNaN(s.LineWidth) || double.IsInfinity(s.LineWidth) || s.LineWidth < 0) s.LineWidth = d.LineWidth;
+            s.ScaleRatio = Pos(s.ScaleRatio, d.ScaleRatio);
+            s.AutoTextViewPercent = Math.Min(10, Math.Max(0.1, Pos(s.AutoTextViewPercent, d.AutoTextViewPercent)));
+            if (double.IsNaN(s.FixedWidthValue) || s.FixedWidthValue < 1) s.FixedWidthValue = d.FixedWidthValue;
+            s.CheckHeight = Pos(s.CheckHeight, d.CheckHeight);
+            s.CloudMarkerTextHeight = Pos(s.CloudMarkerTextHeight, d.CloudMarkerTextHeight);
+            s.CloudMarkerBoxHeight = Pos(s.CloudMarkerBoxHeight, d.CloudMarkerBoxHeight);
+            s.CloudMarkerBoxWidth = Pos(s.CloudMarkerBoxWidth, d.CloudMarkerBoxWidth);
+            if (s.NextNumber < 1) s.NextNumber = 1;
+            if (s.Shape != "矩形" && s.Shape != "菱形" && s.Shape != "椭圆") s.Shape = d.Shape;
+            if (s.CloudStyle != "等宽" && s.CloudStyle != "渐变") s.CloudStyle = d.CloudStyle;
+            if (string.IsNullOrWhiteSpace(s.LayerName)) s.LayerName = d.LayerName;
+            if (s.Connector == null) s.Connector = d.Connector;
+            s.ColorIndex = Aci(s.ColorIndex, d.ColorIndex); s.CloudColor = Aci(s.CloudColor, d.CloudColor); s.LeaderColor = Aci(s.LeaderColor, d.LeaderColor);
+            s.TextColor = Aci(s.TextColor, d.TextColor); s.BoxColor = Aci(s.BoxColor, d.BoxColor); s.ReplyColor = Aci(s.ReplyColor, d.ReplyColor);
+            s.PassColor = Aci(s.PassColor, d.PassColor); s.CheckColor = Aci(s.CheckColor, d.CheckColor); s.ScreenshotBackgroundColor = Aci(s.ScreenshotBackgroundColor, d.ScreenshotBackgroundColor);
+            if (s.SeparateColors == null) s.SeparateColors = "";
+        }
+
+        /// <summary>导出设置到指定文件（与 settings.xml 同格式，不含工具栏显隐等运行状态）。</summary>
+        public static void ExportTo(AnnotationSettings s, string path)
+        {
+            var text = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" + BuildRoot(s).ToString();
+            DataFiles.WriteAllTextAtomic(path, text, new System.Text.UTF8Encoding(false));
+        }
+
+        /// <summary>从导出的设置文件读取（不写入本机设置，由设置窗口填入界面、用户保存后才生效）。</summary>
+        public static bool TryLoadFrom(string path, out AnnotationSettings s, out string error)
+        {
+            s = new AnnotationSettings(); error = null;
+            try
+            {
+                var x = XElement.Load(path);
+                if (x.Name.LocalName != "Settings") { error = "不是 GM批注 设置文件（根节点不是 Settings）。"; return false; }
+                Read(x, s);
+                return true;
+            }
+            catch (Exception ex) { error = ex.Message; return false; }
         }
 
         /// <summary>把损坏的 settings.xml 复制为 settings.xml.bad-yyyyMMdd-HHmmss（同一损坏版本只备份一次）。</summary>
-        private static void BackupCorruptFile()
+        private static bool BackupCorruptFile()
         {
             try
             {
                 var info = new FileInfo(PathName);
-                if (!info.Exists) return;
+                if (!info.Exists) return false;
                 var signature = info.LastWriteTimeUtc.Ticks + ":" + info.Length;
-                if (signature == _backedUpSignature) return;
+                if (signature == _backedUpSignature) return false;
                 var target = PathName + ".bad-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
                 if (!File.Exists(target)) File.Copy(PathName, target, false);
                 _backedUpSignature = signature;
                 CorruptBackupPath = target;
                 PluginLog.Warning("Settings.Backup", "settings.xml 无法解析，已备份为 " + target + "，当前使用默认设置。");
+                return true;
             }
-            catch (Exception ex) { PluginLog.Warning("Settings.Backup", ex.Message); }
+            catch (Exception ex) { PluginLog.Warning("Settings.Backup", ex.Message); return false; }
         }
 
         /// <summary>磁盘上的 settings.xml 当前是否无法解析。</summary>
@@ -140,7 +199,8 @@ namespace GMAnnotation
                 new XElement("ArchiveOnCreate",s.ArchiveOnCreate),new XElement("ContentSuggest",s.ContentSuggest),
                 new XElement("CloudMarkerEnabled",s.CloudMarkerEnabled),new XElement("CloudMarkerText",s.CloudMarkerText??""),new XElement("CloudMarkerAutoIncrement",s.CloudMarkerAutoIncrement),
                 new XElement("CloudMarkerTextHeight",s.CloudMarkerTextHeight.ToString(CultureInfo.InvariantCulture)),new XElement("CloudMarkerBoxHeight",s.CloudMarkerBoxHeight.ToString(CultureInfo.InvariantCulture)),new XElement("CloudMarkerBoxWidth",s.CloudMarkerBoxWidth.ToString(CultureInfo.InvariantCulture)),
-                new XElement("CloudMarkerShape",CloudMarker.Normalize(s.CloudMarkerShape)),new XElement("CloudMarkerColor",s.CloudMarkerColor));
+                new XElement("CloudMarkerShape",CloudMarker.Normalize(s.CloudMarkerShape)),new XElement("CloudMarkerColor",s.CloudMarkerColor),
+                new XElement("SeparateColors",s.SeparateColors??""));
         }
 
         /// <summary>与磁盘内容不同才写（原子替换）。DocumentActivated 等高频路径借此避免无谓写盘。</summary>

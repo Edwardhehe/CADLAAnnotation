@@ -14,10 +14,22 @@
         <Border DockPanel.Dock="Bottom" Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"
                 Padding="14,10">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="取消" IsCancel="True" Style="{StaticResource SecondaryButton}" Click="Cancel_Click"/>
-                <Button Content="保存设置" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Save_Click"/>
-            </StackPanel>
+            <DockPanel LastChildFill="False">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <Button Content="恢复默认" Style="{StaticResource SecondaryButton}" Click="Reset_Click"
+                            ToolTip="把界面上的各项恢复为默认值（不含下一个编号）；点「保存设置」后才生效"/>
+                    <Button Content="导入…" Style="{StaticResource SecondaryButton}" Click="Import_Click"
+                            ToolTip="从导出的设置文件读入到界面；点「保存设置」后才生效"/>
+                    <Button Content="导出…" Style="{StaticResource SecondaryButton}" Click="Export_Click"
+                            ToolTip="把界面上的当前值导出为设置文件（可在其他电脑导入）"/>
+                    <Button Content="打开数据目录" Style="{StaticResource SecondaryButton}" Click="OpenFolder_Click"
+                            ToolTip="%AppData%\GMAnnotation（设置、历史记录、知识库、日志）"/>
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="取消" IsCancel="True" Style="{StaticResource SecondaryButton}" Click="Cancel_Click"/>
+                    <Button Content="保存设置" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Save_Click"/>
+                </StackPanel>
+            </DockPanel>
         </Border>
 
         <TabControl Margin="8,6,8,0">
@@ -44,7 +56,7 @@
                             <ComboBox x:Name="CloudStyleCombo" Grid.Row="1" Grid.Column="1"/>
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="云线半径(mm)" Style="{StaticResource FieldLabel}"/>
                             <TextBox x:Name="CloudRadiusText" Grid.Row="2" Grid.Column="1"/>
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="云线线宽(mm)" Style="{StaticResource FieldLabel}"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="云线/引线线宽(mm)" Style="{StaticResource FieldLabel}" ToolTip="云线与引线共用此线宽；渐变云线按逐段宽度绘制"/>
                             <TextBox x:Name="LineWidthText" Grid.Row="3" Grid.Column="1"/>
                         </Grid>
                         <CheckBox x:Name="CloudAutoFitCheck" Content="云线自适应"
@@ -133,7 +145,8 @@
                                 <ColumnDefinition Width="120"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="固定宽度值" Style="{StaticResource FieldLabel}"/>
+                            <TextBlock Grid.Column="0" Text="固定宽度值(mm)" Style="{StaticResource FieldLabel}"
+                                       ToolTip="打印尺寸，随比例/自适应换算；首行（日期/专业/批注人）比该宽度长时会自动加宽，避免折行"/>
                             <TextBox x:Name="FixedWidthValueText" Grid.Column="1"/>
                         </Grid>
 
@@ -155,7 +168,7 @@
                             <TextBlock Grid.Row="1" Grid.Column="0" Text="默认角色" Style="{StaticResource FieldLabel}"/>
                             <ComboBox x:Name="DefaultRoleCombo" Grid.Row="1" Grid.Column="1" IsEditable="True"/>
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="默认专业" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="DefaultDisciplineText" Grid.Row="2" Grid.Column="1"/>
+                            <ComboBox x:Name="DefaultDisciplineCombo" Grid.Row="2" Grid.Column="1" IsEditable="True"/>
                         </Grid>
                         <CheckBox x:Name="AutoNumberCheck" Content="自动编号" Margin="120,6,0,2"/>
 
@@ -202,7 +215,7 @@
                             <CheckBox x:Name="LayerAppendDateCheck" Content="图层名添加日期"/>
                             <CheckBox x:Name="LayerAppendNameCheck" Content="图层名添加批注人姓名"/>
                             <CheckBox x:Name="DateBeforeNameCheck" Content="日期排列在姓名前"/>
-                            <CheckBox x:Name="PlottableCheck" Content="批注图层参与打印"/>
+                            <CheckBox x:Name="PlottableCheck" Content="批注图层参与打印（新建或再次使用该图层时应用，已有的其他批注图层不改）"/>
                         </StackPanel>
 
                         <Rectangle Style="{StaticResource SectionSeparator}"/>
@@ -280,8 +293,10 @@
                             • 设置保存在本机（%AppData%\GMAnnotation\settings.xml）<LineBreak/>
                             • 批注数据编码后存储在 DWG 图形内，随图纸传递<LineBreak/>
                             • 启用字体自适应后，字高按云线对角线尺寸 × 百分比自动计算<LineBreak/>
-                            • 选比例（1:N）后自动取消自适应：字高 = 打印字高(mm) × N，云线半径 = 打印云线半径(mm) × N<LineBreak/>
-                            • 创建命令执行时，命令行会显示本次实际采用的字高和云线半径
+                            • 未启用自适应时：字高 = 打印字高(mm) × N，云线半径 = 打印云线半径(mm) × N（布局图纸空间中按 1:1）<LineBreak/>
+                            • 从下拉选比例（1:N）会自动取消两个自适应；手填比例时在保存时询问<LineBreak/>
+                            • 创建批注/云线时，命令行会显示本次实际采用的字高和云线半径<LineBreak/>
+                            • 设置文件损坏时会先备份为 settings.xml.bad-时间戳，按默认值运行，点「保存设置」才重建
                         </TextBlock>
 
                         <TextBlock Text="命令速查" Style="{StaticResource SectionHeader}"/>
@@ -306,9 +321,16 @@
                             GM_PZ_HISTORY  — 批注历史记录（留痕）<LineBreak/>
                             GM_PZ_KB       — 知识库（批注条目 + 常用批注语，独立体系）<LineBreak/>
                             GM_PZ_EXPORT   — 导出批注<LineBreak/>
+                            GM_PZ_WORD     — 导出批注到 Word（时间、云线范围截图、批注文字）<LineBreak/>
                             GM_PZ_IMPORT   — 导入批注<LineBreak/>
                             GM_PZ_REPAIR   — 修复复制产生的批注<LineBreak/>
                             GM_PZ_TOOLBAR  — 显示/隐藏 GM批注工具栏（不存在时创建）<LineBreak/>
+                            GM_PZ_TOOLBAR_SHOW — 打开 GM批注工具栏并记住为显示<LineBreak/>
+                            GM_PZ_TOOLBAR_HIDE — 隐藏 GM批注工具栏并记住为隐藏<LineBreak/>
+                            GMPANEL        — GM_PZ_TOOLBAR_SHOW 的简短别名<LineBreak/>
+                            GM_PZ_INSTALL_AUTOLOAD   — 为当前 CAD 安装启动自动加载<LineBreak/>
+                            GM_PZ_UNINSTALL_AUTOLOAD — 卸载启动自动加载<LineBreak/>
+                            GM_PZ_AUTOLOAD — 在安装与卸载自动加载之间切换（兼容旧菜单）<LineBreak/>
                             GM_PZ_SETTINGS — 打开本设置窗口<LineBreak/>
                             GM_PZ_MENU     — 重新加载菜单<LineBreak/>
                             GM_PZ_ABOUT    — 关于 GM批注

@@ -78,6 +78,9 @@ namespace GMAnnotation
         public bool ContinuousAnnotation { get; set; } = true;
         public bool CloudOnly { get; set; } = false;
         public bool SameColors { get; set; } = true;
+        /// <summary>统一颜色模式下保留的分项颜色（云线,引线,文字,框,已回复,已完成,对勾；逗号分隔）。
+        /// 运行时仍用已同步为统一色的各分项字段；取消"统一颜色"时设置窗口据此还原原来的分项颜色。</summary>
+        public string SeparateColors { get; set; } = "";
         public bool LayerAppendDate { get; set; } = true;
         public bool LayerAppendName { get; set; } = false;
         public bool DateBeforeName { get; set; } = true;

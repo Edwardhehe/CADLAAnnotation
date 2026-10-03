@@ -62,8 +62,10 @@ namespace GMAnnotation.Views
             // 加载当前设置值
             RefreshControls();
             // 面板修改只保留为待应用值；点击“开始批注”时才统一写入设置。
-            ShapeRectRadio.Checked += (_, __) => ShapeCombo.Text = "矩形";
-            ShapeCircleRadio.Checked += (_, __) => ShapeCombo.Text = "椭圆";
+            // 「批注形式」单选与「外形」下拉保持一致：圆形 ⇔ 椭圆；矩形单选覆盖矩形/菱形（选矩形时菱形保持不变）。
+            ShapeRectRadio.Checked += (_, __) => { if (!_syncingShape && ShapeCombo.Text == "椭圆") ShapeCombo.Text = "矩形"; };
+            ShapeCircleRadio.Checked += (_, __) => { if (!_syncingShape) ShapeCombo.Text = "椭圆"; };
+            ShapeCombo.SelectionChanged += (_, __) => Dispatcher.BeginInvoke(new Action(SyncShapeRadio));
             SingleModeRadio.Checked += (_, __) => UpdateModeAvailability();
             MultiModeRadio.Checked += (_, __) => UpdateModeAvailability();
             // 菜单打开面板时由 ShowAndStart 立即开始批注；之后可修改参数，再由“开始批注”按钮或再次点菜单进入 CAD 交互。
@@ -84,6 +86,22 @@ namespace GMAnnotation.Views
             DoubleClickEditCheck.IsChecked = _s.DoubleClickEdit;
             ContinuousCheck.IsChecked = _s.ContinuousAnnotation;
             CloudOnlyCheck.IsChecked = _s.CloudOnly;
+            SyncShapeRadio();
+        }
+
+        private bool _syncingShape;
+
+        /// <summary>按「外形」下拉同步「批注形式」单选（PL 线模式不动）。</summary>
+        private void SyncShapeRadio()
+        {
+            if (ShapePlineRadio.IsChecked == true) return;
+            _syncingShape = true;
+            try
+            {
+                if (ShapeCombo.Text == "椭圆") ShapeCircleRadio.IsChecked = true;
+                else ShapeRectRadio.IsChecked = true;
+            }
+            finally { _syncingShape = false; }
         }
 
         /// <summary>点击开始时，将面板当前值一次性写回设置并持久化。
@@ -412,6 +430,7 @@ namespace GMAnnotation.Views
                 settings.NextNumber = AnnotationService.GetNextNumber(doc);
                 data.Number = "GM-" + settings.NextNumber.ToString("D3");
             }
+            else data.Number = AnnotationService.SuggestNumber(doc); // 关闭自动编号：预填本图下一个空闲编号（可改），不推进计数
 
             switch (shape)
             {
@@ -445,7 +464,7 @@ namespace GMAnnotation.Views
                 return;
             }
             // 完整 PL 批注：先确认占位框和引线位置，再填写内容并直接落图。
-            if (effective.FontAutoFit) doc.Editor.WriteMessage($"\n云线范围: {w:0.#}×{h:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}");
+            doc.Editor.WriteMessage($"\n云线范围: {w:0.#}×{h:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}");
             var placementResult=AnnotationService.PromptPlacement(doc,effective,_runSettings,null,null,points,points[points.Count-1],PlacementGeometryKind.Polygon);if(!AcceptInteraction(doc,placementResult))return;var textPointWcs=placementResult.Point;
             if (!CadDialog.ShowAnnotation(data, false)){doc.Editor.WriteMessage("\n已在填写内容阶段取消 PL 批注。");return;}
             AnnotationService.CreatePlineCloud(doc, data, effective, points, textPointWcs);
@@ -464,7 +483,7 @@ namespace GMAnnotation.Views
                 var (_,w,h)=AnnotationService.UcsAlignedExtents(doc,first,second);
                 var diagonal = Math.Sqrt(w * w + h * h);
                 var effective = AnnotationService.ResolveEffectiveSettings(doc, _runSettings, data, diagonal, true);
-                if (effective.FontAutoFit) doc.Editor.WriteMessage($"\n云线对角线: {diagonal:0.#}  云线半径: {effective.CloudRadius:0.###}");
+                doc.Editor.WriteMessage($"\n云线对角线: {diagonal:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}");
                 AnnotationService.CreateCloudOnly(doc, effective, first, second);
                 doc.Editor.WriteMessage("\n云线已创建。");
                 CheckContinuous(doc);
@@ -475,7 +494,7 @@ namespace GMAnnotation.Views
             var (_,bw,bh)=AnnotationService.UcsAlignedExtents(doc,f,s);
             var bdiagonal = Math.Sqrt(bw * bw + bh * bh);
             var beffective = AnnotationService.ResolveEffectiveSettings(doc, _runSettings, data, bdiagonal, true);
-            if (beffective.FontAutoFit) doc.Editor.WriteMessage($"\n云线对角线: {bdiagonal:0.#}  字高: {beffective.TextHeight:0.###}  云线半径: {beffective.CloudRadius:0.###}");
+            doc.Editor.WriteMessage($"\n云线对角线: {bdiagonal:0.#}  字高: {beffective.TextHeight:0.###}  云线半径: {beffective.CloudRadius:0.###}");
             var placementResult=AnnotationService.PromptPlacement(doc,beffective,_runSettings,new[]{f},new[]{s},null,s,PlacementGeometryKind.Region);if(!AcceptInteraction(doc,placementResult))return;var textPt=placementResult.Point;
             if (!CadDialog.ShowAnnotation(data, false)){doc.Editor.WriteMessage("\n已在填写内容阶段取消单区域批注。");return;}
             AnnotationService.Create(doc, data, beffective, f, s, textPt);
@@ -502,6 +521,7 @@ namespace GMAnnotation.Views
                 settings.NextNumber = AnnotationService.GetNextNumber(doc);
                 data.Number = "GM-" + settings.NextNumber.ToString("D3");
             }
+            else data.Number = AnnotationService.SuggestNumber(doc); // 关闭自动编号：预填本图下一个空闲编号（可改），不推进计数
 
             var preview = _runSettings.Clone();
             doc.Editor.WriteMessage(

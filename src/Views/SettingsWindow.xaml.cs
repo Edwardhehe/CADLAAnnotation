@@ -9,38 +9,59 @@ namespace GMAnnotation.Views
 {
     internal partial class SettingsWindow : Window
     {
-        private readonly AnnotationSettings _s;
+        private AnnotationSettings _s;
         /// <summary>程序性赋值比例（初始化）期间为 true，避免触发"选比例自动关自适应"。</summary>
         private bool _scaleChanging;
+        /// <summary>本窗口内对"比例 + 自适应"询问的回答（只问一次；校验失败重试时不重复弹）。</summary>
+        private bool? _scaleAutoAnswer;
+        /// <summary>当前 DWG 中已有的文字样式（没有传入时为空，不做存在性提醒）。</summary>
+        private readonly HashSet<string> _drawingStyles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>保存成功后的设置（调用方在 DialogResult=true 时读取）。</summary>
         public AnnotationSettings Value => _s;
 
         /// <summary>构造设置窗口。textStyles 为当前 DWG 中可用的文字样式名列表。</summary>
         public SettingsWindow(AnnotationSettings value, IEnumerable<string> textStyles = null)
         {
             InitializeComponent();
-            _s = value;
+            _s = value ?? new AnnotationSettings();
             ShapeCombo.ItemsSource = new[] { "矩形", "菱形", "椭圆" };
             CloudStyleCombo.ItemsSource = new[] { "等宽", "渐变" };
             DefaultRoleCombo.ItemsSource = AnnotationOptions.Roles;
+            DefaultDisciplineCombo.ItemsSource = AnnotationOptions.Disciplines;
             ConnectorCombo.ItemsSource = new[] { "-", "_", "·", "无" };
             ScaleRatioCombo.ItemsSource = AnnotationOptions.PlotScales;
-            // 所有颜色下拉菜单共享 ACI 255 色列表
-            foreach (var combo in new[] { ColorIndexCombo, CloudColorCombo, LeaderColorCombo, TextColorCombo, BoxColorCombo, ReplyColorCombo, ScreenshotBackgroundColorCombo, PassColorCombo, CheckColorCombo })
+            // 所有颜色下拉菜单共享 ACI 1~255 色列表
+            foreach (var combo in AllColorCombos())
                 combo.ItemsSource = AciColors.All;
             // 文字样式下拉菜单：合并预设 + DWG 中已有样式
             var styles = new List<string> { "Standard" };
-            if (textStyles != null) styles.AddRange(textStyles.Where(s => !string.Equals(s, "Standard", StringComparison.OrdinalIgnoreCase)));
+            if (textStyles != null)
+            {
+                foreach (var name in textStyles) if (!string.IsNullOrWhiteSpace(name)) _drawingStyles.Add(name);
+                styles.AddRange(_drawingStyles.Where(x => !string.Equals(x, "Standard", StringComparison.OrdinalIgnoreCase)));
+            }
             TextStyleCombo.ItemsSource = styles;
             LoadValues();
             if (SettingsStore.IsCorrupt)
                 Title += "（settings.xml 损坏，当前显示默认值；点「保存设置」才会覆盖原文件" +
                          (string.IsNullOrEmpty(SettingsStore.CorruptBackupPath) ? "" : "，原文件已备份") + "）";
-            Loaded += (s, e) => { WindowSizing.FitToWorkArea(this, 0.9, 0.86); RefreshDependencies(); };
+            // 比例提示随输入实时刷新（可编辑下拉手填、字高/半径改动都会更新）。
+            ScaleRatioCombo.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent, new TextChangedEventHandler((sender, e) => RefreshScaleHint()));
+            TextHeightText.TextChanged += (sender, e) => RefreshScaleHint();
+            CloudRadiusText.TextChanged += (sender, e) => RefreshScaleHint();
+            Loaded += (sender, e) => { WindowSizing.FitToWorkArea(this, 0.9, 0.86); RefreshDependencies(); };
         }
+
+        private IEnumerable<ComboBox> AllColorCombos() => new[] { ColorIndexCombo, CloudColorCombo, LeaderColorCombo, TextColorCombo, BoxColorCombo, ReplyColorCombo, ScreenshotBackgroundColorCombo, PassColorCombo, CheckColorCombo };
+
+        /// <summary>统一颜色模式下记住的 7 个分项颜色（顺序：云线,引线,文字,框,已回复,已完成,对勾）。</summary>
+        private ComboBox[] SeparateColorCombos() => new[] { CloudColorCombo, LeaderColorCombo, TextColorCombo, BoxColorCombo, ReplyColorCombo, PassColorCombo, CheckColorCombo };
 
         private void LoadValues()
         {
-            ShapeCombo.Text = _s.Shape; CloudStyleCombo.Text = _s.CloudStyle;
+            // 下拉不可编辑：设置文件里的未知值回退到第一项，避免显示为空、保存成空串。
+            ShapeCombo.Text = ShapeCombo.Items.Contains(_s.Shape) ? _s.Shape : "矩形";
+            CloudStyleCombo.Text = CloudStyleCombo.Items.Contains(_s.CloudStyle) ? _s.CloudStyle : "等宽";
             Set(CloudRadiusText, _s.CloudRadius); Set(LineWidthText, _s.LineWidth);
             CloudAutoFitCheck.IsChecked = _s.CloudAutoFit; FontAutoFitCheck.IsChecked = _s.FontAutoFit;
             Set(AutoTextViewPercentText, _s.AutoTextViewPercent);
@@ -51,7 +72,7 @@ namespace GMAnnotation.Views
             AutoCloseOrthoCheck.IsChecked = _s.AutoCloseOrtho; AutoCloseSnapCheck.IsChecked = _s.AutoCloseSnap;
             DoubleClickEditCheck.IsChecked = _s.DoubleClickEdit; ViewTopIsNorthCheck.IsChecked = _s.ViewTopIsNorth;
             Set(HeaderHeightText, _s.HeaderHeight); Set(SecondLineHeightText, _s.SecondLineHeight); Set(TextHeightText, _s.TextHeight);
-            DefaultAuthorText.Text = _s.DefaultAuthor; DefaultRoleCombo.Text = _s.DefaultRole; DefaultDisciplineText.Text = _s.DefaultDiscipline;
+            DefaultAuthorText.Text = _s.DefaultAuthor; DefaultRoleCombo.Text = _s.DefaultRole; DefaultDisciplineCombo.Text = _s.DefaultDiscipline;
             FixedWidthCheck.IsChecked = _s.FixedWidth; Set(FixedWidthValueText, _s.FixedWidthValue);
             AutoNumberCheck.IsChecked = _s.AutoNumber;
             LayerNameText.Text = _s.LayerName; TextStyleCombo.Text = _s.TextStyleName;
@@ -62,6 +83,12 @@ namespace GMAnnotation.Views
             ScreenshotBackgroundOnceReplyCheck.IsChecked = _s.ScreenshotBackgroundOnceReply;
             SelectColor(ScreenshotBackgroundColorCombo, _s.ScreenshotBackgroundColor);
             SelectColor(PassColorCombo, _s.PassColor); SelectColor(CheckColorCombo, _s.CheckColor);
+            // 统一颜色模式：分项下拉显示之前记住的分项颜色（取消统一颜色时即恢复为原来的分项配色）。
+            if (_s.SameColors && TryParseSeparateColors(_s.SeparateColors, out var separate))
+            {
+                var combos = SeparateColorCombos();
+                for (var i = 0; i < combos.Length; i++) SelectColor(combos[i], separate[i]);
+            }
             Set(CheckHeightText, _s.CheckHeight);
             LayerAppendDateCheck.IsChecked = _s.LayerAppendDate; LayerAppendNameCheck.IsChecked = _s.LayerAppendName;
             DateBeforeNameCheck.IsChecked = _s.DateBeforeName; ConnectorCombo.Text = _s.Connector;
@@ -72,14 +99,29 @@ namespace GMAnnotation.Views
             ShowDrawingNoCheck.IsChecked = _s.ShowDrawingNo;
             CloudMarkerEnabledCheck.IsChecked = _s.CloudMarkerEnabled;
             UpdateCloudMarkerSummary();
+            RefreshDependencies();
+        }
+
+        private static bool TryParseSeparateColors(string text, out short[] colors)
+        {
+            colors = null;
+            var parts = (text ?? "").Split(',');
+            if (parts.Length != 7) return false;
+            var result = new short[7];
+            for (var i = 0; i < 7; i++) if (!short.TryParse(parts[i].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out result[i])) return false;
+            colors = result;
+            return true;
         }
 
         private void UpdateCloudMarkerSummary()
         {
             if (CloudMarkerSummaryText == null) return;
             var preview = _s.Clone();
-            preview.CloudMarkerEnabled = CloudMarkerEnabledCheck.IsChecked == true;
-            CloudMarkerSummaryText.Text = "当前：" + CloudMarker.Describe(preview);
+            preview.CloudMarkerEnabled = true;
+            var detail = CloudMarker.Describe(preview).Substring(2); // 去掉"开，"
+            CloudMarkerSummaryText.Text = CloudMarkerEnabledCheck.IsChecked == true
+                ? "当前：开，" + detail
+                : "当前：关（开启后为：" + detail + "）";
         }
 
         private void CloudMarkerEnabled_Changed(object sender, RoutedEventArgs e) => UpdateCloudMarkerSummary();
@@ -97,58 +139,141 @@ namespace GMAnnotation.Views
         {
             try
             {
-                _s.Shape = ShapeCombo.Text.Trim(); _s.CloudStyle = CloudStyleCombo.Text.Trim();
-                _s.CloudRadius = N(CloudRadiusText, "云线半径", 0.001); _s.LineWidth = N(LineWidthText, "云线线宽", 0);
-                _s.CloudAutoFit = On(CloudAutoFitCheck); _s.FontAutoFit = On(FontAutoFitCheck);
-                _s.AutoTextViewPercent = N(AutoTextViewPercentText, "自适应百分比", 0.1, 10);
-                _s.ScaleRatio = ParseScale(ScaleRatioCombo.Text);
-                // 比例与自适应是两套算法：选了比例却还勾着自适应时，字高仍按云线尺寸算，比例看不出效果。
-                // 这里问一句再决定，避免用户以为"比例没生效"。
-                if (_s.ScaleRatio > 1.0 + 1e-9 && (_s.FontAutoFit || _s.CloudAutoFit))
+                var collected = Collect(true);
+                if (collected == null) return; // 用户在提醒里选择返回修改
+                SettingsStore.Save(collected, true);
+                _s = collected;
+                DialogResult = true;
+            }
+            catch (Exception ex) { MessageBox.Show(this, "设置保存失败：" + ex.Message, "GM批注", MessageBoxButton.OK, MessageBoxImage.Error); }
+        }
+
+        /// <summary>把界面值收集到一份新的设置副本（校验失败抛 InvalidOperationException；原副本不被部分改写）。
+        /// interactive=true 时做"比例+自适应""文字样式不存在"等询问，用户选择返回修改时返回 null。</summary>
+        private AnnotationSettings Collect(bool interactive)
+        {
+            var t = _s.Clone();
+            t.Shape = ShapeCombo.Text.Trim(); t.CloudStyle = CloudStyleCombo.Text.Trim();
+            var cloudAuto = On(CloudAutoFitCheck); var fontAuto = On(FontAutoFitCheck);
+            // 被禁用（不参与计算）的输入框不阻止保存：值非法时保留原值。
+            t.CloudRadius = cloudAuto ? Lenient(CloudRadiusText, _s.CloudRadius, 0.001) : N(CloudRadiusText, "云线半径", 0.001);
+            t.LineWidth = cloudAuto ? Lenient(LineWidthText, _s.LineWidth, 0) : N(LineWidthText, "云线/引线线宽", 0);
+            t.CloudAutoFit = cloudAuto; t.FontAutoFit = fontAuto;
+            t.AutoTextViewPercent = fontAuto || cloudAuto ? N(AutoTextViewPercentText, "字高占云线 %", 0.1, 10) : Lenient(AutoTextViewPercentText, _s.AutoTextViewPercent, 0.1, 10);
+            t.ScaleRatio = ParseScale(ScaleRatioCombo.Text);
+            // 比例与自适应是两套算法：选了比例却还勾着自适应时，字高仍按云线尺寸算，比例看不出效果。
+            // 这里问一句再决定（本窗口只问一次），避免用户以为"比例没生效"。
+            if (interactive && t.ScaleRatio > 1.0 + 1e-9 && (t.FontAutoFit || t.CloudAutoFit))
+            {
+                if (!_scaleAutoAnswer.HasValue)
                 {
-                    var autoNames = _s.FontAutoFit && _s.CloudAutoFit ? "字体/云线自适应" : _s.FontAutoFit ? "字体自适应" : "云线自适应";
+                    var autoNames = t.FontAutoFit && t.CloudAutoFit ? "字体/云线自适应" : t.FontAutoFit ? "字体自适应" : "云线自适应";
                     var answer = MessageBox.Show(this,
-                        "已选比例 1:" + FormatDenominator(_s.ScaleRatio) + "，但仍勾选了" + autoNames + "。\n\n" +
+                        "已选比例 1:" + FormatDenominator(t.ScaleRatio) + "，但仍勾选了" + autoNames + "。\n\n" +
                         "自适应按云线尺寸计算，比例不参与，图上尺寸不会按比例放大。\n" +
                         "是否改为按比例换算（取消自适应勾选）？",
                         "GM批注", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                    if (answer == MessageBoxResult.Yes) { _s.FontAutoFit = false; _s.CloudAutoFit = false; }
+                    _scaleAutoAnswer = answer == MessageBoxResult.Yes;
                 }
-                _s.CloudMarkerEnabled = On(CloudMarkerEnabledCheck);
-                _s.AutoCloseOrtho = On(AutoCloseOrthoCheck); _s.AutoCloseSnap = On(AutoCloseSnapCheck);
-                _s.DoubleClickEdit = On(DoubleClickEditCheck); _s.ViewTopIsNorth = On(ViewTopIsNorthCheck);
-                _s.HeaderHeight = N(HeaderHeightText, "首行字高", 0.01); _s.SecondLineHeight = N(SecondLineHeightText, "次行字高", 0.01);
-                _s.TextHeight = N(TextHeightText, "正文字高", 0.01);
-                _s.DefaultAuthor = DefaultAuthorText.Text.Trim(); _s.DefaultRole = DefaultRoleCombo.Text.Trim();
-                _s.DefaultDiscipline = DefaultDisciplineText.Text.Trim();
-                _s.FixedWidth = On(FixedWidthCheck); _s.FixedWidthValue = N(FixedWidthValueText, "固定宽度", 1);
-                _s.AutoNumber = On(AutoNumberCheck);
-                _s.LayerName = LayerNameText.Text.Trim();
-                if (_s.LayerName.Length == 0) throw new InvalidOperationException("图层名称不能为空。");
-                CheckLayerText(_s.LayerName, "图层基础名称", LayerNameText);
-                _s.TextStyleName = TextStyleCombo.Text.Trim();
-                _s.SameColors = On(SameColorsCheck);
-                _s.ColorIndex = SelectedColor(ColorIndexCombo); _s.CloudColor = SelectedColor(CloudColorCombo);
-                _s.LeaderColor = SelectedColor(LeaderColorCombo); _s.TextColor = SelectedColor(TextColorCombo);
-                _s.BoxColor = SelectedColor(BoxColorCombo); _s.ReplyColor = SelectedColor(ReplyColorCombo);
-                _s.ScreenshotBackgroundOnceReply = On(ScreenshotBackgroundOnceReplyCheck);
-                _s.ScreenshotBackgroundColor = SelectedColor(ScreenshotBackgroundColorCombo);
-                _s.PassColor = SelectedColor(PassColorCombo); _s.CheckColor = SelectedColor(CheckColorCombo);
-                _s.CheckHeight = N(CheckHeightText, "对勾高度", 0.01);
-                _s.LayerAppendDate = On(LayerAppendDateCheck); _s.LayerAppendName = On(LayerAppendNameCheck);
-                _s.DateBeforeName = On(DateBeforeNameCheck); _s.Connector = ConnectorCombo.Text.Trim();
-                if (_s.Connector != "无") CheckLayerText(_s.Connector, "连接符", ConnectorCombo);
-                if (_s.LayerAppendName) CheckLayerText(_s.DefaultAuthor, "默认批注人（已勾选「图层名添加批注人姓名」）", DefaultAuthorText);
-                _s.Plottable = On(PlottableCheck);
-                _s.ShowDiscipline = On(ShowDisciplineCheck);
-                _s.ShowAuthor = On(ShowAuthorCheck); _s.ShowRole = On(ShowRoleCheck);
-                _s.ShowDate = On(ShowDateCheck); _s.ShowStatus = On(ShowStatusCheck);
-                _s.ShowDrawingNo = On(ShowDrawingNoCheck);
-                // 统一颜色模式：所有独立颜色同步为统一颜色
-                if (_s.SameColors) _s.CloudColor = _s.LeaderColor = _s.TextColor = _s.BoxColor = _s.ReplyColor = _s.PassColor = _s.CheckColor = _s.ColorIndex;
-                SettingsStore.Save(_s, true); DialogResult = true;
+                if (_scaleAutoAnswer == true)
+                {
+                    t.FontAutoFit = false; t.CloudAutoFit = false;
+                    FontAutoFitCheck.IsChecked = false; CloudAutoFitCheck.IsChecked = false;
+                }
             }
-            catch (Exception ex) { MessageBox.Show(this, "设置保存失败：" + ex.Message, "GM批注", MessageBoxButton.OK, MessageBoxImage.Error); }
+            t.CloudMarkerEnabled = On(CloudMarkerEnabledCheck);
+            t.AutoCloseOrtho = On(AutoCloseOrthoCheck); t.AutoCloseSnap = On(AutoCloseSnapCheck);
+            t.DoubleClickEdit = On(DoubleClickEditCheck); t.ViewTopIsNorth = On(ViewTopIsNorthCheck);
+            t.HeaderHeight = N(HeaderHeightText, "首行字高", 0.1); t.SecondLineHeight = N(SecondLineHeightText, "次行字高", 0.1);
+            t.TextHeight = N(TextHeightText, "正文字高", 0.1);
+            t.DefaultAuthor = DefaultAuthorText.Text.Trim(); t.DefaultRole = DefaultRoleCombo.Text.Trim();
+            t.DefaultDiscipline = DefaultDisciplineCombo.Text.Trim();
+            t.FixedWidth = On(FixedWidthCheck);
+            t.FixedWidthValue = t.FixedWidth ? N(FixedWidthValueText, "固定宽度", 1) : Lenient(FixedWidthValueText, _s.FixedWidthValue, 1);
+            t.AutoNumber = On(AutoNumberCheck);
+            t.LayerName = LayerNameText.Text.Trim();
+            if (t.LayerName.Length == 0) { LayerNameText.Focus(); throw new InvalidOperationException("图层名称不能为空。"); }
+            CheckLayerText(t.LayerName, "图层基础名称", LayerNameText);
+            t.TextStyleName = TextStyleCombo.Text.Trim();
+            if (interactive && t.TextStyleName.Length > 0 && _drawingStyles.Count > 0 && !_drawingStyles.Contains(t.TextStyleName) &&
+                !string.Equals(t.TextStyleName, "Standard", StringComparison.OrdinalIgnoreCase))
+            {
+                var answer = MessageBox.Show(this,
+                    "当前图纸中没有文字样式「" + t.TextStyleName + "」，在这张图里创建批注时会改用默认样式（Standard）。\n\n仍然保存这个样式名吗？",
+                    "GM批注", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (answer != MessageBoxResult.Yes) { TextStyleCombo.Focus(); return null; }
+            }
+            t.SameColors = On(SameColorsCheck);
+            t.ColorIndex = SelectedColor(ColorIndexCombo); t.CloudColor = SelectedColor(CloudColorCombo);
+            t.LeaderColor = SelectedColor(LeaderColorCombo); t.TextColor = SelectedColor(TextColorCombo);
+            t.BoxColor = SelectedColor(BoxColorCombo); t.ReplyColor = SelectedColor(ReplyColorCombo);
+            t.ScreenshotBackgroundOnceReply = On(ScreenshotBackgroundOnceReplyCheck);
+            t.ScreenshotBackgroundColor = SelectedColor(ScreenshotBackgroundColorCombo);
+            t.PassColor = SelectedColor(PassColorCombo); t.CheckColor = SelectedColor(CheckColorCombo);
+            t.CheckHeight = Lenient(CheckHeightText, _s.CheckHeight, 0.01); // 预留项，输入框禁用：不阻止保存
+            t.LayerAppendDate = On(LayerAppendDateCheck); t.LayerAppendName = On(LayerAppendNameCheck);
+            t.DateBeforeName = On(DateBeforeNameCheck); t.Connector = ConnectorCombo.Text.Trim();
+            if (t.Connector != "无") CheckLayerText(t.Connector, "连接符", ConnectorCombo);
+            if (t.LayerAppendName) CheckLayerText(t.DefaultAuthor, "默认批注人（已勾选「图层名添加批注人姓名」）", DefaultAuthorText);
+            t.Plottable = On(PlottableCheck);
+            t.ShowDiscipline = On(ShowDisciplineCheck);
+            t.ShowAuthor = On(ShowAuthorCheck); t.ShowRole = On(ShowRoleCheck);
+            t.ShowDate = On(ShowDateCheck); t.ShowStatus = On(ShowStatusCheck);
+            t.ShowDrawingNo = On(ShowDrawingNoCheck);
+            // 统一颜色模式：运行时各分项颜色同步为统一颜色（与旧版一致），但把用户原来的分项颜色另存一份，取消统一颜色时可还原。
+            if (t.SameColors)
+            {
+                t.SeparateColors = string.Join(",", SeparateColorCombos().Select(c => SelectedColor(c).ToString(CultureInfo.InvariantCulture)));
+                t.CloudColor = t.LeaderColor = t.TextColor = t.BoxColor = t.ReplyColor = t.PassColor = t.CheckColor = t.ColorIndex;
+            }
+            else t.SeparateColors = "";
+            return t;
+        }
+
+        /// <summary>恢复默认：界面填入默认值（保留下一个编号）；点「保存设置」后才生效。</summary>
+        private void Reset_Click(object sender, RoutedEventArgs e)
+        {
+            if (MessageBox.Show(this, "把界面上的所有设置恢复为默认值？\n（下一个编号保持不变；点「保存设置」后才生效，点「取消」可放弃）",
+                    "GM批注", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            var defaults = new AnnotationSettings { NextNumber = _s.NextNumber };
+            _s = defaults; _scaleAutoAnswer = null;
+            LoadValues();
+        }
+
+        /// <summary>导入：读入导出的设置文件填到界面（保留本机的下一个编号）；点「保存设置」后才生效。</summary>
+        private void Import_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog { Title = "导入 GM批注 设置", Filter = "GM批注设置 (*.xml)|*.xml|所有文件 (*.*)|*.*" };
+            if (dialog.ShowDialog(this) != true) return;
+            if (!SettingsStore.TryLoadFrom(dialog.FileName, out var imported, out var error))
+            {
+                MessageBox.Show(this, "导入失败：" + error, "GM批注", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+            imported.NextNumber = _s.NextNumber;
+            _s = imported; _scaleAutoAnswer = null;
+            LoadValues();
+            MessageBox.Show(this, "已读入到界面，请核对后点「保存设置」生效。", "GM批注", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        /// <summary>导出：把界面上的当前值（需通过校验）写成设置文件。</summary>
+        private void Export_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var current = Collect(false);
+                var dialog = new Microsoft.Win32.SaveFileDialog { Title = "导出 GM批注 设置", Filter = "GM批注设置 (*.xml)|*.xml", FileName = "GM批注设置-" + DateTime.Now.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".xml" };
+                if (dialog.ShowDialog(this) != true) return;
+                SettingsStore.ExportTo(current, dialog.FileName);
+                MessageBox.Show(this, "已导出到：\n" + dialog.FileName, "GM批注", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex) { MessageBox.Show(this, "导出失败：" + ex.Message, "GM批注", MessageBoxButton.OK, MessageBoxImage.Error); }
+        }
+
+        private void OpenFolder_Click(object sender, RoutedEventArgs e)
+        {
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", "\"" + AppPaths.DataFolder + "\"") { UseShellExecute = true }); }
+            catch (Exception ex) { MessageBox.Show(this, "无法打开数据目录：" + ex.Message + "\n" + AppPaths.DataFolder, "GM批注", MessageBoxButton.OK, MessageBoxImage.Warning); }
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e) { DialogResult = false; }
@@ -184,6 +309,9 @@ namespace GMAnnotation.Views
                            "；图面云线半径 = " + Num(radiusMm) + "mm × " + denominator + " = " + Num(radiusMm * n) + "。";
                 if (On(FontAutoFitCheck))
                     hint += " 当前勾选了字体自适应：字高按云线尺寸计算、比例不参与字高换算。";
+                if (On(CloudAutoFitCheck))
+                    hint += " 当前勾选了云线自适应：云线半径/线宽按云线尺寸计算。";
+                hint += "（在布局的图纸空间中、未进入视口时一律按 1:1。）";
                 ScaleHintText.Text = hint;
             }
             catch (Exception ex)
@@ -265,6 +393,9 @@ namespace GMAnnotation.Views
         // ---- 辅助方法 ----
         private static bool On(CheckBox x) => x.IsChecked == true;
         private static void Set(TextBox x, double v) => x.Text = v.ToString("0.###", CultureInfo.InvariantCulture);
+        /// <summary>不参与计算（输入框禁用）的数值：能解析且在范围内就用新值，否则保留原值，不阻止保存。</summary>
+        private static double Lenient(TextBox x, double fallback, double min, double max = double.MaxValue)
+            => (double.TryParse(x.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var n) || double.TryParse(x.Text, out n)) && n >= min && n <= max ? n : fallback;
         private static double N(TextBox x, string name, double min, double max = double.MaxValue)
         {
             if (!double.TryParse(x.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var n) && !double.TryParse(x.Text, out n))
