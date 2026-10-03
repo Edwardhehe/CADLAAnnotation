@@ -39,6 +39,10 @@ namespace GMAnnotation
                 s.ShowDiscipline=ParseBool(Get(x,"ShowDiscipline","true"),true);s.ShowAuthor=ParseBool(Get(x,"ShowAuthor","true"),true);s.ShowRole=ParseBool(Get(x,"ShowRole","true"),true);s.ShowDate=ParseBool(Get(x,"ShowDate","true"),true);s.ShowStatus=ParseBool(Get(x,"ShowStatus","true"),true);s.ShowDrawingNo=ParseBool(Get(x,"ShowDrawingNo","true"),true);
                 s.ArchiveOnCreate=ParseBool(Get(x,"ArchiveOnCreate","true"),true);
                 s.ContentSuggest=ParseBool(Get(x,"ContentSuggest","true"),true);
+                s.CloudMarkerEnabled=ParseBool(Get(x,"CloudMarkerEnabled","false"),false);s.CloudMarkerText=Get(x,"CloudMarkerText","A");
+                s.CloudMarkerAutoIncrement=ParseBool(Get(x,"CloudMarkerAutoIncrement","false"),false);
+                s.CloudMarkerTextHeight=ParseDouble(Get(x,"CloudMarkerTextHeight","2.5"),2.5);s.CloudMarkerBoxHeight=ParseDouble(Get(x,"CloudMarkerBoxHeight","5"),5);s.CloudMarkerBoxWidth=ParseDouble(Get(x,"CloudMarkerBoxWidth","10"),10);
+                s.CloudMarkerShape=CloudMarker.Normalize(Get(x,"CloudMarkerShape",CloudMarker.DefaultShape));s.CloudMarkerColor=ParseShort(Get(x,"CloudMarkerColor","-1"),(short)-1);
             }
             catch (Exception ex) { PluginLog.Error("Settings.Load",ex); }
             return s;
@@ -75,7 +79,10 @@ namespace GMAnnotation
                 new XElement("DefaultRole",s.DefaultRole),new XElement("AutoNumber", s.AutoNumber), new XElement("NextNumber", s.NextNumber),
                 new XElement("AutoCloseOrtho",s.AutoCloseOrtho),new XElement("AutoCloseSnap",s.AutoCloseSnap),new XElement("ViewTopIsNorth",s.ViewTopIsNorth),new XElement("DoubleClickEdit",s.DoubleClickEdit),new XElement("ContinuousAnnotation",s.ContinuousAnnotation),new XElement("CloudOnly",s.CloudOnly),new XElement("SameColors",s.SameColors),new XElement("LayerAppendDate",s.LayerAppendDate),new XElement("LayerAppendName",s.LayerAppendName),new XElement("DateBeforeName",s.DateBeforeName),new XElement("Connector",s.Connector),new XElement("Plottable",s.Plottable),new XElement("CheckHeight",s.CheckHeight.ToString(CultureInfo.InvariantCulture)),new XElement("AutoTextViewPercent",s.AutoTextViewPercent.ToString(CultureInfo.InvariantCulture)),
                 new XElement("ShowDiscipline",s.ShowDiscipline),new XElement("ShowAuthor",s.ShowAuthor),new XElement("ShowRole",s.ShowRole),new XElement("ShowDate",s.ShowDate),new XElement("ShowStatus",s.ShowStatus),new XElement("ShowDrawingNo",s.ShowDrawingNo),
-                new XElement("ArchiveOnCreate",s.ArchiveOnCreate),new XElement("ContentSuggest",s.ContentSuggest));
+                new XElement("ArchiveOnCreate",s.ArchiveOnCreate),new XElement("ContentSuggest",s.ContentSuggest),
+                new XElement("CloudMarkerEnabled",s.CloudMarkerEnabled),new XElement("CloudMarkerText",s.CloudMarkerText??""),new XElement("CloudMarkerAutoIncrement",s.CloudMarkerAutoIncrement),
+                new XElement("CloudMarkerTextHeight",s.CloudMarkerTextHeight.ToString(CultureInfo.InvariantCulture)),new XElement("CloudMarkerBoxHeight",s.CloudMarkerBoxHeight.ToString(CultureInfo.InvariantCulture)),new XElement("CloudMarkerBoxWidth",s.CloudMarkerBoxWidth.ToString(CultureInfo.InvariantCulture)),
+                new XElement("CloudMarkerShape",CloudMarker.Normalize(s.CloudMarkerShape)),new XElement("CloudMarkerColor",s.CloudMarkerColor));
         }
 
         /// <summary>与磁盘内容不同才写（原子替换）。DocumentActivated 等高频路径借此避免无谓写盘。</summary>

@@ -67,6 +67,27 @@ namespace GMAnnotation.Views
             ShowAuthorCheck.IsChecked = _s.ShowAuthor; ShowRoleCheck.IsChecked = _s.ShowRole;
             ShowDateCheck.IsChecked = _s.ShowDate; ShowStatusCheck.IsChecked = _s.ShowStatus;
             ShowDrawingNoCheck.IsChecked = _s.ShowDrawingNo;
+            CloudMarkerEnabledCheck.IsChecked = _s.CloudMarkerEnabled;
+            UpdateCloudMarkerSummary();
+        }
+
+        private void UpdateCloudMarkerSummary()
+        {
+            if (CloudMarkerSummaryText == null) return;
+            var preview = _s.Clone();
+            preview.CloudMarkerEnabled = CloudMarkerEnabledCheck.IsChecked == true;
+            CloudMarkerSummaryText.Text = "当前：" + CloudMarker.Describe(preview);
+        }
+
+        private void CloudMarkerEnabled_Changed(object sender, RoutedEventArgs e) => UpdateCloudMarkerSummary();
+
+        /// <summary>打开云线标记设置；改动先写入本窗口的设置副本，点「保存设置」时随其他设置一起持久化。</summary>
+        private void CloudMarkerSettings_Click(object sender, RoutedEventArgs e)
+        {
+            _s.CloudMarkerEnabled = CloudMarkerEnabledCheck.IsChecked == true;
+            var dialog = new CloudMarkerWindow(_s) { Owner = this };
+            if (dialog.ShowDialog() == true) CloudMarkerEnabledCheck.IsChecked = _s.CloudMarkerEnabled;
+            UpdateCloudMarkerSummary();
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)
@@ -90,6 +111,7 @@ namespace GMAnnotation.Views
                         "GM批注", MessageBoxButton.YesNo, MessageBoxImage.Question);
                     if (answer == MessageBoxResult.Yes) { _s.FontAutoFit = false; _s.CloudAutoFit = false; }
                 }
+                _s.CloudMarkerEnabled = On(CloudMarkerEnabledCheck);
                 _s.AutoCloseOrtho = On(AutoCloseOrthoCheck); _s.AutoCloseSnap = On(AutoCloseSnapCheck);
                 _s.DoubleClickEdit = On(DoubleClickEditCheck); _s.ViewTopIsNorth = On(ViewTopIsNorthCheck);
                 _s.HeaderHeight = N(HeaderHeightText, "首行字高", 0.01); _s.SecondLineHeight = N(SecondLineHeightText, "次行字高", 0.01);

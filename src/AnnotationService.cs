@@ -54,6 +54,10 @@ namespace GMAnnotation
             var factor=text/rawText; // 相对"打印字高"的放大倍数：首行/次行/固定宽度/对勾高度沿用同一倍数
             s.TextHeight=text;s.HeaderHeight=Math.Max(0.1,source.HeaderHeight*factor);s.SecondLineHeight=Math.Max(0.1,source.SecondLineHeight*factor);
             s.FixedWidthValue=Math.Max(text*6,source.FixedWidthValue*factor);
+            // 单绘云线角标：与批注字高同一个倍数（自适应时随云线尺寸，固定比例时 ×N，图纸空间 1:1），不另起一套比例逻辑。
+            s.CloudMarkerTextHeight=Math.Max(0.001,source.CloudMarkerTextHeight*factor);
+            s.CloudMarkerBoxHeight=Math.Max(0.001,source.CloudMarkerBoxHeight*factor);
+            s.CloudMarkerBoxWidth=Math.Max(0.001,source.CloudMarkerBoxWidth*factor);
             if(source.CloudAutoFit)
             {
                 s.CloudRadius=Math.Max(0.001,adaptiveText*0.75);
@@ -97,11 +101,17 @@ namespace GMAnnotation
         public static bool PromptCloudOnly(Document doc, AnnotationSettings s, out Point3d firstPoint, out Point3d secondPoint)
             => PromptCloud(doc, s, false, null, null, out firstPoint, out secondPoint) == CloudPromptResult.Completed;
 
+        /// <summary>单绘云线选点，第一角点提示带关键字（如 [标记开关(M)/标记设置(S)]）：输入关键字时调用 <paramref name="onKeyword"/>
+        /// 后重新提示（提示文字每次由 <paramref name="message"/> 生成，便于显示最新状态）。</summary>
+        public static bool PromptCloudOnly(Document doc, AnnotationSettings s, Func<string> message, string[] keywords, Action<string> onKeyword, out Point3d firstPoint, out Point3d secondPoint)
+            => PromptCloud(doc, s, false, null, null, out firstPoint, out secondPoint, message, keywords, onKeyword) == CloudPromptResult.Completed;
+
         /// <summary>多对一云线选点：回车/空格结束连续绘制，Esc 取消整次操作。</summary>
         public static CloudPromptResult PromptCloudOrFinish(Document doc, AnnotationSettings s, IList<Point3d> historyFirsts, IList<Point3d> historySeconds, out Point3d firstPoint, out Point3d secondPoint)
             => PromptCloud(doc, s, true, historyFirsts, historySeconds, out firstPoint, out secondPoint);
 
-        private static CloudPromptResult PromptCloud(Document doc, AnnotationSettings s, bool allowFinish, IList<Point3d> historyFirsts, IList<Point3d> historySeconds, out Point3d firstPoint, out Point3d secondPoint)
+        private static CloudPromptResult PromptCloud(Document doc, AnnotationSettings s, bool allowFinish, IList<Point3d> historyFirsts, IList<Point3d> historySeconds, out Point3d firstPoint, out Point3d secondPoint,
+            Func<string> message = null, string[] keywords = null, Action<string> onKeyword = null)
         {
             firstPoint=Point3d.Origin;secondPoint=Point3d.Origin;var ed=doc.Editor;object ortho=null,osmode=null;
             try{
@@ -132,7 +142,21 @@ namespace GMAnnotation
                     }
                     else
                     {
-                        var first = ed.GetPoint("\n指定云线范围第一个角点: ");
+                        PromptPointResult first;
+                        if (keywords != null && keywords.Length > 0 && onKeyword != null)
+                        {
+                            var options = new PromptPointOptions(message != null ? message() : "\n指定云线范围第一个角点: ");
+                            foreach (var keyword in keywords) options.Keywords.Add(keyword);
+                            options.AppendKeywordsToMessage = false; // 提示文字里已带中文关键字说明
+                            first = ed.GetPoint(options);
+                            if (first.Status == PromptStatus.Keyword)
+                            {
+                                try { onKeyword(first.StringResult); }
+                                catch (System.Exception ex) { PluginLog.Error("CloudPrompt.Keyword", ex); ed.WriteMessage("\n" + ex.Message); }
+                                continue;
+                            }
+                        }
+                        else first = ed.GetPoint("\n指定云线范围第一个角点: ");
                         if (first.Status != PromptStatus.OK)
                         {
                             return CloudPromptResult.Cancelled;
@@ -176,8 +200,20 @@ namespace GMAnnotation
                 cloud.Layer=EffectiveLayer(settings);cloud.Color=Color.FromColorIndex(ColorMethod.ByAci,settings.CloudColor);
                 if(settings.CloudStyle!="渐变"&&settings.LineWidth>0)cloud.ConstantWidth=settings.LineWidth;   // 渐变：线宽走逐段顶点宽度（0→云线线宽），ConstantWidth 必须保持 0
                 var id=space.AppendEntity(cloud);tr.AddNewlyCreatedDBObject(cloud,true);
-                tr.Commit();return id;
+                string markerText=null,markerNote=null;
+                if(settings.CloudMarkerEnabled){markerText=CloudMarker.CurrentText(settings);markerNote=CloudMarker.AddToCloud(doc.Database,tr,space,cloud,settings,min,max,first.Z,ucsToWcs,false,markerText);}
+                tr.Commit();
+                AfterMarker(doc,markerText,markerNote);
+                return id;
             }
+        }
+
+        /// <summary>角标落图之后：推进自动递增、把提示写到命令行。markerText 为 null 表示本次没有画角标。</summary>
+        private static void AfterMarker(Document doc,string markerText,string markerNote)
+        {
+            if(markerText==null)return;
+            CloudMarker.AdvanceText(markerText);
+            if(!string.IsNullOrEmpty(markerNote))try{doc.Editor.WriteMessage("\n提示："+markerNote);}catch{}
         }
 
         /// <summary>仅沿用户折点创建闭合 PL 云线，与矩形批注共用多边形云线算法。</summary>
@@ -194,7 +230,17 @@ namespace GMAnnotation
                 if(settings.CloudStyle!="渐变"&&settings.LineWidth>0)cloud.ConstantWidth=settings.LineWidth;   // 渐变：线宽走逐段顶点宽度（0→云线线宽），ConstantWidth 必须保持 0
                 var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
                 var id=space.AppendEntity(cloud);tr.AddNewlyCreatedDBObject(cloud,true);
-                tr.Commit();return id;
+                string markerText=null,markerNote=null;
+                if(settings.CloudMarkerEnabled)
+                {
+                    // PL 云线：标记放在折点包络（UCS 局部坐标）的右下角内侧。
+                    var pmin=new Point2d(cloudPoints.Min(p=>p.X),cloudPoints.Min(p=>p.Y));var pmax=new Point2d(cloudPoints.Max(p=>p.X),cloudPoints.Max(p=>p.Y));
+                    markerText=CloudMarker.CurrentText(settings);
+                    markerNote=CloudMarker.AddToCloud(doc.Database,tr,space,cloud,settings,pmin,pmax,localPoints[0].Z,ucsToWcs,true,markerText);
+                }
+                tr.Commit();
+                AfterMarker(doc,markerText,markerNote);
+                return id;
             }
         }
 
@@ -3387,7 +3433,7 @@ namespace GMAnnotation
             return string.Join(connector,parts.Where(x=>!string.IsNullOrWhiteSpace(x)));
         }
         /// <summary>应用文字样式；若指定样式不存在则记录警告并回退为默认样式。</summary>
-        private static void ApplyTextStyle(Database db,Transaction tr,MText text,string name)
+        internal static void ApplyTextStyle(Database db,Transaction tr,MText text,string name)
         {
             if(string.IsNullOrWhiteSpace(name))return;
             var table=(TextStyleTable)tr.GetObject(db.TextStyleTableId,OpenMode.ForRead);

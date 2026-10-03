@@ -96,6 +96,20 @@ namespace GMAnnotation
         public bool ArchiveOnCreate { get; set; } = true; // 立即入库：创建/修改批注时写入知识库（KnowledgeStore / knowledge.json）
         /// <summary>输入建议：批注内容输入框是否实时给出补全/续写候选（来源：批注历史记录 / 常用批注语 / 知识库条目）。</summary>
         public bool ContentSuggest { get; set; } = true;
+        // ---- 单绘云线角标（云线右下角内侧的"框 + 文字"）。尺寸为打印毫米，落图时按批注字高同一倍数换算 ----
+        public bool CloudMarkerEnabled { get; set; } = false;
+        public string CloudMarkerText { get; set; } = "A";
+        /// <summary>每画一个角标后文字自动递增（A→B→…→Z→AA，1→2，A9→A10）。</summary>
+        public bool CloudMarkerAutoIncrement { get; set; } = false;
+        public double CloudMarkerTextHeight { get; set; } = 2.5;
+        /// <summary>框高（建议字高 2 倍）。</summary>
+        public double CloudMarkerBoxHeight { get; set; } = 5.0;
+        /// <summary>框宽，仅长形（椭圆/长矩形/长六边形/长八边形/平行四边形）有效，建议字高 5~10 倍。</summary>
+        public double CloudMarkerBoxWidth { get; set; } = 10.0;
+        /// <summary>形状：圆/矩形/六边形/八边形/菱形，或长形 椭圆/长矩形/长六边形/长八边形/平行四边形。</summary>
+        public string CloudMarkerShape { get; set; } = "六边形";
+        /// <summary>角标颜色：1~255 为 ACI 颜色；其他值（默认 -1）表示与云线同色。图层始终跟随云线。</summary>
+        public short CloudMarkerColor { get; set; } = -1;
 
         public AnnotationSettings Clone() => (AnnotationSettings)MemberwiseClone();
     }

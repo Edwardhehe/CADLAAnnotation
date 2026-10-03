@@ -82,6 +82,22 @@
                             <CheckBox x:Name="DoubleClickEditCheck" Content="双击已创建的批注进行编辑"/>
                             <CheckBox x:Name="ViewTopIsNorthCheck" Content="视图上方为北（否则批注随视图扭转）"/>
                         </StackPanel>
+
+                        <Rectangle Style="{StaticResource SectionSeparator}"/>
+
+                        <TextBlock Text="云线标记（单绘云线）" Style="{StaticResource SectionHeader}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="CloudMarkerEnabledCheck" Content="单绘云线时在右下角内侧加标记（框 + 文字）"
+                                      VerticalAlignment="Center" Checked="CloudMarkerEnabled_Changed" Unchecked="CloudMarkerEnabled_Changed"/>
+                            <Button Grid.Column="1" Content="标记设置…" Style="{StaticResource SecondaryButton}" Click="CloudMarkerSettings_Click"/>
+                        </Grid>
+                        <TextBlock x:Name="CloudMarkerSummaryText" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                   Text="作用于 GM_PZ_CLOUD 及面板/GM_PZ_DRAW 的「仅绘云线」；命令行也可用 M 开关、S 设置。标记尺寸与批注字高同一套比例/自适应换算。"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -281,7 +297,7 @@
                             GM_PZ_MERGE    — 合并批注（内容完全一致者并成一条）<LineBreak/>
                             GM_PZ_FILTER   — 过滤批注（只显示内容一致的批注，其余隐藏）<LineBreak/>
                             GM_PZ_REFRESH  — 按当前设置刷新全图批注文字版式<LineBreak/>
-                            GM_PZ_CLOUD    — 仅绘制云线<LineBreak/>
+                            GM_PZ_CLOUD    — 仅绘制云线（M 开关 / S 设置右下角标记）<LineBreak/>
                             GM_PZ_ADDCLOUD — 增补云线<LineBreak/>
                             GM_PZ_LIST     — 打开批注列表并定位<LineBreak/>
                             GM_PZ_SUMMARY  — 批注汇总<LineBreak/>

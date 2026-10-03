@@ -123,7 +123,13 @@ namespace GMAnnotation
             {
                 var settings = SettingsStore.Load();
                 var preview = settings.Clone();
-                if (!AnnotationService.PromptCloudOnly(doc, preview, out var first, out var second)) return;
+                // 第一角点提示带关键字：M 开/关云线角标，S 打开角标设置；每次重提示都显示最新状态。
+                if (!AnnotationService.PromptCloudOnly(doc, preview,
+                        () => "\n指定云线范围第一个角点或 [标记开关(M)/标记设置(S)]（当前标记：" + CloudMarker.Describe(SettingsStore.Load()) + "）: ",
+                        new[] { "M", "S" },
+                        keyword => HandleCloudMarkerKeyword(doc, keyword),
+                        out var first, out var second)) return;
+                settings = SettingsStore.Load(); // 关键字可能刚改过角标设置
                 var (_,width,height)=AnnotationService.UcsAlignedExtents(doc,first,second);
                 var effective = AnnotationService.ResolveEffectiveSettings(doc, settings, new AnnotationData(), Math.Sqrt(width * width + height * height));
                 if (effective.FontAutoFit) doc.Editor.WriteMessage($"\n云线半径: {effective.CloudRadius:0.###}");
@@ -131,6 +137,26 @@ namespace GMAnnotation
                 doc.Editor.WriteMessage("\n云线已创建: " + id);
             }
             catch (System.Exception ex) { doc.Editor.WriteMessage("\n云线创建失败: " + ex.Message); PluginLog.Error("GM_PZ_CLOUD", ex); }
+        }
+
+        /// <summary>单绘云线的关键字：M 切换角标开关并保存；S 打开角标设置窗口，确定后保存。</summary>
+        private static void HandleCloudMarkerKeyword(Document doc, string keyword)
+        {
+            var settings = SettingsStore.Load();
+            if (string.Equals(keyword, "M", StringComparison.OrdinalIgnoreCase))
+            {
+                settings.CloudMarkerEnabled = !settings.CloudMarkerEnabled;
+                SettingsStore.Save(settings);
+                doc.Editor.WriteMessage("\n云线标记已" + (settings.CloudMarkerEnabled ? "开启：" + CloudMarker.Describe(settings) : "关闭") + "。");
+            }
+            else if (string.Equals(keyword, "S", StringComparison.OrdinalIgnoreCase))
+            {
+                if (CadDialog.ShowModal(new CloudMarkerWindow(settings)) == true)
+                {
+                    SettingsStore.Save(settings);
+                    doc.Editor.WriteMessage("\n云线标记设置已保存：" + CloudMarker.Describe(settings) + "。");
+                }
+            }
         }
 
         /// <summary>增补云线：点选既有批注后连续框选新云线范围，每个范围自动生成连到原文字框的引出线，回车/空格结束。</summary>
