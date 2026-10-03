@@ -53,7 +53,7 @@ namespace GMAnnotation
             catch (Exception ex) { PluginLog.Warning("Exchange.ReadPlacements", ex.Message); placements = new Dictionary<string, AnnotationService.AnnotationPlacement>(); }
             var sb = new StringBuilder();
             sb.AppendLine(string.Join(",", Columns));
-            foreach (var item in items.OrderBy(i => i.Data.Number, StringComparer.OrdinalIgnoreCase))
+            foreach (var item in items.OrderBy(i => i.Data.Number, NaturalComparer.Instance))
             {
                 var d = item.Data;
                 placements.TryGetValue(d.Id ?? "", out var place);

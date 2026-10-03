@@ -39,6 +39,8 @@ namespace GMAnnotation
         public string Date { get; set; }
         public string Content { get; set; }
         public List<AnnotationWordCloud> Clouds { get; set; } = new List<AnnotationWordCloud>();
+        /// <summary>该批注当前被隐藏（GM_PZ_HIDE / 过滤）的成员：截图时临时显示，截完立即恢复隐藏。</summary>
+        public List<ObjectId> HiddenIds { get; set; } = new List<ObjectId>();
     }
 
     /// <summary>一处云线的截图结果：成功时为 PNG，失败时为写入 Word 的失败原因。</summary>
@@ -84,6 +86,12 @@ namespace GMAnnotation
                 DefaultExt = ".docx"
             };
             if (dialog.ShowDialog() != true) return;
+            // 截图要切布局、缩放好一阵子：先确认目标文件可写（例如没有在 Word 里打开），免得截完才发现保存不了。
+            if (!CanWrite(dialog.FileName, out var writeError))
+            {
+                ed.WriteMessage("\n无法写入「" + dialog.FileName + "」：" + writeError + "。如果该文件正在 Word 中打开，请先关闭或换一个文件名。");
+                return;
+            }
 
             var captures = entries.Select(entry => entry.Clouds.Select(_ => (WordCapture)null).ToList()).ToList();
             var jobs = new List<CaptureJob>();
@@ -138,6 +146,8 @@ namespace GMAnnotation
                             ed.WriteMessage($"\r正在截图 {done}/{jobs.Count}（{spaceName}）    ");
                             var label = $"批注 {job.Entry.Number} 第 {job.CloudIndex + 1} 处云线（{spaceName}）";
                             WordCapture capture;
+                            // 被隐藏的批注：截图时临时显示（只显示这一条），截完立即恢复隐藏。
+                            var shown = SetVisible(doc, job.Entry.HiddenIds, true);
                             try
                             {
                                 ZoomToExtents(doc, job.Cloud.Extents);
@@ -147,6 +157,10 @@ namespace GMAnnotation
                             {
                                 PluginLog.Error("WordExport.Capture", ex);
                                 capture = WordCapture.Failed(ex.Message);
+                            }
+                            finally
+                            {
+                                if (shown.Count > 0) SetVisible(doc, shown, false);
                             }
                             if (!capture.Succeeded) failed++;
                             captures[job.EntryIndex][job.CloudIndex] = capture;
@@ -186,6 +200,56 @@ namespace GMAnnotation
             ed.WriteMessage($"\n已导出 {entries.Count} 条批注到: {dialog.FileName}");
             if (failed > 0) ed.WriteMessage($"\n其中 {failed} 处云线截图失败，Word 中已写入「截图失败」占位，详见日志 {AppPaths.DataFolder}\\Logs\\GMAnnotation.log");
             PluginLog.Info("WordExport", $"导出完成：{dialog.FileName}，云线 {jobs.Count} 处，截图失败 {failed} 处。");
+        }
+
+        /// <summary>目标文件能否独占写入（已存在则不改动内容；原本不存在则探测后删除）。</summary>
+        private static bool CanWrite(string path, out string error)
+        {
+            error = null;
+            var existed = File.Exists(path);
+            try
+            {
+                using (new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) { }
+                if (!existed) File.Delete(path);
+                return true;
+            }
+            catch (System.Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
+        /// <summary>批量设置实体可见性，返回实际改动过的实体（供之后原样恢复）。失败只记日志，不影响导出。</summary>
+        private static List<ObjectId> SetVisible(Document doc, IList<ObjectId> ids, bool visible)
+        {
+            var changed = new List<ObjectId>();
+            if (ids == null || ids.Count == 0) return changed;
+            try
+            {
+                using (doc.LockDocument())
+                using (var tr = doc.Database.TransactionManager.StartTransaction())
+                {
+                    foreach (var id in ids)
+                    {
+                        if (id.IsNull || !id.IsValid || id.IsErased) continue;
+                        try
+                        {
+                            if (!(tr.GetObject(id, OpenMode.ForRead, false) is Entity entity) || entity.Visible == visible) continue;
+                            entity.UpgradeOpen();
+                            entity.Visible = visible;
+                            changed.Add(id);
+                        }
+                        catch (System.Exception ex) { PluginLog.Warning("WordExport.Visibility", ex.Message); }
+                    }
+                    tr.Commit();
+                }
+#if !ZWCAD
+                if (changed.Count > 0) doc.Editor.Regen();
+#endif
+            }
+            catch (System.Exception ex) { PluginLog.Warning("WordExport.Visibility", ex.Message); }
+            return changed;
         }
 
         private static bool IsCurrentSpace(AnnotationWordCloud cloud)

@@ -49,6 +49,11 @@ namespace GMAnnotation
         private static bool _doubleClickEditSuppressed;
         /// <summary>监听命令结束/取消/失败的文档（兜底恢复系统变量）。</summary>
         private static Document _commandWatchDocument;
+        /// <summary>监听 UNDO/REDO 类命令以刷新批注列表的文档（始终是当前活动文档）。</summary>
+        private static Document _undoWatchDocument;
+        private static readonly HashSet<string> UndoCommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "U", "UNDO", "REDO", "MREDO", "OOPS" };
+        /// <summary>settings.xml 中记录"双击编辑期间临时改动、尚未恢复的系统变量"的节点名（CAD 异常退出后下次加载时恢复）。</summary>
+        private const string PendingRestoreKey = "PendingSysvarRestore";
 
         public void Initialize()
         {
@@ -59,9 +64,12 @@ namespace GMAnnotation
             PluginLog.Info("Initialize", "构建于 " + buildTime.ToString("yyyy-MM-dd HH:mm:ss") + "，加载自 " + asm.Location);
             // .NET 8（AutoCAD 2025+）默认不含 GBK 等代码页，CSV 导入识别 GBK 前必须先注册。
             DataFiles.EnsureEncodings();
+            // 上次双击编辑期间 CAD 异常退出：QPMODE/DBLCLKEDIT 还停留在临时关闭状态，这里恢复。
+            RecoverPendingSystemVariables();
             // BeginDoubleClick 是应用级事件，覆盖之后新建/打开的所有文档，无需逐文档注册。
             CadApplication.BeginDoubleClick += OnBeginDoubleClick;
             CadApplication.DocumentManager.DocumentActivated += OnDocumentActivated;
+            CadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
             var doc = CadApplication.DocumentManager.MdiActiveDocument;
             var menuReady = MenuInstaller.EnsureWithRetry();
             // 浮动快捷栏已取消：CAD 原生工具栏是单字按钮的唯一入口。加载时就建好并显示；
@@ -70,6 +78,7 @@ namespace GMAnnotation
             var toolbarReady = ToolbarInstaller.EnsureWithRetry();
             AnnotationService.SyncNextNumber(doc);
             ObserveDatabase(doc?.Database);
+            WatchUndo(doc);
             doc?.Editor.WriteMessage(
                 "\nGM批注已加载。" + (menuReady ? " 菜单已就绪。" : " 菜单稍后自动挂上（或用 GM_PZ_MENU）。") +
                 (toolbarReady
@@ -86,7 +95,9 @@ namespace GMAnnotation
         {
             CadApplication.BeginDoubleClick -= OnBeginDoubleClick;
             CadApplication.DocumentManager.DocumentActivated -= OnDocumentActivated;
+            try { CadApplication.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed; } catch { /* 退出阶段 */ }
             ObserveDatabase(null);
+            WatchUndo(null);
             if (_idleAttached) { CadApplication.Idle -= OnIdle; _idleAttached = false; }
             MenuInstaller.Detach();
             ToolbarInstaller.Detach();
@@ -100,18 +111,68 @@ namespace GMAnnotation
             {
                 AnnotationService.SyncNextNumber(e.Document);
                 ObserveDatabase(e.Document?.Database);
+                WatchUndo(e.Document);
                 GMAnnotation.Views.AnnotationPanel.HandleDocumentActivated(e.Document);
                 GMAnnotation.Views.AnnotationListPanel.RefreshIfOpen();
             }
             catch (System.Exception ex) { PluginLog.Error("Document.Activated", ex); }
         }
 
+        /// <summary>只监听当前活动文档的数据库（批注被删除/撤销时刷新列表）。
+        /// 解除旧监听失败（文档已关闭、数据库已释放）不影响挂上新监听。</summary>
         private static void ObserveDatabase(Database database)
         {
             if(_observedDatabase==database)return;
-            if(_observedDatabase!=null)_observedDatabase.ObjectErased-=OnObjectErased;
-            _observedDatabase=database;
-            if(_observedDatabase!=null)_observedDatabase.ObjectErased+=OnObjectErased;
+            var old=_observedDatabase;_observedDatabase=null;
+            if(old!=null)
+            {
+                try{if(!old.IsDisposed)old.ObjectErased-=OnObjectErased;}
+                catch(System.Exception ex){PluginLog.Warning("Database.Unobserve",ex.Message);}
+            }
+            if(database==null)return;
+            try{database.ObjectErased+=OnObjectErased;_observedDatabase=database;}
+            catch(System.Exception ex){PluginLog.Warning("Database.Observe",ex.Message);}
+        }
+
+        /// <summary>文档即将关闭：解除对它的全部监听并清掉指向它的双击状态，避免持有已释放对象。</summary>
+        private static void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
+        {
+            try
+            {
+                var doc=e.Document;if(doc==null)return;
+                if(_observedDatabase!=null&&_observedDatabase==doc.Database)ObserveDatabase(null);
+                if(_undoWatchDocument==doc)WatchUndo(null);
+                if(_commandWatchDocument==doc)UnwatchCommands();
+                if(_pendingDocument==doc){_pendingDocument=null;_pendingId=ObjectId.Null;}
+                if(_handoffDocument==doc)ClearHandoff();
+            }
+            catch(System.Exception ex){PluginLog.Warning("Document.ToBeDestroyed",ex.Message);}
+        }
+
+        /// <summary>监听活动文档的 U/UNDO/REDO/MREDO/OOPS：撤销/重做后批注可能出现或消失，空闲时刷新列表。</summary>
+        private static void WatchUndo(Document doc)
+        {
+            if(_undoWatchDocument==doc)return;
+            var old=_undoWatchDocument;_undoWatchDocument=null;
+            if(old!=null)
+            {
+                try{old.CommandEnded-=OnUndoCommandEnded;}
+                catch(System.Exception ex){PluginLog.Warning("UndoWatch.Unhook",ex.Message);}
+            }
+            if(doc==null)return;
+            try{doc.CommandEnded+=OnUndoCommandEnded;_undoWatchDocument=doc;}
+            catch(System.Exception ex){PluginLog.Warning("UndoWatch.Hook",ex.Message);}
+        }
+
+        private static void OnUndoCommandEnded(object sender, CommandEventArgs e)
+        {
+            try
+            {
+                if(!UndoCommands.Contains(e.GlobalCommandName??""))return;
+                _listRefreshPending=true;
+                AttachIdle();
+            }
+            catch(System.Exception ex){PluginLog.Warning("UndoWatch",ex.Message);}
         }
 
         private static void OnObjectErased(object sender,ObjectErasedEventArgs e)
@@ -420,11 +481,70 @@ namespace GMAnnotation
                 }
                 catch (System.Exception ex) { PluginLog.Warning("DoubleClick.SuppressDblClkEdit", ex.Message); }
             }
+            PersistPendingRestore();
+        }
+
+        /// <summary>把"临时关闭前的原值"写进 settings.xml：CAD 在双击编辑期间崩溃/被结束时，下次加载据此恢复。</summary>
+        private static void PersistPendingRestore()
+        {
+            try
+            {
+                var parts=new List<string>();
+                if(_quickPropertiesSuppressed&&_savedQuickPropertiesMode!=null)parts.Add("QPMODE="+EncodeSysvar(_savedQuickPropertiesMode));
+                if(_doubleClickEditSuppressed&&_savedDoubleClickEditMode!=null)parts.Add("DBLCLKEDIT="+EncodeSysvar(_savedDoubleClickEditMode));
+                SettingsStore.SaveExtra(PendingRestoreKey,parts.Count>0?string.Join(";",parts):null);
+            }
+            catch(System.Exception ex){PluginLog.Warning("DoubleClick.PersistRestore",ex.Message);}
+        }
+
+        private static string EncodeSysvar(object value)
+        {
+            var kind=value is string?"S":value is short?"H":"I";
+            return kind+":"+Convert.ToString(value,System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static object DecodeSysvar(string text)
+        {
+            if(string.IsNullOrEmpty(text)||text.Length<2||text[1]!=':')return null;
+            var raw=text.Substring(2);
+            switch(text[0])
+            {
+                case 'S':return raw;
+                case 'H':return short.TryParse(raw,out var h)?(object)h:null;
+                default:return int.TryParse(raw,out var i)?(object)i:null;
+            }
+        }
+
+        /// <summary>加载时检查上次是否有未恢复的系统变量；只有当前值仍是插件临时设置的"关闭"状态时才恢复（用户之后手动改过的不动）。</summary>
+        private static void RecoverPendingSystemVariables()
+        {
+            try
+            {
+                var pending=SettingsStore.LoadExtra(PendingRestoreKey);
+                if(string.IsNullOrWhiteSpace(pending))return;
+                foreach(var part in pending.Split(new[]{';'},StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var eq=part.IndexOf('=');if(eq<=0)continue;
+                    var name=part.Substring(0,eq).Trim();var value=DecodeSysvar(part.Substring(eq+1).Trim());
+                    if(value==null||(name!="QPMODE"&&name!="DBLCLKEDIT"))continue;
+                    try
+                    {
+                        var current=CadApplication.GetSystemVariable(name);
+                        if(IsOn(current)){PluginLog.Info("DoubleClick.Recover",name+" 当前已是开启状态（"+current+"），不再恢复。");continue;}
+                        CadApplication.SetSystemVariable(name,value);
+                        PluginLog.Warning("DoubleClick.Recover","上次双击编辑期间 CAD 未正常结束，已把 "+name+" 恢复为 "+value+"。");
+                    }
+                    catch(System.Exception ex){PluginLog.Warning("DoubleClick.Recover",name+"："+ex.Message);}
+                }
+                SettingsStore.SaveExtra(PendingRestoreKey,null);
+            }
+            catch(System.Exception ex){PluginLog.Warning("DoubleClick.Recover",ex.Message);}
         }
 
         /// <summary>恢复双击编辑期间临时改动的 QPMODE / DBLCLKEDIT（幂等，可重复调用），不永久改写 CAD 偏好。</summary>
         internal static void RestoreSuppressedSystemVariables()
         {
+            var hadSuppressed = HasSuppressedSystemVariables;
             if (_quickPropertiesSuppressed)
             {
                 var mode = _savedQuickPropertiesMode;
@@ -441,6 +561,7 @@ namespace GMAnnotation
                 try { CadApplication.SetSystemVariable("DBLCLKEDIT", mode); }
                 catch (System.Exception ex) { PluginLog.Error("DoubleClick.RestoreDblClkEdit", ex); }
             }
+            if (hadSuppressed) SettingsStore.SaveExtra(PendingRestoreKey, null);
             if (_handoffId.IsNull && _pendingId.IsNull && !_editRunning) UnwatchCommands();
         }
 

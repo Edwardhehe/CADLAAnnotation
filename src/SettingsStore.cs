@@ -44,13 +44,26 @@ namespace GMAnnotation
             return s;
         }
 
+        /// <summary>保存设置（跨进程加锁 + 临时文件原子替换）。内容与磁盘上完全相同时不写盘。</summary>
         public static void Save(AnnotationSettings s)
         {
-            Directory.CreateDirectory(Folder);
-            // 工具栏显隐不属于 AnnotationSettings（由 ToolbarInstaller 单独读写）：整文件重写时原样保留该节点，
-            // 防止面板/设置窗口长时间持有的旧设置对象把用户刚关掉的工具栏状态覆盖回去。
-            var toolbarVisible = ReadElement(ToolbarVisibleKey);
-            var root = new XElement("Settings",
+            using (DataFiles.Lock(false))
+            {
+                var root = BuildRoot(s);
+                // 不属于 AnnotationSettings 的节点（工具栏显隐、待恢复的系统变量）由各自模块单独读写：整文件重写时原样保留，
+                // 防止面板/设置窗口长时间持有的旧设置对象把这些状态覆盖掉。
+                foreach (var key in ExtraKeys)
+                {
+                    var value = ReadElement(key);
+                    if (value != null) root.Add(new XElement(key, value));
+                }
+                WriteIfChanged(root);
+            }
+        }
+
+        private static XElement BuildRoot(AnnotationSettings s)
+        {
+            return new XElement("Settings",
                 new XElement("Shape",s.Shape),new XElement("CloudStyle",s.CloudStyle),
                 new XElement("LayerName", s.LayerName), new XElement("ColorIndex", s.ColorIndex),
                 new XElement("TextStyleName",s.TextStyleName),new XElement("CloudColor",s.CloudColor),new XElement("LeaderColor",s.LeaderColor),new XElement("TextColor",s.TextColor),new XElement("BoxColor",s.BoxColor),new XElement("ReplyColor",s.ReplyColor),new XElement("ScreenshotBackgroundColor",s.ScreenshotBackgroundColor),new XElement("PassColor",s.PassColor),new XElement("CheckColor",s.CheckColor),new XElement("ScreenshotBackgroundOnceReply",s.ScreenshotBackgroundOnceReply),
@@ -63,8 +76,47 @@ namespace GMAnnotation
                 new XElement("AutoCloseOrtho",s.AutoCloseOrtho),new XElement("AutoCloseSnap",s.AutoCloseSnap),new XElement("ViewTopIsNorth",s.ViewTopIsNorth),new XElement("DoubleClickEdit",s.DoubleClickEdit),new XElement("ContinuousAnnotation",s.ContinuousAnnotation),new XElement("CloudOnly",s.CloudOnly),new XElement("SameColors",s.SameColors),new XElement("LayerAppendDate",s.LayerAppendDate),new XElement("LayerAppendName",s.LayerAppendName),new XElement("DateBeforeName",s.DateBeforeName),new XElement("Connector",s.Connector),new XElement("Plottable",s.Plottable),new XElement("CheckHeight",s.CheckHeight.ToString(CultureInfo.InvariantCulture)),new XElement("AutoTextViewPercent",s.AutoTextViewPercent.ToString(CultureInfo.InvariantCulture)),
                 new XElement("ShowDiscipline",s.ShowDiscipline),new XElement("ShowAuthor",s.ShowAuthor),new XElement("ShowRole",s.ShowRole),new XElement("ShowDate",s.ShowDate),new XElement("ShowStatus",s.ShowStatus),new XElement("ShowDrawingNo",s.ShowDrawingNo),
                 new XElement("ArchiveOnCreate",s.ArchiveOnCreate),new XElement("ContentSuggest",s.ContentSuggest));
-            if (toolbarVisible != null) root.Add(new XElement(ToolbarVisibleKey, toolbarVisible));
-            root.Save(PathName);
+        }
+
+        /// <summary>与磁盘内容不同才写（原子替换）。DocumentActivated 等高频路径借此避免无谓写盘。</summary>
+        private static void WriteIfChanged(XElement root)
+        {
+            var text = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" + root.ToString();
+            try
+            {
+                if (File.Exists(PathName) && string.Equals(File.ReadAllText(PathName, System.Text.Encoding.UTF8), text, StringComparison.Ordinal)) return;
+            }
+            catch (Exception ex) { PluginLog.Warning("Settings.Compare", ex.Message); }
+            DataFiles.WriteAllTextAtomic(PathName, text, new System.Text.UTF8Encoding(false));
+        }
+
+        /// <summary>不经 AnnotationSettings、由各模块单独读写的节点；<see cref="Save"/> 时原样保留。</summary>
+        private static readonly string[] ExtraKeys = { "ToolbarVisible", "PendingSysvarRestore" };
+
+        /// <summary>读取单独存放的节点值；没有时返回 null。</summary>
+        public static string LoadExtra(string key) => ReadElement(key);
+
+        /// <summary>只更新 settings.xml 中的某个单独节点（value 为 null 时删除该节点），其余设置原样保留。
+        /// 文件损坏时不覆盖，避免丢掉其他设置。</summary>
+        public static bool SaveExtra(string key, string value)
+        {
+            try
+            {
+                using (DataFiles.Lock(false))
+                {
+                    XElement x = null;
+                    if (File.Exists(PathName))
+                    {
+                        try { x = XElement.Load(PathName); }
+                        catch (Exception ex) { PluginLog.Error("Settings.Extra.Load", ex); return false; }
+                    }
+                    if (x == null) x = new XElement("Settings");
+                    x.SetElementValue(key, value);
+                    WriteIfChanged(x);
+                    return true;
+                }
+            }
+            catch (Exception ex) { PluginLog.Error("Settings.Extra.Save", ex); return false; }
         }
 
         // ============ 「GM批注」工具栏显隐（单独读写，不经 AnnotationSettings） ============
@@ -80,20 +132,7 @@ namespace GMAnnotation
         /// <summary>只更新 settings.xml 中的工具栏显隐节点，其余设置原样保留。</summary>
         public static void SaveToolbarVisible(bool visible)
         {
-            try
-            {
-                Directory.CreateDirectory(Folder);
-                XElement x = null;
-                if (File.Exists(PathName))
-                {
-                    try { x = XElement.Load(PathName); }
-                    catch (Exception ex) { PluginLog.Error("Settings.Toolbar.Load", ex); return; } // 文件损坏时不覆盖，避免丢掉其他设置
-                }
-                if (x == null) x = new XElement("Settings");
-                x.SetElementValue(ToolbarVisibleKey, visible);
-                x.Save(PathName);
-            }
-            catch (Exception ex) { PluginLog.Error("Settings.Toolbar.Save", ex); }
+            SaveExtra(ToolbarVisibleKey, visible ? "true" : "false");
         }
 
         private static string ReadElement(string name)

@@ -119,18 +119,18 @@ namespace GMAnnotation
         public void CloudOnly()
         {
             var doc = CadApplication.DocumentManager.MdiActiveDocument; if (doc == null) return;
-            var settings = SettingsStore.Load();
-            var preview = settings.Clone();
-            if (!AnnotationService.PromptCloudOnly(doc, preview, out var first, out var second)) return;
             try
             {
+                var settings = SettingsStore.Load();
+                var preview = settings.Clone();
+                if (!AnnotationService.PromptCloudOnly(doc, preview, out var first, out var second)) return;
                 var (_,width,height)=AnnotationService.UcsAlignedExtents(doc,first,second);
                 var effective = AnnotationService.ResolveEffectiveSettings(doc, settings, new AnnotationData(), Math.Sqrt(width * width + height * height));
                 if (effective.FontAutoFit) doc.Editor.WriteMessage($"\n云线半径: {effective.CloudRadius:0.###}");
                 var id = AnnotationService.CreateCloudOnly(doc, effective, first, second);
                 doc.Editor.WriteMessage("\n云线已创建: " + id);
             }
-            catch (System.Exception ex) { doc.Editor.WriteMessage("\n云线创建失败: " + ex.Message); }
+            catch (System.Exception ex) { doc.Editor.WriteMessage("\n云线创建失败: " + ex.Message); PluginLog.Error("GM_PZ_CLOUD", ex); }
         }
 
         /// <summary>增补云线：点选既有批注后连续框选新云线范围，每个范围自动生成连到原文字框的引出线，回车/空格结束。</summary>
@@ -138,10 +138,8 @@ namespace GMAnnotation
         public void AddCloudToAnnotation()
         {
             var doc = CadApplication.DocumentManager.MdiActiveDocument; if (doc == null) return;
-            var implied = doc.Editor.SelectImplied();
-            ObjectId id;
-            if (implied.Status == PromptStatus.OK && implied.Value.Count > 0) id = implied.Value.GetObjectIds()[0];
-            else
+            var id = FirstImpliedAnnotation(doc);
+            if (id.IsNull)
             {
                 var result = doc.Editor.GetEntity("\n选择要增补云线的 GM批注: "); if (result.Status != PromptStatus.OK) return; id = result.ObjectId;
             }
@@ -156,7 +154,7 @@ namespace GMAnnotation
                     if (entity == null || !AnnotationService.TryReadFromEntity(tr, entity, out data)) { doc.Editor.WriteMessage("\n所选对象不是有效的 GM批注，或批注数据已损坏。"); return; }
                 }
             }
-            catch (System.Exception ex) { doc.Editor.WriteMessage("\n读取批注失败: " + ex.Message); return; }
+            catch (System.Exception ex) { doc.Editor.WriteMessage("\n读取批注失败: " + ex.Message); PluginLog.Error("GM_PZ_ADDCLOUD", ex); return; }
 
             AppendCloudSession(doc, data);
         }
@@ -165,6 +163,12 @@ namespace GMAnnotation
         /// 供 GM_PZ_ADDCLOUD 命令与编辑批注窗口的「增补云线」按钮共用。</summary>
         internal static void AppendCloudSession(Document doc, AnnotationData data)
         {
+            // 新云线必须与原批注在同一空间：框选点取自当前空间，写到别的空间坐标就对不上了。
+            if (!AnnotationService.IsInCurrentSpace(doc, data.Id, out var ownerSpace))
+            {
+                doc.Editor.WriteMessage("\n批注 " + data.Number + " 位于「" + ownerSpace + "」，请先切换到该空间（布局中的模型空间批注可双击进入视口）再增补云线。");
+                return;
+            }
             // 预览就用当前全局设置的样式，这样选点阶段看到的云线大小与最终补出来的完全一致。
             var preview = AnnotationService.AppendCloudStyle(doc, data);
             var historyFirsts = new List<Point3d>();
@@ -224,11 +228,9 @@ namespace GMAnnotation
             try
             {
                 string key = null;
-                var implied = doc.Editor.SelectImplied();
-                if (implied.Status == PromptStatus.OK && implied.Value.Count > 0)
+                var picked = FirstImpliedAnnotation(doc);
+                if (!picked.IsNull)
                 {
-                    var picked = implied.Value.GetObjectIds()[0];
-                    doc.Editor.SetImpliedSelection(new ObjectId[0]);
                     using (var tr = doc.Database.TransactionManager.StartTransaction())
                     {
                         var entity = tr.GetObject(picked, OpenMode.ForRead, false) as Entity;
@@ -255,13 +257,7 @@ namespace GMAnnotation
             try
             {
                 // 源批注：优先用预选对象，否则提示点选。
-                ObjectId sourceId = ObjectId.Null;
-                var implied = doc.Editor.SelectImplied();
-                if (implied.Status == PromptStatus.OK && implied.Value.Count > 0)
-                {
-                    sourceId = implied.Value.GetObjectIds()[0];
-                    doc.Editor.SetImpliedSelection(new ObjectId[0]);
-                }
+                var sourceId = FirstImpliedAnnotation(doc);
                 if (sourceId.IsNull)
                 {
                     var pick = doc.Editor.GetEntity("\n选择源批注（作为格式来源）: ");
@@ -325,13 +321,8 @@ namespace GMAnnotation
                 }
                 else
                 {
-                    var implied = doc.Editor.SelectImplied();
-                    if (implied.Status == PromptStatus.OK && implied.Value.Count > 0)
-                    {
-                        id = implied.Value.GetObjectIds()[0];
-                        doc.Editor.SetImpliedSelection(new ObjectId[0]);
-                    }
-                    else
+                    id = FirstImpliedAnnotation(doc);
+                    if (id.IsNull)
                     {
                         var options = new PromptEntityOptions("\n选择要编辑的 GM批注: ");
                         var result = doc.Editor.GetEntity(options); if (result.Status != PromptStatus.OK) return; id = result.ObjectId;
@@ -439,17 +430,33 @@ namespace GMAnnotation
         public void DeleteAnnotation()
         {
             var doc = CadApplication.DocumentManager.MdiActiveDocument; if (doc == null) return;
-            var implied = doc.Editor.SelectImplied(); ObjectId target;
-            if (implied.Status == PromptStatus.OK && implied.Value.Count > 0) target = implied.Value.GetObjectIds()[0];
-            else { var result = doc.Editor.GetEntity("\n选择要删除的 GM批注: "); if (result.Status != PromptStatus.OK) return; target = result.ObjectId; }
-            AnnotationService.AutoRepairIfNeeded(doc, target);
             try
             {
-                if (!AnnotationService.Delete(doc, target)) { doc.Editor.WriteMessage("\n所选对象不是有效的 GM批注。"); return; }
-                doc.Editor.WriteMessage("\nGM批注已删除，可使用 UNDO 恢复。");
+                // 预选了多条批注时逐条删除（同一条批注的多个成员只删一次）；没有预选批注时提示点选一条。
+                var targets = ImpliedAnnotationMembers(doc);
+                if (targets.Count == 0)
+                {
+                    var result = doc.Editor.GetEntity("\n选择要删除的 GM批注: "); if (result.Status != PromptStatus.OK) return;
+                    targets.Add(result.ObjectId);
+                }
+                var deleted = 0; var invalid = 0;
+                foreach (var target in targets)
+                {
+                    if (target.IsErased) continue; // 已随前面同一条批注一起删掉
+                    try
+                    {
+                        AnnotationService.AutoRepairIfNeeded(doc, target);
+                        if (target.IsErased) continue;
+                        if (AnnotationService.Delete(doc, target)) deleted++; else invalid++;
+                    }
+                    catch (System.Exception ex) { invalid++; PluginLog.Error("GM_PZ_DELETE.Item", ex); }
+                }
+                if (deleted == 0) { doc.Editor.WriteMessage("\n所选对象不是有效的 GM批注。"); return; }
+                doc.Editor.WriteMessage(deleted == 1 ? "\nGM批注已删除，可使用 UNDO 恢复。" : "\n已删除 " + deleted + " 条 GM批注，可使用 UNDO 恢复。");
+                if (invalid > 0) doc.Editor.WriteMessage("\n另有 " + invalid + " 个对象删除失败或不是有效批注，详见日志。");
                 AnnotationListPanel.RefreshIfOpen();
             }
-            catch (System.Exception ex) { doc.Editor.WriteMessage("\n删除失败: " + ex.Message); }
+            catch (System.Exception ex) { doc.Editor.WriteMessage("\n删除失败: " + ex.Message); PluginLog.Error("GM_PZ_DELETE", ex); }
         }
 
         /// <summary>隐藏批注：把批注整体设为不可见（数据保留在图内）。预选了批注则只隐藏所选，否则隐藏全图批注。</summary>
@@ -519,13 +526,8 @@ namespace GMAnnotation
                 return;
             }
 
-            var implied = doc.Editor.SelectImplied();
-            ObjectId target;
-            if (implied.Status == PromptStatus.OK && implied.Value.Count > 0)
-            {
-                target = implied.Value.GetObjectIds()[0];
-            }
-            else
+            var target = FirstImpliedAnnotation(doc);
+            if (target.IsNull)
             {
                 var result = doc.Editor.GetEntity(
                     "\n选择要移动文字框的 GM批注: ");
@@ -537,9 +539,9 @@ namespace GMAnnotation
                 target = result.ObjectId;
             }
 
-            AnnotationService.AutoRepairIfNeeded(doc, target);
             try
             {
+                AnnotationService.AutoRepairIfNeeded(doc, target);
                 if (!AnnotationService.MoveAnnotation(doc, target))
                 {
                     doc.Editor.WriteMessage(
@@ -553,6 +555,7 @@ namespace GMAnnotation
             catch (System.Exception ex)
             {
                 doc.Editor.WriteMessage("\n移动批注失败: " + ex.Message);
+                PluginLog.Error("GM_PZ_MOVE", ex);
             }
         }
 
@@ -573,15 +576,25 @@ namespace GMAnnotation
                     }
                 }
             }
-            catch { /* 获取样式失败时使用默认列表 */ }
-            CadDialog.ShowModal(new SettingsWindow(SettingsStore.Load(), styles));
+            catch (System.Exception ex) { PluginLog.Warning("GM_PZ_SETTINGS.Styles", ex.Message); /* 获取样式失败时使用默认列表 */ }
+            try { CadDialog.ShowModal(new SettingsWindow(SettingsStore.Load(), styles)); }
+            catch (System.Exception ex)
+            {
+                PluginLog.Error("GM_PZ_SETTINGS", ex);
+                CadApplication.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\n打开批注设置失败: " + ex.Message);
+            }
         }
 
         /// <summary>打开批注列表面板（左侧停靠）。</summary>
         [CommandMethod("GM_PZ_LIST", CommandFlags.Modal)]
         public void AnnotationList()
         {
-            AnnotationListPanel.ShowOrActivate();
+            try { AnnotationListPanel.ShowOrActivate(); }
+            catch (System.Exception ex)
+            {
+                PluginLog.Error("GM_PZ_LIST", ex);
+                CadApplication.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\n打开批注列表失败: " + ex.Message);
+            }
         }
 
         /// <summary>批注汇总：框选批注后，在点击位置绘制日期+内容汇总表，并从各批注框引线指向表位。</summary>
@@ -733,7 +746,45 @@ namespace GMAnnotation
         [CommandMethod("GM_PZ_ABOUT", CommandFlags.Modal)]
         public void About()
         {
-            CadDialog.ShowModal(new AboutWindow());
+            try { CadDialog.ShowModal(new AboutWindow()); }
+            catch (System.Exception ex)
+            {
+                PluginLog.Error("GM_PZ_ABOUT", ex);
+                CadApplication.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\n打开关于窗口失败: " + ex.Message);
+            }
+        }
+
+        /// <summary>预选集中第一个 GM 批注成员（预选里混有非批注对象也能找到）；没有则返回 Null。会清空预选。</summary>
+        private static ObjectId FirstImpliedAnnotation(Document doc)
+        {
+            var ids = ImpliedAnnotationMembers(doc);
+            return ids.Count > 0 ? ids[0] : ObjectId.Null;
+        }
+
+        /// <summary>预选集中所有带 GM批注扩展数据的实体（含复制出来尚未修复的副本）。读取后清空预选，避免残留夹点。</summary>
+        private static List<ObjectId> ImpliedAnnotationMembers(Document doc)
+        {
+            var list = new List<ObjectId>();
+            try
+            {
+                var implied = doc.Editor.SelectImplied();
+                if (implied.Status != PromptStatus.OK || implied.Value == null || implied.Value.Count == 0) return list;
+                var ids = implied.Value.GetObjectIds();
+                try { doc.Editor.SetImpliedSelection(new ObjectId[0]); } catch (System.Exception ex) { PluginLog.Warning("ImpliedSelection.Clear", ex.Message); }
+                using (var tr = doc.Database.TransactionManager.StartTransaction())
+                {
+                    foreach (var oid in ids)
+                    {
+                        if (oid.IsNull || !oid.IsValid || oid.IsErased) continue;
+                        if (!(tr.GetObject(oid, OpenMode.ForRead, false) is Entity entity)) continue;
+                        using (var xdata = entity.GetXDataForApplication(AnnotationCodec.AppName))
+                            if (xdata != null) list.Add(oid);
+                    }
+                    tr.Commit();
+                }
+            }
+            catch (System.Exception ex) { PluginLog.Warning("ImpliedSelection", ex.Message); }
+            return list;
         }
 
         internal static bool EditById(Document doc, ObjectId id)
@@ -753,7 +804,7 @@ namespace GMAnnotation
                 AnnotationListPanel.RefreshIfOpen();
                 doc.Editor.WriteMessage("\nGM批注已更新: " + data.Number); return true;
             }
-            catch (System.Exception ex) { doc.Editor.WriteMessage("\n编辑失败: " + ex.Message); return false; }
+            catch (System.Exception ex) { doc.Editor.WriteMessage("\n编辑失败: " + ex.Message); PluginLog.Error("GM_PZ_EDIT", ex); return false; }
         }
     }
 }

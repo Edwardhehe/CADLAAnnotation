@@ -44,6 +44,8 @@ namespace GMAnnotation
         {
             var s=source.Clone();
             var scale=source.ScaleRatio>0?source.ScaleRatio:1.0; // 出图比例分母（1:100 → 100）：打印 mm → 图面单位
+            // 图纸空间（布局里、未进入视口）按 1:1 出图，图面单位就是打印毫米：比例分母固定为 1。
+            if(IsPaperSpaceActive(doc))scale=1.0;
             var rawText=Math.Max(source.TextHeight,0.1);          // 打印字高（mm）
             var refSize=cloudDiagonal;
             if(refSize<=0){using(var view=doc.Editor.GetCurrentView())refSize=view.Height;}
@@ -63,6 +65,13 @@ namespace GMAnnotation
                 s.LineWidth=Math.Max(0,source.LineWidth*scale);
             }
             s.CheckHeight=Math.Max(source.CheckHeight*factor,text*2);if(captureRenderSettings&&data!=null){data.RenderTextHeight=s.TextHeight;data.RenderHeaderHeight=s.HeaderHeight;data.RenderSecondLineHeight=s.SecondLineHeight;data.RenderCloudRadius=s.CloudRadius;data.RenderLineWidth=s.LineWidth;}return s;
+        }
+
+        /// <summary>当前是否处于图纸空间（布局标签且未激活视口，TILEMODE=0 且 CVPORT=1）。</summary>
+        internal static bool IsPaperSpaceActive(Document doc)
+        {
+            try{return doc!=null&&!doc.Database.TileMode&&CadSpaces.CvPort==1;}
+            catch{return false;}
         }
 
         private static AnnotationSettings SettingsForExisting(AnnotationData data)
@@ -300,7 +309,10 @@ namespace GMAnnotation
                 EnsureRegApp(doc.Database,tr);EnsureLayer(doc.Database,tr,baseSettings,data);
                 // 原图层可能带"日期/人名"后缀（LayerAppendDate），按当前设置重算会落到今天的图层上，故照抄原图层。
                 var layerOverride=ExistingLayerName(doc.Database,tr,existing.Layer);
-                var space=(BlockTableRecord)tr.GetObject(doc.Database.CurrentSpaceId,OpenMode.ForWrite);
+                // 写入原批注所在空间（模型/布局），而不是当前空间；会话入口已保证两者一致，这里再兜底一次。
+                var ownerSpaceId=OwnerSpaceOf(tr,group);
+                if(ownerSpaceId.IsNull)ownerSpaceId=doc.Database.CurrentSpaceId;
+                var space=(BlockTableRecord)tr.GetObject(ownerSpaceId,OpenMode.ForWrite);
                 var ids=new ObjectIdCollection();
                 var ucsToWcs=GetUcsMatrix(doc);var wcsToUcs=ucsToWcs.Inverse();
                 var first=firstPoint.TransformBy(wcsToUcs);var second=secondPoint.TransformBy(wcsToUcs);
@@ -342,6 +354,41 @@ namespace GMAnnotation
                 AnnotationHistoryStore.Record(doc,"增补云线",data,null);
                 return true;
             }
+        }
+
+        /// <summary>编组第一个有效成员所在的空间（块表记录 Id）；没有有效成员时返回 Null。</summary>
+        private static ObjectId OwnerSpaceOf(Transaction tr,Group group)
+        {
+            foreach(ObjectId member in group.GetAllEntityIds())
+            {
+                if(!member.IsValid||member.IsErased)continue;
+                if(tr.GetObject(member,OpenMode.ForRead,false) is Entity entity)return entity.OwnerId;
+            }
+            return ObjectId.Null;
+        }
+
+        /// <summary>批注所在空间是否就是当前空间；不是时给出所在空间名（"模型"/布局名），供增补云线提示用户先切换。
+        /// 读不到批注时按"一致"处理（交给后续流程报错）。</summary>
+        internal static bool IsInCurrentSpace(Document doc,string annotationId,out string spaceName)
+        {
+            spaceName=null;
+            try
+            {
+                using(var tr=doc.Database.TransactionManager.StartTransaction())
+                {
+                    var groups=(DBDictionary)tr.GetObject(doc.Database.GroupDictionaryId,OpenMode.ForRead);
+                    var groupName=GroupPrefix+annotationId;if(!groups.Contains(groupName))return true;
+                    if(!(tr.GetObject(groups.GetAt(groupName),OpenMode.ForRead) is Group group))return true;
+                    var owner=OwnerSpaceOf(tr,group);
+                    if(owner.IsNull||owner==doc.Database.CurrentSpaceId)return true;
+                    var modelSpaceId=ModelSpaceIdOf(tr,doc.Database);
+                    string layoutName=null;
+                    if(tr.GetObject(owner,OpenMode.ForRead,false) is BlockTableRecord btr&&btr.IsLayout&&tr.GetObject(btr.LayoutId,OpenMode.ForRead,false) is Layout layout)layoutName=layout.LayoutName;
+                    spaceName=CadSpaces.DisplayName(owner==modelSpaceId,layoutName);
+                    return false;
+                }
+            }
+            catch(System.Exception ex){PluginLog.Warning("AppendCloud.SpaceCheck",ex.Message);return true;}
         }
 
         /// <summary>增补云线的交互预览设置：直接用当前全局设置（含比例/自适应），
@@ -607,10 +654,13 @@ namespace GMAnnotation
             using (doc.LockDocument()) using (var tr = doc.Database.TransactionManager.StartTransaction())
             {
                 EnsureRegApp(doc.Database, tr); EnsureLayer(doc.Database, tr, settings,data);
-                var space = (BlockTableRecord)tr.GetObject(spaceId.IsNull ? doc.Database.CurrentSpaceId : spaceId, OpenMode.ForWrite);
+                var targetSpaceId = spaceId.IsNull ? doc.Database.CurrentSpaceId : spaceId;
+                var space = (BlockTableRecord)tr.GetObject(targetSpaceId, OpenMode.ForWrite);
                 var ids = new ObjectIdCollection();
+                // 写入非当前空间（导入时还原到别的布局）：当前 UCS/视图属于当前空间，与目标空间无关，按 WCS 构建且不按当前视图翻转弧瓣。
+                var foreignSpace = targetSpaceId != doc.Database.CurrentSpaceId;
 
-                var ucsToWcs=GetUcsMatrix(doc);var wcsToUcs=ucsToWcs.Inverse();var first=firstPoint.TransformBy(wcsToUcs);var second=secondPoint.TransformBy(wcsToUcs);var localText=textLocation.TransformBy(wcsToUcs);
+                var ucsToWcs=foreignSpace?Matrix3d.Identity:GetUcsMatrix(doc);var wcsToUcs=ucsToWcs.Inverse();var first=firstPoint.TransformBy(wcsToUcs);var second=secondPoint.TransformBy(wcsToUcs);var localText=textLocation.TransformBy(wcsToUcs);
                 var min=new Point2d(Math.Min(first.X,second.X),Math.Min(first.Y,second.Y));var max=new Point2d(Math.Max(first.X,second.X),Math.Max(first.Y,second.Y));
                 var cloud=BuildCloud(min,max,settings);cloud.Elevation=first.Z;
                 var requestedWidth=settings.FixedWidth?settings.FixedWidthValue:Math.Max(55.0,settings.TextHeight*18.0);
@@ -623,7 +673,7 @@ namespace GMAnnotation
                 var boxEntity=BuildBox(localText,boxW,boxH);boxEntity.Elevation=localText.Z;
                 var cloudCorner=ResolveRegionLeaderAnchor(cloud,min,max,settings,localText);var boxCorners=new[]{new Point2d(localText.X,localText.Y),new Point2d(localText.X+boxW,localText.Y),new Point2d(localText.X+boxW,localText.Y+boxH),new Point2d(localText.X,localText.Y+boxH)};var boxCorner=boxCorners.OrderBy(c=>c.GetDistanceTo(cloudCorner)).First();
                 var leader=new Polyline();leader.AddVertexAt(0,cloudCorner,0,0,0);leader.AddVertexAt(1,boxCorner,0,0,0);leader.Elevation=localText.Z;
-                cloud.TransformBy(ucsToWcs);OrientCloudBulgesForView(doc,cloud);text.TransformBy(ucsToWcs);boxEntity.TransformBy(ucsToWcs);leader.TransformBy(ucsToWcs);
+                cloud.TransformBy(ucsToWcs);if(!foreignSpace)OrientCloudBulgesForView(doc,cloud);text.TransformBy(ucsToWcs);boxEntity.TransformBy(ucsToWcs);leader.TransformBy(ucsToWcs);
                 Add(space,tr,cloud,ids,settings,data.Id,"cloud",settings.CloudColor,data);Add(space,tr,text,ids,settings,data.Id,"text",TextColorForStatus(settings,data.Status),data);Add(space,tr,boxEntity,ids,settings,data.Id,"box",settings.SameColors?settings.CloudColor:settings.BoxColor,data);Add(space,tr,leader,ids,settings,data.Id,"leader",settings.LeaderColor,data);
 
                 var groups = (DBDictionary)tr.GetObject(doc.Database.GroupDictionaryId, OpenMode.ForWrite);
@@ -1254,6 +1304,8 @@ namespace GMAnnotation
             public double TextHeight;
             public Point2d[] BoxCorners;
             public double BoxElevation;
+            /// <summary>批注文字所在空间（模型/布局块表记录），清单表按当前空间的批注取字高。</summary>
+            public ObjectId SpaceId;
         }
 
         /// <summary>批注汇总：框选批注（窗口/窗交均可）后，在用户点击位置绘制"日期+内容"汇总表，并从各批注框引线指向表位。</summary>
@@ -1301,7 +1353,7 @@ namespace GMAnnotation
                 }
             }
             if(items.Count==0){ed.WriteMessage("\n所选对象中没有有效的 GM批注。");return;}
-            items=items.OrderBy(x=>x.Data.Number,StringComparer.OrdinalIgnoreCase).ToList();
+            items=items.OrderBy(x=>x.Data.Number,NaturalComparer.Instance).ToList();
 
             var placement=ed.GetPoint("\n指定批注汇总表位置: ");
             if(placement.Status!=PromptStatus.OK)return;
@@ -1436,8 +1488,13 @@ namespace GMAnnotation
             if (placement.Status != PromptStatus.OK) return;
 
             var settings = SettingsStore.Load();
-            // 与汇总表同一口径：表内文字高度取全部批注文字高度的平均值。
-            var textHeight = items.Average(x => x.TextHeight > 0 ? x.TextHeight : settings.TextHeight);
+            // 表内文字高度：取当前空间（清单要画进去的空间）中批注的平均字高——模型空间批注按比例放大过，
+            // 直接混算会让布局里的清单字大得离谱。当前空间没有批注时按当前设置（含比例/图纸空间 1:1）计算。
+            var currentSpaceId = doc.Database.CurrentSpaceId;
+            var local = items.Where(x => x.SpaceId == currentSpaceId && x.TextHeight > 0).ToList();
+            var textHeight = local.Count > 0
+                ? local.Average(x => x.TextHeight)
+                : ResolveEffectiveSettings(doc, settings, new AnnotationData()).TextHeight;
             CreateLegendTable(doc, settings, items, placement.Value, textHeight);
             ed.WriteMessage($"\n已生成 {items.Count} 条批注的清单表。");
         }
@@ -1459,16 +1516,19 @@ namespace GMAnnotation
                     if (!(tr.GetObject(groups.GetAt(groupName), OpenMode.ForRead) is Group group)) continue;
                     if (!TryReadMaster(group, tr, out var data)) continue;
                     var measuredHeight = 0.0;
+                    var spaceId = ObjectId.Null;
                     foreach (ObjectId member in group.GetAllEntityIds())
                     {
                         if (!member.IsValid || member.IsErased) continue;
                         if (!(tr.GetObject(member, OpenMode.ForRead, false) is Entity memberEntity)) continue;
-                        if (measuredHeight <= 0 && memberEntity is MText mtext) measuredHeight = mtext.TextHeight;
+                        if (spaceId.IsNull) spaceId = memberEntity.OwnerId;
+                        if (measuredHeight <= 0 && memberEntity is MText mtext) { measuredHeight = mtext.TextHeight; spaceId = mtext.OwnerId; }
                     }
                     items.Add(new SummaryItem
                     {
                         Data = data,
-                        TextHeight = data.RenderTextHeight > 0 ? data.RenderTextHeight : measuredHeight
+                        TextHeight = data.RenderTextHeight > 0 ? data.RenderTextHeight : measuredHeight,
+                        SpaceId = spaceId
                     });
                 }
             }
@@ -1681,18 +1741,20 @@ namespace GMAnnotation
                     if(!groups.Contains(groupName))continue;
                     var group=(Group)tr.GetObject(groups.GetAt(groupName),OpenMode.ForRead);
                     var clouds=new List<AnnotationWordCloud>();
+                    var hidden=new List<ObjectId>();
                     foreach(ObjectId member in group.GetAllEntityIds())
                     {
                         if(!member.IsValid||member.IsErased)continue;
                         var entity=tr.GetObject(member,OpenMode.ForRead,false) as Entity;
                         if(entity==null)continue;
+                        if(!entity.Visible)hidden.Add(member);
                         if(!TryGetRole(entity,out var role)||role!="cloud")continue;
                         Extents3d extents;
                         try{extents=entity.GeometricExtents;}catch{PluginLog.Warning("WordExport","批注 "+info.Number+" 的一条云线无法计算范围，已跳过。");continue;}
                         // 坐标是云线所在空间的 WCS：模型空间云线要在模型标签截图，图纸空间云线要在其布局的图纸空间截图。
                         clouds.Add(new AnnotationWordCloud{Extents=extents,SpaceId=entity.OwnerId,IsModel=entity.OwnerId==modelSpaceId,LayoutName=LayoutNameOf(tr,entity,layoutCache)});
                     }
-                    entries.Add(new AnnotationWordEntry{Number=info.Number,Date=info.Date,Content=info.Content,Clouds=clouds});
+                    entries.Add(new AnnotationWordEntry{Number=info.Number,Date=info.Date,Content=info.Content,Clouds=clouds,HiddenIds=hidden});
                 }
             }
             return entries; // GetAllAnnotations 已按编号排序
@@ -1819,7 +1881,9 @@ namespace GMAnnotation
             try
             {
                 var settings = SettingsStore.Load();
-                settings.NextNumber = GetNextNumber(doc);
+                var next = GetNextNumber(doc);
+                if (settings.NextNumber == next) return; // 每次切换文档都会调用：没变化就不写盘
+                settings.NextNumber = next;
                 SettingsStore.Save(settings);
             }
             catch (System.Exception ex) { PluginLog.Error("Number.Sync", ex); }
@@ -1874,7 +1938,7 @@ namespace GMAnnotation
                 }
             }
             catch (System.Exception ex) { PluginLog.Error("GetAllAnnotations", ex); }
-            return result.OrderBy(x => x.Number, StringComparer.OrdinalIgnoreCase).ToList();
+            return result.OrderBy(x => x.Number, NaturalComparer.Instance).ToList();
         }
 
         /// <summary>
@@ -2166,7 +2230,7 @@ namespace GMAnnotation
                 cache[owner] = name;
                 return name;
             }
-            catch { return null; }
+            catch (System.Exception ex) { PluginLog.Warning("LayoutNameOf", ex.Message); return null; }
         }
 
         /// <summary>按布局名查该布局的空间（BlockTableRecord）Id；本图没有这个布局时返回 ObjectId.Null。
@@ -2183,7 +2247,7 @@ namespace GMAnnotation
                     if (tr.GetObject(layouts.GetAt(layoutName), OpenMode.ForRead, false) is Layout layout) return layout.BlockTableRecordId;
                 }
             }
-            catch { }
+            catch (System.Exception ex) { PluginLog.Warning("FindLayoutSpace", "查找布局「" + layoutName + "」失败：" + ex.Message); }
             return ObjectId.Null;
         }
 
@@ -2599,7 +2663,7 @@ namespace GMAnnotation
                         if (bucket.Count < 2) continue;
                         // 主批注：必须自己有编组（否则没地方容纳并进来的云线），在候选里取编号最小者。
                         var master = bucket.Where(m => m.Group != null)
-                                           .OrderBy(m => m.Data.Number, StringComparer.OrdinalIgnoreCase)
+                                           .OrderBy(m => m.Data.Number, NaturalComparer.Instance)
                                            .ThenBy(m => m.Data.Date).FirstOrDefault();
                         if (master == null)
                         {

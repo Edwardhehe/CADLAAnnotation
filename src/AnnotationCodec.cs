@@ -15,9 +15,35 @@ namespace GMAnnotation
         /// <summary>XData 单个 ASCII 字符串上限 255 字符，留裕量。</summary>
         private const int ChunkSize = 200;
 
-        /// <summary>把批注数据编码并包装为带序号前缀的 XData 分片，如 "LA_D0:xxx"。</summary>
+        /// <summary>编码后长度上限。单个实体的 XData 总量上限约 16KB，内嵌分片之外还有应用名、Id、角色等；
+        /// 12000 字符留足裕量（中文内容约 3000 字，英文约 9000 字）。</summary>
+        public const int MaxEncodedLength = 12000;
+
+        /// <summary>编码后长度是否在上限内；超出时给出建议的内容字数上限（按比例估算）。</summary>
+        public static bool FitsXData(AnnotationData d, out int encodedLength, out int suggestedMaxContent)
+        {
+            encodedLength = Encode(d).Length;
+            var contentLength = (d.Content ?? "").Length;
+            if (encodedLength <= MaxEncodedLength) { suggestedMaxContent = contentLength; return true; }
+            var fixedPart = Encode(new AnnotationData
+            {
+                Id = d.Id, Number = d.Number, Date = d.Date, Discipline = d.Discipline, Author = d.Author, Status = d.Status,
+                Content = "", Role = d.Role, DrawingNo = d.DrawingNo, RenderTextHeight = d.RenderTextHeight,
+                RenderHeaderHeight = d.RenderHeaderHeight, RenderSecondLineHeight = d.RenderSecondLineHeight,
+                RenderCloudRadius = d.RenderCloudRadius, RenderLineWidth = d.RenderLineWidth
+            }).Length;
+            var perChar = contentLength > 0 ? (double)(encodedLength - fixedPart) / contentLength : 4.0;
+            suggestedMaxContent = Math.Max(0, (int)((MaxEncodedLength - fixedPart) / Math.Max(1.0, perChar)));
+            return false;
+        }
+
+        /// <summary>把批注数据编码并包装为带序号前缀的 XData 分片，如 "LA_D0:xxx"。
+        /// 超出 <see cref="MaxEncodedLength"/> 时抛出 InvalidOperationException（宁可明确失败，也不写出 CAD 拒收或被截断的 XData）。</summary>
         public static string[] BuildChunks(AnnotationData d)
         {
+            if (!FitsXData(d, out var encodedLength, out var suggested))
+                throw new InvalidOperationException("批注内容过长（编码后 " + encodedLength + " 字符，上限 " + MaxEncodedLength
+                    + "），超出 CAD 扩展数据容量。请把内容精简到约 " + suggested + " 字以内。");
             var parts = Split(Encode(d), ChunkSize);
             for (var i = 0; i < parts.Length; i++) parts[i] = ChunkPrefix + i + ":" + parts[i];
             return parts;

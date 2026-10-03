@@ -317,9 +317,17 @@ namespace GMAnnotation.Views
                 if(answer!=MessageBoxResult.Yes){NumberTextBox.Focus();NumberTextBox.SelectAll();return;}
             }
             CaptureInto(Value);
-            // 记住本图的图号与"立即入库"开关，下次自动带出。
+            // 内嵌在每个实体 XData 里的批注数据有容量上限（约 16KB），超长内容在这里就拦下，而不是落图时才报错。
+            if(!AnnotationCodec.FitsXData(Value,out _,out var maxContent))
+            {
+                MessageBox.Show(this,"批注内容过长（当前 "+(Value.Content??"").Length+" 字），超出 CAD 扩展数据容量。\n\n请精简到约 "+maxContent+" 字以内（中文约 3000 字，英文约 9000 字），或把详细说明放到知识库/外部文档中引用。","GM批注 · 内容过长",MessageBoxButton.OK,MessageBoxImage.Warning);
+                ContentTextBox.Focus();
+                return;
+            }
+            // 记住本图的图号与"立即入库"开关，下次自动带出（保存失败只记日志，不影响本次批注）。
             AnnotationHistoryStore.SetDrawingNo(_drawingPath,Value.DrawingNo);
-            var settings=SettingsStore.Load();settings.ArchiveOnCreate=ArchiveCheckBox.IsChecked==true;SettingsStore.Save(settings);
+            try{var settings=SettingsStore.Load();settings.ArchiveOnCreate=ArchiveCheckBox.IsChecked==true;SettingsStore.Save(settings);}
+            catch(System.Exception ex){PluginLog.Warning("AnnotationWindow.SaveArchiveOption",ex.Message);}
             DialogResult=true;
         }
 
