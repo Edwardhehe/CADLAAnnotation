@@ -19,7 +19,9 @@ using CadApplication = Autodesk.AutoCAD.ApplicationServices.Core.Application;
 
 namespace GMAnnotation.Views
 {
-    /// <summary>浮动批注面板：选择批注类型、形式和设置，开始批注时统一生效，支持连续批注。
+    /// <summary>浮动批注面板（精简版）：只选批注类型、批注形式（含仅绘云线）与连续批注，其余参数
+    /// （专业、批注人、外形、云线样式、角色、自动编号、双击编辑等）一律使用已保存的设置（settings.xml /
+    /// GM_PZ_SETTINGS），面板右下角「设置」按钮打开完整设置窗口。开始批注时统一生效，支持连续批注。
     /// 从菜单"绘制批注"（GM_PZ_NOTE）打开时会立即按面板当前设置开始批注。</summary>
     internal partial class AnnotationPanel : Window
     {
@@ -50,22 +52,12 @@ namespace GMAnnotation.Views
         {
             InitializeComponent();
             _s = SettingsStore.Load();
-            // 先恢复上次的类型/形式（在挂 Checked 事件之前，不覆盖"外形"下拉的已保存值）。
+            // 先恢复上次的类型/形式（PL 线只在本会话记忆；矩形/圆形随后按已保存的「外形」同步）。
             if (!_rememberedIsSingle) MultiModeRadio.IsChecked = true;
             if (_rememberedShape == "pline") ShapePlineRadio.IsChecked = true;
             else if (_rememberedShape == "圆形") ShapeCircleRadio.IsChecked = true;
-            // 下拉数据源
-            DisciplineCombo.ItemsSource = AnnotationOptions.Disciplines;
-            ShapeCombo.ItemsSource = new[] { "矩形", "菱形", "椭圆" };
-            CloudStyleCombo.ItemsSource = new[] { "等宽", "渐变" };
-            RoleCombo.ItemsSource = AnnotationOptions.Roles;
-            // 加载当前设置值
+            // 加载当前设置值；面板修改只保留为待应用值，点击“开始批注”时才统一写入设置。
             RefreshControls();
-            // 面板修改只保留为待应用值；点击“开始批注”时才统一写入设置。
-            // 「批注形式」单选与「外形」下拉保持一致：圆形 ⇔ 椭圆；矩形单选覆盖矩形/菱形（选矩形时菱形保持不变）。
-            ShapeRectRadio.Checked += (_, __) => { if (!_syncingShape && ShapeCombo.Text == "椭圆") ShapeCombo.Text = "矩形"; };
-            ShapeCircleRadio.Checked += (_, __) => { if (!_syncingShape) ShapeCombo.Text = "椭圆"; };
-            ShapeCombo.SelectionChanged += (_, __) => Dispatcher.BeginInvoke(new Action(SyncShapeRadio));
             SingleModeRadio.Checked += (_, __) => UpdateModeAvailability();
             MultiModeRadio.Checked += (_, __) => UpdateModeAvailability();
             // 菜单打开面板时由 ShowAndStart 立即开始批注；之后可修改参数，再由“开始批注”按钮或再次点菜单进入 CAD 交互。
@@ -77,36 +69,32 @@ namespace GMAnnotation.Views
         private void RefreshControls()
         {
             _shown = _s.Clone();
-            DisciplineCombo.Text = _s.DefaultDiscipline;
-            AuthorText.Text = _s.DefaultAuthor;
-            ShapeCombo.Text = _s.Shape;
-            CloudStyleCombo.Text = _s.CloudStyle;
-            RoleCombo.Text = _s.DefaultRole;
-            AutoNumberCheck.IsChecked = _s.AutoNumber;
-            DoubleClickEditCheck.IsChecked = _s.DoubleClickEdit;
             ContinuousCheck.IsChecked = _s.ContinuousAnnotation;
             CloudOnlyCheck.IsChecked = _s.CloudOnly;
             SyncShapeRadio();
         }
 
-        private bool _syncingShape;
-
-        /// <summary>按「外形」下拉同步「批注形式」单选（PL 线模式不动）。</summary>
+        /// <summary>按已保存的「外形」同步「批注形式」单选：椭圆 ⇒ 圆形，矩形/菱形 ⇒ 矩形（PL 线模式不动）。</summary>
         private void SyncShapeRadio()
         {
             if (ShapePlineRadio.IsChecked == true) return;
-            _syncingShape = true;
-            try
-            {
-                if (ShapeCombo.Text == "椭圆") ShapeCircleRadio.IsChecked = true;
-                else ShapeRectRadio.IsChecked = true;
-            }
-            finally { _syncingShape = false; }
+            if (_s.Shape == "椭圆") ShapeCircleRadio.IsChecked = true;
+            else ShapeRectRadio.IsChecked = true;
+        }
+
+        /// <summary>由「批注形式」单选推出要写回的「外形」：圆形 ⇒ 椭圆；矩形 ⇒ 原为椭圆时改矩形，
+        /// 原为矩形/菱形时保持不变；PL 线不涉及外形，返回 null（不写回）。</summary>
+        private static string ShapeFromRadio(bool rect, bool circle, string savedShape)
+        {
+            if (circle) return "椭圆";
+            if (rect) return savedShape == "椭圆" ? "矩形" : savedShape;
+            return null;
         }
 
         /// <summary>点击开始时，将面板当前值一次性写回设置并持久化。
-        /// 先重新读取磁盘上的最新设置，只覆盖面板自己管理的字段——面板开着期间在「批注设置」窗口
-        /// 或批注窗口（立即入库）里做的修改不会被面板持有的旧设置对象覆盖回去。</summary>
+        /// 先重新读取磁盘上的最新设置，只覆盖面板自己管理且用户真正改过的字段（连续批注、仅绘云线、
+        /// 由「批注形式」推出的外形）——专业、批注人、云线样式、角色、自动编号、双击编辑等已不在面板上，
+        /// 一律沿用设置文件中的值；面板开着期间在设置窗口或批注窗口（立即入库）里做的修改也不会被覆盖。</summary>
         private void ApplyPanelSettings()
         {
             var shown = _shown ?? _s;
@@ -114,13 +102,8 @@ namespace GMAnnotation.Views
             var changed = false;
             void ApplyText(string value, string before, Action<string> set) { value = (value ?? "").Trim(); if (!string.Equals(value, (before ?? "").Trim(), StringComparison.Ordinal)) { set(value); changed = true; } }
             void ApplyFlag(bool value, bool before, Action<bool> set) { if (value != before) { set(value); changed = true; } }
-            ApplyText(DisciplineCombo.Text, shown.DefaultDiscipline, v => fresh.DefaultDiscipline = v);
-            ApplyText(AuthorText.Text, shown.DefaultAuthor, v => fresh.DefaultAuthor = v);
-            ApplyText(ShapeCombo.Text, shown.Shape, v => fresh.Shape = v);
-            ApplyText(CloudStyleCombo.Text, shown.CloudStyle, v => fresh.CloudStyle = v);
-            ApplyText(RoleCombo.Text, shown.DefaultRole, v => fresh.DefaultRole = v);
-            ApplyFlag(AutoNumberCheck.IsChecked == true, shown.AutoNumber, v => fresh.AutoNumber = v);
-            ApplyFlag(DoubleClickEditCheck.IsChecked == true, shown.DoubleClickEdit, v => fresh.DoubleClickEdit = v);
+            var shapeFromRadio = ShapeFromRadio(ShapeRectRadio.IsChecked == true, ShapeCircleRadio.IsChecked == true, shown.Shape);
+            if (shapeFromRadio != null) ApplyText(shapeFromRadio, shown.Shape, v => fresh.Shape = v);
             ApplyFlag(ContinuousCheck.IsChecked == true, shown.ContinuousAnnotation, v => fresh.ContinuousAnnotation = v);
             ApplyFlag(CloudOnlyCheck.IsChecked == true, shown.CloudOnly, v => fresh.CloudOnly = v);
             if (changed) SettingsStore.Save(fresh);
@@ -309,7 +292,7 @@ namespace GMAnnotation.Views
                 _startPending = true;
                 _pendingSinceUtc = DateTime.UtcNow;
                 StartButton.IsEnabled = !_isRunning;
-                StartButton.Content = "等待 CAD…（可重试）";
+                StartButton.Content = "等待 CAD…"; // 面板已精简变窄，文字从「等待 CAD…（可重试）」缩短；再次点击仍可重试
                 doc.SendStringToExecute("GM_PZ_RUN ", true, false, false);
             }
             catch (Exception ex)
@@ -409,7 +392,9 @@ namespace GMAnnotation.Views
             var w = new SettingsWindow(SettingsStore.Load(), styles);
             if (CadDialog.ShowModal(w) == true)
             {
-                _s = w.Value;
+                // 设置窗口已自行保存；按磁盘最新值刷新面板（与 GM_PZ_SETTINGS 保存后 ReloadSettingsIfOpen 一致）。
+                try { _s = SettingsStore.Load(); }
+                catch (Exception ex) { PluginLog.Warning("Panel.Settings", ex.Message); _s = w.Value; }
                 RefreshControls();
             }
         }

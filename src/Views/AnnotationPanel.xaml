@@ -2,86 +2,51 @@
         x:ClassModifier="internal"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="GM 批注面板" Width="280" Height="500"
-        MinWidth="268" MinHeight="360"
-        ResizeMode="CanResize"
+        Title="GM 批注面板" Width="236" SizeToContent="Height"
+        MinWidth="220"
+        ResizeMode="NoResize"
         Topmost="True" ShowInTaskbar="False"
         WindowStyle="ToolWindow" Style="{DynamicResource GMWindow}">
     <Window.Resources>
         <ResourceDictionary Source="../Themes/LATheme.xaml"/>
     </Window.Resources>
 
-    <DockPanel>
-        <!-- 底部操作栏（同 LA 主窗口：无分隔条，主操作按钮 #0078D7） -->
-        <Grid DockPanel.Dock="Bottom" Margin="8,4,8,8">
+    <!-- 精简面板：只选批注类型 / 形式；专业、批注人、外形、云线样式、角色、自动编号、双击编辑等
+         使用已保存的设置，右下角「设置」打开完整设置窗口（同 GM_PZ_SETTINGS）。 -->
+    <DockPanel Margin="8,8,8,8">
+        <!-- 底部操作栏（同 LA 主窗口：主操作按钮 #0078D7） -->
+        <Grid DockPanel.Dock="Bottom" Margin="0,2,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <CheckBox x:Name="ContinuousCheck" Grid.Column="0" Content="连续批注" VerticalAlignment="Center" Margin="0"/>
-            <Button x:Name="StartButton" Grid.Column="1" Content="开始批注" MinWidth="96"
-                    Style="{DynamicResource AccentButton}" Click="Start_Click" Margin="8,0,0,0"/>
+            <Button Grid.Column="1" Content="设置" MinWidth="40" MinHeight="28" Margin="4,0,0,0"
+                    Style="{StaticResource CompactButton}" Click="Settings_Click"
+                    ToolTip="打开完整设置（同 GM_PZ_SETTINGS）：专业、批注人、外形、云线样式、角色、自动编号、双击编辑等"/>
+            <Button x:Name="StartButton" Grid.Column="2" Content="开始批注" MinWidth="76"
+                    Style="{DynamicResource AccentButton}" Click="Start_Click" Margin="4,0,0,0"/>
         </Grid>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8,8,8,0">
-            <StackPanel>
-                <GroupBox Header="批注类型">
+        <StackPanel>
+            <GroupBox Header="批注类型">
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="SingleModeRadio" Content="单独批注" IsChecked="True" GroupName="Mode"/>
+                    <RadioButton x:Name="MultiModeRadio" Content="多对一批注" GroupName="Mode" Margin="0,2,0,2"/>
+                </StackPanel>
+            </GroupBox>
+
+            <GroupBox Header="批注形式">
+                <StackPanel>
                     <StackPanel Orientation="Horizontal">
-                        <RadioButton x:Name="SingleModeRadio" Content="单独批注" IsChecked="True" GroupName="Mode"/>
-                        <RadioButton x:Name="MultiModeRadio" Content="多对一批注" GroupName="Mode" Margin="0,2,0,2"/>
+                        <RadioButton x:Name="ShapeRectRadio" Content="矩形" IsChecked="True" GroupName="Shape"/>
+                        <RadioButton x:Name="ShapePlineRadio" Content="PL 线" GroupName="Shape"/>
+                        <RadioButton x:Name="ShapeCircleRadio" Content="圆形" GroupName="Shape" Margin="0,2,0,2"/>
                     </StackPanel>
-                </GroupBox>
-
-                <GroupBox Header="批注形式">
-                    <StackPanel>
-                        <UniformGrid Columns="3">
-                            <RadioButton x:Name="ShapeRectRadio" Content="矩形" IsChecked="True" GroupName="Shape"/>
-                            <RadioButton x:Name="ShapePlineRadio" Content="PL 线" GroupName="Shape"/>
-                            <RadioButton x:Name="ShapeCircleRadio" Content="圆形" GroupName="Shape"/>
-                        </UniformGrid>
-                        <CheckBox x:Name="CloudOnlyCheck" Content="仅绘云线（无文字/引线）" Margin="0,4,0,0"/>
-                    </StackPanel>
-                </GroupBox>
-
-                <GroupBox Header="批注设置（开始批注时生效）">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="56"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="专业" Style="{StaticResource FieldLabelLeft}"/>
-                            <ComboBox x:Name="DisciplineCombo" Grid.Row="0" Grid.Column="1" IsEditable="True"/>
-
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="批注人" Style="{StaticResource FieldLabelLeft}"/>
-                            <TextBox x:Name="AuthorText" Grid.Row="1" Grid.Column="1"/>
-
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="外形" Style="{StaticResource FieldLabelLeft}"/>
-                            <ComboBox x:Name="ShapeCombo" Grid.Row="2" Grid.Column="1"/>
-
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="云线样式" Style="{StaticResource FieldLabelLeft}"/>
-                            <ComboBox x:Name="CloudStyleCombo" Grid.Row="3" Grid.Column="1"/>
-
-                            <TextBlock Grid.Row="4" Grid.Column="0" Text="角色" Style="{StaticResource FieldLabelLeft}"/>
-                            <ComboBox x:Name="RoleCombo" Grid.Row="4" Grid.Column="1" IsEditable="True"/>
-                        </Grid>
-
-                        <CheckBox x:Name="AutoNumberCheck" Content="自动编号" Margin="0,4,0,2"/>
-                        <CheckBox x:Name="DoubleClickEditCheck" Content="双击编辑"/>
-                    </StackPanel>
-                </GroupBox>
-
-                <Button Content="完整设置…" Style="{StaticResource SecondaryButton}" Click="Settings_Click"
-                        Margin="0,2,0,4" HorizontalAlignment="Right"/>
-            </StackPanel>
-        </ScrollViewer>
+                    <CheckBox x:Name="CloudOnlyCheck" Content="仅绘云线（无文字/引线）" Margin="0,4,0,0"/>
+                </StackPanel>
+            </GroupBox>
+        </StackPanel>
     </DockPanel>
 </Window>
