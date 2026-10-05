@@ -1,4 +1,4 @@
-# GM批注 v1.1
+# GM批注 v1.1.1
 
 同时支持 AutoCAD 与 ZWCAD 的本地批注插件，无需登录或联网。两种宿主共用同一套源码、DWG 数据格式、界面和命令。
 
@@ -8,12 +8,12 @@
 
 ### 1. 获取 DLL
 
-从 Releases 页面下载最新版本的 `GMAnnotation-vX.Y.zip`（如 `GMAnnotation-v1.1.zip`）并完整解压，再按 CAD 宿主选择 DLL：
+从 Releases 页面下载最新版本的 `GMAnnotation-vX.Y.zip`（如 `GMAnnotation-v1.1.1.zip`）并完整解压，再按 CAD 宿主选择 DLL：
 
 - GitHub：<https://github.com/Edwardhehe/CADLAAnnotation/releases>
 - Gitee（国内访问更快）：<https://gitee.com/Edwardhehe/CADLAAnnotation/releases>
 
-本文档对应源码版本 **v1.1**（程序集版本 1.1.0.0；「关于」窗口 `GM_PZ_ABOUT` 与加载提示显示的版本号以实际加载的 DLL 为准）。
+本文档对应源码版本 **v1.1.1**（程序集版本 1.1.1.0；「关于」窗口 `GM_PZ_ABOUT` 与加载提示显示的版本号以实际加载的 DLL 为准）。
 
 | CAD 宿主 | DLL |
 |---|---|
