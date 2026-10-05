@@ -114,6 +114,10 @@ namespace GMAnnotation
         /// <summary>角标颜色：1~255 为 ACI 颜色；其他值（默认 -1）表示与云线同色。图层始终跟随云线。</summary>
         public short CloudMarkerColor { get; set; } = -1;
 
+        /// <summary>运行时标记（不写入 settings.xml）：本对象是 settings.xml 一时读不到（被占用/正在替换）时临时用的默认值。
+        /// 这样的对象不能被自动保存写回，否则会把用户的比例等全部设置冲成默认值（见 SettingsStore.Save）。</summary>
+        public bool LoadedFromFallback { get; set; }
+
         public AnnotationSettings Clone() => (AnnotationSettings)MemberwiseClone();
     }
 }

@@ -449,7 +449,7 @@ namespace GMAnnotation.Views
                 return;
             }
             // 完整 PL 批注：先确认占位框和引线位置，再填写内容并直接落图。
-            doc.Editor.WriteMessage($"\n云线范围: {w:0.#}×{h:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}");
+            doc.Editor.WriteMessage($"\n云线范围: {w:0.#}×{h:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}" + AnnotationService.ScaleNote(doc, _runSettings));
             var placementResult=AnnotationService.PromptPlacement(doc,effective,_runSettings,null,null,points,points[points.Count-1],PlacementGeometryKind.Polygon);if(!AcceptInteraction(doc,placementResult))return;var textPointWcs=placementResult.Point;
             if (!CadDialog.ShowAnnotation(data, false)){doc.Editor.WriteMessage("\n已在填写内容阶段取消 PL 批注。");return;}
             AnnotationService.CreatePlineCloud(doc, data, effective, points, textPointWcs);
@@ -468,7 +468,7 @@ namespace GMAnnotation.Views
                 var (_,w,h)=AnnotationService.UcsAlignedExtents(doc,first,second);
                 var diagonal = Math.Sqrt(w * w + h * h);
                 var effective = AnnotationService.ResolveEffectiveSettings(doc, _runSettings, data, diagonal, true);
-                doc.Editor.WriteMessage($"\n云线对角线: {diagonal:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}");
+                doc.Editor.WriteMessage($"\n云线对角线: {diagonal:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}" + AnnotationService.ScaleNote(doc, _runSettings));
                 AnnotationService.CreateCloudOnly(doc, effective, first, second);
                 doc.Editor.WriteMessage("\n云线已创建。");
                 CheckContinuous(doc);
@@ -479,7 +479,7 @@ namespace GMAnnotation.Views
             var (_,bw,bh)=AnnotationService.UcsAlignedExtents(doc,f,s);
             var bdiagonal = Math.Sqrt(bw * bw + bh * bh);
             var beffective = AnnotationService.ResolveEffectiveSettings(doc, _runSettings, data, bdiagonal, true);
-            doc.Editor.WriteMessage($"\n云线对角线: {bdiagonal:0.#}  字高: {beffective.TextHeight:0.###}  云线半径: {beffective.CloudRadius:0.###}");
+            doc.Editor.WriteMessage($"\n云线对角线: {bdiagonal:0.#}  字高: {beffective.TextHeight:0.###}  云线半径: {beffective.CloudRadius:0.###}" + AnnotationService.ScaleNote(doc, _runSettings));
             var placementResult=AnnotationService.PromptPlacement(doc,beffective,_runSettings,new[]{f},new[]{s},null,s,PlacementGeometryKind.Region);if(!AcceptInteraction(doc,placementResult))return;var textPt=placementResult.Point;
             if (!CadDialog.ShowAnnotation(data, false)){doc.Editor.WriteMessage("\n已在填写内容阶段取消单区域批注。");return;}
             AnnotationService.Create(doc, data, beffective, f, s, textPt);

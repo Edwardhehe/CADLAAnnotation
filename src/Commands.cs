@@ -74,14 +74,14 @@ namespace GMAnnotation
                 // "仅绘云线"设置：不选文字框、不填内容，画完即结束。
                 if (settings.CloudOnly)
                 {
-                    doc.Editor.WriteMessage($"\n云线对角线: {diagonal:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}");
+                    doc.Editor.WriteMessage($"\n云线对角线: {diagonal:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}" + AnnotationService.ScaleNote(doc, settings));
                     AnnotationService.CreateCloudOnly(doc, effective, first, second);
                     doc.Editor.WriteMessage("\n云线已创建。");
                     return;
                 }
 
                 // 始终报出本次实际采用的尺寸，方便核对比例选型算出来的图面值。
-                doc.Editor.WriteMessage($"\n云线对角线: {diagonal:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}");
+                doc.Editor.WriteMessage($"\n云线对角线: {diagonal:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}" + AnnotationService.ScaleNote(doc, settings));
 
                 var placement = AnnotationService.PromptPlacement(
                     doc, effective, settings, new[] { first }, new[] { second }, null, second, PlacementGeometryKind.Region);
@@ -140,7 +140,7 @@ namespace GMAnnotation
                 settings = SettingsStore.Load(); // 关键字可能刚改过角标设置
                 var (_,width,height)=AnnotationService.UcsAlignedExtents(doc,first,second);
                 var effective = AnnotationService.ResolveEffectiveSettings(doc, settings, new AnnotationData(), Math.Sqrt(width * width + height * height));
-                doc.Editor.WriteMessage($"\n云线范围: {width:0.#}×{height:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}");
+                doc.Editor.WriteMessage($"\n云线范围: {width:0.#}×{height:0.#}  字高: {effective.TextHeight:0.###}  云线半径: {effective.CloudRadius:0.###}" + AnnotationService.ScaleNote(doc, settings));
                 var id = AnnotationService.CreateCloudOnly(doc, effective, first, second);
                 doc.Editor.WriteMessage("\n云线已创建: " + id);
             }

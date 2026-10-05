@@ -21,17 +21,27 @@ using CadPolyline = Autodesk.AutoCAD.DatabaseServices.Polyline;
 
 namespace GMAnnotation
 {
+    /// <summary>
+    /// 拖拽预览的公共工具。
+    /// <para>AutoCAD 的 Jig 在每次鼠标移动时（且可能每帧多次）回调 WorldDraw，这里必须只做纯几何计算：
+    /// 不开事务、不取当前视图（Editor.GetCurrentView）、不建 MText 实测。最外层事务结束（含 Abort）时 AutoCAD 会刷新图形，
+    /// 在拖拽中这会把拖拽图形擦掉，表现为预览"时隐时现、几乎看不见"（AutoCAD 2020~2024 尤其明显，中望不刷新所以不受影响）。
+    /// 所以与光标无关的量（视图方向、文字框尺寸、已确定的云线）都在 Jig 构造时、拖拽开始前一次算好。</para>
+    /// </summary>
     internal static class RegionPreviewDrawing
     {
-        internal static void DrawHistory(
-            WorldDraw draw,
+        /// <summary>把已确认的历史区域一次性构造成显示用云线（WCS，已定向、已设预览外观）。</summary>
+        internal static List<CadPolyline> BuildHistory(
             Document doc,
             Matrix3d ucsToWcs,
             Matrix3d wcsToUcs,
             AnnotationSettings source,
             IList<Point3d> firsts,
-            IList<Point3d> seconds)
+            IList<Point3d> seconds,
+            Vector3d? viewDirection)
         {
+            var result = new List<CadPolyline>();
+            if (firsts == null || seconds == null) return result;
             for (var i = 0; i < firsts.Count && i < seconds.Count; i++)
             {
                 var a = firsts[i].TransformBy(wcsToUcs);
@@ -44,35 +54,52 @@ namespace GMAnnotation
                     source,
                     null,
                     diagonal);
-
-                using (var cloud = AnnotationService.BuildCloud(
+                var cloud = AnnotationService.BuildCloud(
                     RegionPreviewJig.ToMin(a, b),
                     RegionPreviewJig.ToMax(a, b),
-                    settings))
-                {
-                    AnnotationService.ApplyPreviewAppearance(
-                        cloud,
-                        settings,
-                        settings.CloudColor,
-                        "cloud");
-                    cloud.Elevation = a.Z;
-                    cloud.TransformBy(ucsToWcs);
-                    AnnotationService.OrientCloudBulgesForView(doc,cloud);
-                    draw.Geometry.Draw(cloud);
-                }
+                    settings);
+                AnnotationService.ApplyPreviewAppearance(
+                    cloud,
+                    settings,
+                    settings.CloudColor,
+                    "cloud");
+                cloud.Elevation = a.Z;
+                cloud.TransformBy(ucsToWcs);
+                AnnotationService.OrientCloudBulgesForView(cloud, viewDirection);
+                result.Add(cloud);
             }
+            return result;
+        }
+
+        internal static void DrawAll(WorldDraw draw, IEnumerable<CadPolyline> entities)
+        {
+            foreach (var entity in entities) draw.Geometry.Draw(entity);
+        }
+
+        internal static void DisposeAll(List<CadPolyline> entities)
+        {
+            if (entities == null) return;
+            foreach (var entity in entities)
+            {
+                try { entity?.Dispose(); } catch { }
+            }
+            entities.Clear();
+        }
+
+        private static int _failureLogged;
+
+        /// <summary>WorldDraw 内部异常只记一次日志（异常会让 CAD 丢掉这一帧的预览，便于用户反馈时定位）。</summary>
+        internal static void LogFailure(string jig, System.Exception ex)
+        {
+            if (System.Threading.Interlocked.Exchange(ref _failureLogged, 1) == 0)
+                PluginLog.Warning("Jig." + jig, "预览绘制异常（仅记录首次）：" + ex.Message);
         }
     }
 
     /// <summary>多对一第一角点预览：显示全部已确认区域，并允许回车结束。</summary>
-    internal sealed class RegionFirstPointPreviewJig : DrawJig
+    internal sealed class RegionFirstPointPreviewJig : DrawJig, IDisposable
     {
-        private readonly Document _doc;
-        private readonly Matrix3d _ucsToWcs;
-        private readonly Matrix3d _wcsToUcs;
-        private readonly AnnotationSettings _source;
-        private readonly List<Point3d> _firsts;
-        private readonly List<Point3d> _seconds;
+        private readonly List<CadPolyline> _history;
         private Point3d _current;
         private bool _hasSample;
 
@@ -85,12 +112,15 @@ namespace GMAnnotation
             IList<Point3d> firsts,
             IList<Point3d> seconds)
         {
-            _doc = doc;
-            _source = source;
-            _firsts = firsts?.ToList() ?? new List<Point3d>();
-            _seconds = seconds?.ToList() ?? new List<Point3d>();
-            _ucsToWcs = AnnotationService.GetUcsMatrix(doc);
-            _wcsToUcs = _ucsToWcs.Inverse();
+            var ucsToWcs = AnnotationService.GetUcsMatrix(doc);
+            _history = RegionPreviewDrawing.BuildHistory(
+                doc,
+                ucsToWcs,
+                ucsToWcs.Inverse(),
+                source,
+                firsts,
+                seconds,
+                AnnotationService.CurrentViewDirection(doc));
         }
 
         protected override SamplerStatus Sampler(JigPrompts prompts)
@@ -126,42 +156,57 @@ namespace GMAnnotation
 
         protected override bool WorldDraw(WorldDraw draw)
         {
-            RegionPreviewDrawing.DrawHistory(
-                draw,
-                _doc,
-                _ucsToWcs,
-                _wcsToUcs,
-                _source,
-                _firsts,
-                _seconds);
+            try { RegionPreviewDrawing.DrawAll(draw, _history); }
+            catch (System.Exception ex) { RegionPreviewDrawing.LogFailure("RegionFirstPoint", ex); }
             return true;
         }
+
+        public void Dispose() => RegionPreviewDrawing.DisposeAll(_history);
     }
 
     /// <summary>拖拽预览：按当前区域尺寸解析最终参数，在 UCS 中构造并变换到 WCS。</summary>
-    internal sealed class RegionPreviewJig : DrawJig
+    internal sealed class RegionPreviewJig : DrawJig, IDisposable
     {
-        private readonly Document _doc;private readonly Matrix3d _ucsToWcs,_wcsToUcs;private readonly Point3d _first;private readonly AnnotationSettings _source;private readonly List<Point3d> _historyFirsts,_historySeconds;private Point3d _current;
+        private readonly Document _doc;private readonly Matrix3d _ucsToWcs,_wcsToUcs;private readonly Point3d _first;private readonly AnnotationSettings _source;private readonly List<CadPolyline> _history;private readonly Vector3d? _viewDirection;private Point3d _current;
         public Point3d Current=>_current;
-        public RegionPreviewJig(Document doc,Point3d first,AnnotationSettings source,IList<Point3d> historyFirsts=null,IList<Point3d> historySeconds=null){_doc=doc;_ucsToWcs=AnnotationService.GetUcsMatrix(doc);_wcsToUcs=_ucsToWcs.Inverse();_first=first;_current=first;_source=source;_historyFirsts=historyFirsts?.ToList()??new List<Point3d>();_historySeconds=historySeconds?.ToList()??new List<Point3d>();}
+        public RegionPreviewJig(Document doc,Point3d first,AnnotationSettings source,IList<Point3d> historyFirsts=null,IList<Point3d> historySeconds=null)
+        {
+            _doc=doc;_ucsToWcs=AnnotationService.GetUcsMatrix(doc);_wcsToUcs=_ucsToWcs.Inverse();_first=first;_current=first;_source=source;
+            _viewDirection=AnnotationService.CurrentViewDirection(doc);
+            _history=RegionPreviewDrawing.BuildHistory(doc,_ucsToWcs,_wcsToUcs,source,historyFirsts,historySeconds,_viewDirection);
+        }
         // 保留 BasePoint 以支持相对坐标和对象捕捉，但使用普通十字光标，避免 CAD 额外画出角点对角虚线。
         protected override SamplerStatus Sampler(JigPrompts prompts){var o=new JigPromptPointOptions("\n指定批注范围另一个角点: "){UseBasePoint=true,BasePoint=_first,Cursor=CursorType.Crosshair};var r=prompts.AcquirePoint(o);if(r.Status!=PromptStatus.OK)return SamplerStatus.Cancel;if(r.Value.DistanceTo(_current)<1e-8)return SamplerStatus.NoChange;_current=r.Value;return SamplerStatus.OK;}
         protected override bool WorldDraw(WorldDraw draw)
         {
-            RegionPreviewDrawing.DrawHistory(draw,_doc,_ucsToWcs,_wcsToUcs,_source,_historyFirsts,_historySeconds);
-            var first=_first.TransformBy(_wcsToUcs);var current=_current.TransformBy(_wcsToUcs);var w=Math.Abs(current.X-first.X);var h=Math.Abs(current.Y-first.Y);if(w<1e-8||h<1e-8)return true;
-            var settings=AnnotationService.ResolveEffectiveSettings(_doc,_source,new AnnotationData(),Math.Sqrt(w*w+h*h));
-            using(var cloud=AnnotationService.BuildCloud(ToMin(first,current),ToMax(first,current),settings)){AnnotationService.ApplyPreviewAppearance(cloud,settings,settings.CloudColor,"cloud");cloud.Elevation=first.Z;cloud.TransformBy(_ucsToWcs);AnnotationService.OrientCloudBulgesForView(_doc,cloud);draw.Geometry.Draw(cloud);}return true;
+            try
+            {
+                RegionPreviewDrawing.DrawAll(draw,_history);
+                var first=_first.TransformBy(_wcsToUcs);var current=_current.TransformBy(_wcsToUcs);var w=Math.Abs(current.X-first.X);var h=Math.Abs(current.Y-first.Y);if(w<1e-8||h<1e-8)return true;
+                var settings=AnnotationService.ResolveEffectiveSettings(_doc,_source,new AnnotationData(),Math.Sqrt(w*w+h*h));
+                using(var cloud=AnnotationService.BuildCloud(ToMin(first,current),ToMax(first,current),settings)){AnnotationService.ApplyPreviewAppearance(cloud,settings,settings.CloudColor,"cloud");cloud.Elevation=first.Z;cloud.TransformBy(_ucsToWcs);AnnotationService.OrientCloudBulgesForView(cloud,_viewDirection);draw.Geometry.Draw(cloud);}
+            }
+            catch(System.Exception ex){RegionPreviewDrawing.LogFailure("Region",ex);}
+            return true;
         }
+        public void Dispose()=>RegionPreviewDrawing.DisposeAll(_history);
         internal static Point2d ToMin(Point3d a,Point3d b)=>new Point2d(Math.Min(a.X,b.X),Math.Min(a.Y,b.Y));internal static Point2d ToMax(Point3d a,Point3d b)=>new Point2d(Math.Max(a.X,b.X),Math.Max(a.Y,b.Y));
     }
 
     internal enum PlacementGeometryKind { Region, Polygon, MultiRegion }
 
-    /// <summary>完整批注放置预览：实际云线、文字、边框和全部引线。</summary>
-    internal sealed class PlacementPreviewJig : DrawJig
+    /// <summary>完整批注放置预览：实际云线、文字边框和全部引线。
+    /// 云线与文字框尺寸跟光标位置无关，构造时一次算好；WorldDraw 每帧只重算文字框位置与引线。</summary>
+    internal sealed class PlacementPreviewJig : DrawJig, IDisposable
     {
-        private readonly Document _doc;private readonly Matrix3d _ucsToWcs,_wcsToUcs;private readonly AnnotationSettings _settings,_source;private readonly PlacementGeometryKind _kind;private readonly List<Point3d> _firsts,_seconds,_polygon;private Point3d _current;
+        private readonly Matrix3d _ucsToWcs,_wcsToUcs;private readonly AnnotationSettings _settings;private readonly PlacementGeometryKind _kind;private Point3d _current;
+        /// <summary>UCS 中的云线（只用于求引线锚点，不绘制）。</summary>
+        private readonly List<CadPolyline> _localClouds=new List<CadPolyline>();
+        /// <summary>显示用云线（WCS，已定向、已设预览外观）。</summary>
+        private readonly List<CadPolyline> _displayClouds=new List<CadPolyline>();
+        private readonly List<AnnotationSettings> _cloudSettings=new List<AnnotationSettings>();
+        private readonly List<Point2d> _mins=new List<Point2d>(),_maxs=new List<Point2d>();
+        private readonly double _boxW,_boxH;
         public Point3d Current=>_current;
         public PlacementPreviewJig(
             Document doc,
@@ -173,93 +218,105 @@ namespace GMAnnotation
             Point3d initial,
             PlacementGeometryKind kind)
         {
-            _doc = doc;
             _settings = settings;
-            _source = source ?? settings;
-            _firsts = firsts?.ToList() ?? new List<Point3d>();
-            _seconds = seconds?.ToList() ?? new List<Point3d>();
-            _polygon = polygon?.ToList() ?? new List<Point3d>();
+            source = source ?? settings;
             _current = initial;
             _kind = kind;
             _ucsToWcs = AnnotationService.GetUcsMatrix(doc);
             _wcsToUcs = _ucsToWcs.Inverse();
+            var viewDirection = AnnotationService.CurrentViewDirection(doc);
+            try
+            {
+                if (kind == PlacementGeometryKind.Polygon)
+                {
+                    var pts = (polygon ?? new List<Point3d>()).Select(p => p.TransformBy(_wcsToUcs)).ToList();
+                    if (pts.Count >= 3)
+                    {
+                        var cloud = AnnotationService.BuildPolygonCloud(pts.Select(p => new Point2d(p.X, p.Y)).ToList(), settings);
+                        cloud.Elevation = pts[0].Z;
+                        AddCloud(cloud, settings, new Point2d(), new Point2d(), viewDirection);
+                    }
+                }
+                else if (firsts != null && seconds != null)
+                {
+                    for (var i = 0; i < firsts.Count && i < seconds.Count; i++)
+                    {
+                        var a = firsts[i].TransformBy(_wcsToUcs); var b = seconds[i].TransformBy(_wcsToUcs);
+                        var min = RegionPreviewJig.ToMin(a, b); var max = RegionPreviewJig.ToMax(a, b);
+                        var cloudSettings = kind == PlacementGeometryKind.MultiRegion
+                            ? AnnotationService.ResolveEffectiveSettings(doc, source, new AnnotationData(), Math.Sqrt(Math.Pow(max.X - min.X, 2) + Math.Pow(max.Y - min.Y, 2)))
+                            : settings;
+                        var cloud = AnnotationService.BuildCloud(min, max, cloudSettings);
+                        cloud.Elevation = a.Z;
+                        AddCloud(cloud, cloudSettings, min, max, viewDirection);
+                    }
+                }
+            }
+            catch (System.Exception ex) { PluginLog.Warning("Jig.Placement", "预览云线构造失败：" + ex.Message); }
+
+            // 预览外框与正式创建同一套估算，避免放置时框偏小、落图后才「撑开」的观感落差。
+            // MText 实测要开事务，只能在拖拽开始前做一次（见 RegionPreviewDrawing 说明）。
+            var previewData = new AnnotationData
+            {
+                Content = "批注内容",
+                DrawingNo = "图号",
+                Status = "待处理",
+                Date = DateTime.Now.ToString("yyyy-MM-dd"),
+                Discipline = "专业",
+                Author = "批注人"
+            };
+            var requestedWidth = settings.FixedWidth
+                ? settings.FixedWidthValue
+                : Math.Max(settings.TextHeight * 18, 55);
+            AnnotationService.MeasureTextBox(doc, previewData, settings, requestedWidth, out _boxW, out _boxH);
         }
+
+        private void AddCloud(CadPolyline local, AnnotationSettings cloudSettings, Point2d min, Point2d max, Vector3d? viewDirection)
+        {
+            var display = (CadPolyline)local.Clone();
+            AnnotationService.ApplyPreviewAppearance(display, cloudSettings, cloudSettings.CloudColor, "cloud");
+            display.TransformBy(_ucsToWcs);
+            AnnotationService.OrientCloudBulgesForView(display, viewDirection);
+            _localClouds.Add(local); _displayClouds.Add(display); _cloudSettings.Add(cloudSettings); _mins.Add(min); _maxs.Add(max);
+        }
+
         // 放置阶段已由 WorldDraw 绘制云线/框/引出线，勿用 RubberBand，否则会从原点额外拉出一条对角虚线。
         protected override SamplerStatus Sampler(JigPrompts prompts){var o=new JigPromptPointOptions("\n指定批注框位置: "){Cursor=CursorType.Crosshair};var r=prompts.AcquirePoint(o);if(r.Status!=PromptStatus.OK)return SamplerStatus.Cancel;if(r.Value.DistanceTo(_current)<1e-8)return SamplerStatus.NoChange;_current=r.Value;return SamplerStatus.OK;}
         protected override bool WorldDraw(WorldDraw draw)
         {
-            var localText=_current.TransformBy(_wcsToUcs);var clouds=new List<CadPolyline>();var anchors=new List<Point2d>();
             try
             {
-                if(_kind==PlacementGeometryKind.Polygon)
-                {
-                    var pts=_polygon.Select(p=>p.TransformBy(_wcsToUcs)).ToList();var cloud=AnnotationService.BuildPolygonCloud(pts.Select(p=>new Point2d(p.X,p.Y)).ToList(),_settings);cloud.Elevation=pts[0].Z;clouds.Add(cloud);anchors.Add(new Point2d(cloud.GetClosestPointTo(localText,false).X,cloud.GetClosestPointTo(localText,false).Y));
-                }
-                else for(var i=0;i<_firsts.Count;i++)
-                {
-                    var a=_firsts[i].TransformBy(_wcsToUcs);var b=_seconds[i].TransformBy(_wcsToUcs);var min=RegionPreviewJig.ToMin(a,b);var max=RegionPreviewJig.ToMax(a,b);var settings=_kind==PlacementGeometryKind.MultiRegion?AnnotationService.ResolveEffectiveSettings(_doc,_source,new AnnotationData(),Math.Sqrt(Math.Pow(max.X-min.X,2)+Math.Pow(max.Y-min.Y,2))):_settings;var cloud=AnnotationService.BuildCloud(min,max,settings);cloud.Elevation=a.Z;clouds.Add(cloud);anchors.Add(AnnotationService.ResolveRegionLeaderAnchor(cloud,min,max,settings,localText));
-                }
-
-                // 预览外框与正式创建同一套估算，避免放置时框偏小、落图后才「撑开」的观感落差。
-                var previewData = new AnnotationData
-                {
-                    Content = "批注内容",
-                    DrawingNo = "图号",
-                    Status = "待处理",
-                    Date = DateTime.Now.ToString("yyyy-MM-dd"),
-                    Discipline = "专业",
-                    Author = "批注人"
-                };
-                var requestedWidth = _settings.FixedWidth
-                    ? _settings.FixedWidthValue
-                    : Math.Max(_settings.TextHeight * 18, 55);
-                AnnotationService.MeasureTextBox(_doc, previewData, _settings, requestedWidth, out var boxW, out var boxH);
-                using (var box = AnnotationService.BuildBox(localText, boxW, boxH))
+                var localText=_current.TransformBy(_wcsToUcs);
+                using (var box = AnnotationService.BuildBox(localText, _boxW, _boxH))
                 {
                     var boxCorners = new[]
                     {
                         new Point2d(localText.X, localText.Y),
-                        new Point2d(localText.X + boxW, localText.Y),
-                        new Point2d(localText.X + boxW, localText.Y + boxH),
-                        new Point2d(localText.X, localText.Y + boxH)
+                        new Point2d(localText.X + _boxW, localText.Y),
+                        new Point2d(localText.X + _boxW, localText.Y + _boxH),
+                        new Point2d(localText.X, localText.Y + _boxH)
                     };
                     box.Elevation = localText.Z;
 
-                    for (var i = 0; i < clouds.Count; i++)
+                    for (var i = 0; i < _displayClouds.Count; i++)
                     {
-                        var cloudSettings =
-                            _kind == PlacementGeometryKind.MultiRegion
-                                ? AnnotationService.SettingsForRegion(
-                                    _doc,
-                                    _source,
-                                    _firsts[i],
-                                    _seconds[i])
-                                : _settings;
-                        AnnotationService.ApplyPreviewAppearance(
-                            clouds[i],
-                            cloudSettings,
-                            cloudSettings.CloudColor,
-                            "cloud");
-                        clouds[i].TransformBy(_ucsToWcs);
-                        AnnotationService.OrientCloudBulgesForView(_doc,clouds[i]);
-                        draw.Geometry.Draw(clouds[i]);
+                        var cloudSettings = _cloudSettings[i];
+                        draw.Geometry.Draw(_displayClouds[i]);
+
+                        Point2d anchor;
+                        if (_kind == PlacementGeometryKind.Polygon)
+                        {
+                            var closest = _localClouds[i].GetClosestPointTo(localText, false);
+                            anchor = new Point2d(closest.X, closest.Y);
+                        }
+                        else anchor = AnnotationService.ResolveRegionLeaderAnchor(_localClouds[i], _mins[i], _maxs[i], cloudSettings, localText);
 
                         using (var leader = new CadPolyline())
                         {
-                            leader.AddVertexAt(
-                                0, anchors[i], 0, 0, 0);
-                            leader.AddVertexAt(
-                                1,
-                                boxCorners
-                                    .OrderBy(c => c.GetDistanceTo(anchors[i]))
-                                    .First(),
-                                0, 0, 0);
+                            leader.AddVertexAt(0, anchor, 0, 0, 0);
+                            leader.AddVertexAt(1, boxCorners.OrderBy(c => c.GetDistanceTo(anchor)).First(), 0, 0, 0);
                             leader.Elevation = localText.Z;
-                            AnnotationService.ApplyPreviewAppearance(
-                                leader,
-                                cloudSettings,
-                                cloudSettings.LeaderColor,
-                                "leader");
+                            AnnotationService.ApplyPreviewAppearance(leader, cloudSettings, cloudSettings.LeaderColor, "leader");
                             leader.TransformBy(_ucsToWcs);
                             draw.Geometry.Draw(leader);
                         }
@@ -276,8 +333,14 @@ namespace GMAnnotation
                     draw.Geometry.Draw(box);
                 }
             }
-            finally{foreach(var cloud in clouds)cloud.Dispose();}
+            catch (System.Exception ex) { RegionPreviewDrawing.LogFailure("Placement", ex); }
             return true;
+        }
+
+        public void Dispose()
+        {
+            RegionPreviewDrawing.DisposeAll(_localClouds);
+            RegionPreviewDrawing.DisposeAll(_displayClouds);
         }
     }
 
@@ -288,6 +351,7 @@ namespace GMAnnotation
         private readonly Matrix3d _wcsToUcs;
         private readonly IList<Point3d> _points;
         private readonly AnnotationSettings _source;
+        private readonly Vector3d? _viewDirection;
         private Point3d _current;
         private bool _hasSample;
 
@@ -304,6 +368,7 @@ namespace GMAnnotation
             _source = source;
             _ucsToWcs = AnnotationService.GetUcsMatrix(doc);
             _wcsToUcs = _ucsToWcs.Inverse();
+            _viewDirection = AnnotationService.CurrentViewDirection(doc);
             _current = points.Count > 0
                 ? points[points.Count - 1]
                 : Point3d.Origin;
@@ -361,9 +426,16 @@ namespace GMAnnotation
 
         protected override bool WorldDraw(WorldDraw draw)
         {
+            try { DrawPreview(draw); }
+            catch (System.Exception ex) { RegionPreviewDrawing.LogFailure("PlinePoint", ex); }
+            return true;
+        }
+
+        private void DrawPreview(WorldDraw draw)
+        {
             if (_points.Count == 0)
             {
-                return true;
+                return;
             }
 
             var local = _points
@@ -380,11 +452,12 @@ namespace GMAnnotation
             var diagonal = Math.Sqrt(
                 Math.Pow(maxX - minX, 2) +
                 Math.Pow(maxY - minY, 2));
+            // 对角线为 0（只有一个点）时不能传 0：ResolveEffectiveSettings 会退回去取当前视图，拖拽中不要做这种事。
             var settings = AnnotationService.ResolveEffectiveSettings(
                 _doc,
                 _source,
                 null,
-                diagonal);
+                diagonal > 1e-9 ? diagonal : 1e-6);
 
             if (polygon.Count >= 3 &&
                 AnnotationService.ValidateCloudPolygon(polygon, out var ignored))
@@ -400,7 +473,7 @@ namespace GMAnnotation
                         settings.CloudColor,
                         "cloud");
                     cloud.TransformBy(_ucsToWcs);
-                    AnnotationService.OrientCloudBulgesForView(_doc,cloud);
+                    AnnotationService.OrientCloudBulgesForView(cloud, _viewDirection);
                     draw.Geometry.Draw(cloud);
                 }
             }
@@ -423,8 +496,6 @@ namespace GMAnnotation
                     draw.Geometry.Draw(line);
                 }
             }
-
-            return true;
         }
     }
 

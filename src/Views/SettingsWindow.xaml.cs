@@ -10,6 +10,8 @@ namespace GMAnnotation.Views
     internal partial class SettingsWindow : Window
     {
         private AnnotationSettings _s;
+        /// <summary>打开窗口时活动文档是否处于布局图纸空间（只用于提示"本次生效比例"，不影响保存值）。</summary>
+        private readonly bool _paperSpaceNow;
         /// <summary>程序性赋值比例（初始化）期间为 true，避免触发"选比例自动关自适应"。</summary>
         private bool _scaleChanging;
         /// <summary>本窗口内对"比例 + 自适应"询问的回答（只问一次；校验失败重试时不重复弹）。</summary>
@@ -42,6 +44,9 @@ namespace GMAnnotation.Views
             }
             TextStyleCombo.ItemsSource = styles;
             LoadValues();
+            try { _paperSpaceNow = AnnotationService.IsPaperSpaceActiveNow(); } catch { _paperSpaceNow = false; }
+            if (_s.LoadedFromFallback && !SettingsStore.IsCorrupt)
+                Title += "（settings.xml 暂时读不到，当前显示默认值；点「保存设置」才会覆盖原文件）";
             if (SettingsStore.IsCorrupt)
                 Title += "（settings.xml 损坏，当前显示默认值；点「保存设置」才会覆盖原文件" +
                          (string.IsNullOrEmpty(SettingsStore.CorruptBackupPath) ? "" : "，原文件已备份") + "）";
@@ -311,7 +316,9 @@ namespace GMAnnotation.Views
                     hint += " 当前勾选了字体自适应：字高按云线尺寸计算、比例不参与字高换算。";
                 if (On(CloudAutoFitCheck))
                     hint += " 当前勾选了云线自适应：云线半径/线宽按云线尺寸计算。";
-                hint += "（在布局的图纸空间中、未进入视口时一律按 1:1。）";
+                hint += " 布局图纸空间（未进入视口）自动按 1:1，模型空间（含在布局里进入视口）用此比例；切换空间不会改动这里保存的比例。";
+                if (!On(FontAutoFitCheck) || !On(CloudAutoFitCheck))
+                    hint += _paperSpaceNow ? " 当前处于布局图纸空间：本次生效 1:1。" : " 当前处于模型空间：本次生效 1:" + denominator + "。";
                 ScaleHintText.Text = hint;
             }
             catch (Exception ex)
@@ -338,7 +345,7 @@ namespace GMAnnotation.Views
             if (TextSizeHintText != null)
                 TextSizeHintText.Text = fontAuto
                     ? "已启用字体自适应：正文字高 = 云线对角线 × 百分比（比例不参与）；这里的三个字高只作为相对比例——首行/次行相对正文放大缩小，云线标记尺寸也按「标记字高 ÷ 正文字高」跟随。"
-                    : "未启用字体自适应：字高按「打印字高(mm) × 比例分母」换算为图面尺寸（如 3mm、1:100 → 图上 300；布局图纸空间中按 1:1）。";
+                    : "未启用字体自适应：字高按「打印字高(mm) × 比例分母」换算为图面尺寸（如 3mm、1:100 → 图上 300）；布局图纸空间自动 1:1，模型空间用此比例。";
             var same = On(SameColorsCheck);
             ColorIndexCombo.IsEnabled = same;
             foreach (var x in new[] { CloudColorCombo, LeaderColorCombo, TextColorCombo, BoxColorCombo, ReplyColorCombo, PassColorCombo, CheckColorCombo })

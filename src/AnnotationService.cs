@@ -71,10 +71,32 @@ namespace GMAnnotation
             s.CheckHeight=Math.Max(source.CheckHeight*factor,text*2);if(captureRenderSettings&&data!=null){data.RenderTextHeight=s.TextHeight;data.RenderHeaderHeight=s.HeaderHeight;data.RenderSecondLineHeight=s.SecondLineHeight;data.RenderCloudRadius=s.CloudRadius;data.RenderLineWidth=s.LineWidth;}return s;
         }
 
+        /// <summary>命令行用的"本次生效比例"说明（只读显示，不改任何保存值）：
+        /// 布局图纸空间（未进入视口）按 1:1，模型空间（含布局里进入视口）按设置比例；两个自适应都开时比例不参与。</summary>
+        internal static string ScaleNote(Document doc, AnnotationSettings source)
+        {
+            if (source == null) return "";
+            if (source.FontAutoFit && source.CloudAutoFit) return "  比例: 自适应（不按比例换算）";
+            var n = source.ScaleRatio > 0 ? source.ScaleRatio : 1.0;
+            var text = IsPaperSpaceActive(doc)
+                ? "  比例: 1:1（布局图纸空间自动 1:1；设置比例 1:" + n.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " 不变）"
+                : "  比例: 1:" + n.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "（模型空间）";
+            if (source.FontAutoFit) text += "，字高自适应";
+            else if (source.CloudAutoFit) text += "，云线自适应";
+            return text;
+        }
+
         /// <summary>当前是否处于图纸空间（布局标签且未激活视口，TILEMODE=0 且 CVPORT=1）。</summary>
         internal static bool IsPaperSpaceActive(Document doc)
         {
             try{return doc!=null&&!doc.Database.TileMode&&CadSpaces.CvPort==1;}
+            catch{return false;}
+        }
+
+        /// <summary>当前活动文档是否处于布局图纸空间（供设置窗口显示"当前生效比例"，只读）。</summary>
+        internal static bool IsPaperSpaceActiveNow()
+        {
+            try{return IsPaperSpaceActive(ActiveDocument());}
             catch{return false;}
         }
 
@@ -109,9 +131,9 @@ namespace GMAnnotation
             using(SuppressDrawingAids(s)){
                 var first = ed.GetPoint("\n指定批注范围第一个角点: "); if (first.Status != PromptStatus.OK) return false;
                 var firstWcs=first.Value.TransformBy(GetUcsMatrix(doc));
-                var region=new RegionPreviewJig(doc,firstWcs,s);var regionResult=ed.Drag(region);if(regionResult.Status!=PromptStatus.OK)return false;
-                var (_,regionWidth,regionHeight)=UcsAlignedExtents(doc,firstWcs,region.Current);if(regionWidth<=1e-6||regionHeight<=1e-6){ed.WriteMessage("\n批注范围必须同时具有宽度和高度，请重新指定。");return false;}
-                firstPoint=firstWcs;secondPoint=region.Current;return true;
+                PromptResult regionResult;Point3d regionCurrent;using(var region=new RegionPreviewJig(doc,firstWcs,s)){regionResult=ed.Drag(region);regionCurrent=region.Current;}if(regionResult.Status!=PromptStatus.OK)return false;
+                var (_,regionWidth,regionHeight)=UcsAlignedExtents(doc,firstWcs,regionCurrent);if(regionWidth<=1e-6||regionHeight<=1e-6){ed.WriteMessage("\n批注范围必须同时具有宽度和高度，请重新指定。");return false;}
+                firstPoint=firstWcs;secondPoint=regionCurrent;return true;
             }
         }
 
@@ -138,14 +160,19 @@ namespace GMAnnotation
                     Point3d firstWcs;
                     if (allowFinish)
                     {
-                        var firstJig = new RegionFirstPointPreviewJig(
+                        PromptResult firstResult; bool finishRequested;
+                        using (var firstJig = new RegionFirstPointPreviewJig(
                             doc,
                             s,
                             historyFirsts,
-                            historySeconds);
-                        var firstResult = ed.Drag(firstJig);
+                            historySeconds))
+                        {
+                            firstResult = ed.Drag(firstJig);
+                            finishRequested = firstJig.FinishRequested;
+                            firstWcs = firstJig.Current;
+                        }
 
-                        if (firstJig.FinishRequested)
+                        if (finishRequested)
                         {
                             return CloudPromptResult.Finished;
                         }
@@ -154,8 +181,6 @@ namespace GMAnnotation
                         {
                             return CloudPromptResult.Cancelled;
                         }
-
-                        firstWcs = firstJig.Current;
                     }
                     else
                     {
@@ -182,24 +207,28 @@ namespace GMAnnotation
                         firstWcs = first.Value.TransformBy(GetUcsMatrix(doc));
                     }
 
-                    var region = new RegionPreviewJig(
+                    PromptResult regionResult; Point3d regionCurrent;
+                    using (var region = new RegionPreviewJig(
                         doc,
                         firstWcs,
                         s,
                         historyFirsts,
-                        historySeconds);
-                    var regionResult = ed.Drag(region);
+                        historySeconds))
+                    {
+                        regionResult = ed.Drag(region);
+                        regionCurrent = region.Current;
+                    }
                     if (regionResult.Status != PromptStatus.OK)
                     {
                         return CloudPromptResult.Cancelled;
                     }
-                    var (_,width,height)=UcsAlignedExtents(doc,firstWcs,region.Current);
+                    var (_,width,height)=UcsAlignedExtents(doc,firstWcs,regionCurrent);
                     if(width<=1e-6||height<=1e-6)
                     {
                         ed.WriteMessage("\n云线范围必须同时具有宽度和高度，请重新指定。");
                         continue;
                     }
-                    firstPoint=firstWcs;secondPoint=region.Current;return CloudPromptResult.Completed;
+                    firstPoint=firstWcs;secondPoint=regionCurrent;return CloudPromptResult.Completed;
                 }
             }
         }
@@ -2948,7 +2977,15 @@ namespace GMAnnotation
 
         internal static AnnotationSettings SettingsForRegion(Document doc,AnnotationSettings source,Point3d first,Point3d second){var (_,w,h)=UcsAlignedExtents(doc,first,second);return ResolveEffectiveSettings(doc,source,new AnnotationData(),Math.Sqrt(w*w+h*h));}
         // 渐变云线的线宽走逐段顶点宽度，预览时不能再写全局宽度（会抹平渐变；逐段宽度不一致时写全局宽度还可能抛 eInvalidInput）。
-        internal static void ApplyPreviewAppearance(Entity entity,AnnotationSettings settings,short color,string role){entity.Color=Color.FromColorIndex(ColorMethod.ByAci,color);if(entity is Polyline poly&&settings.LineWidth>0&&(role=="cloud"||role=="leader")&&!(role=="cloud"&&settings.CloudStyle=="渐变"))SafeSetConstantWidth(poly,settings.LineWidth);}
+        // 预览实体不在数据库里（没有图层），AutoCAD 下透明度"随层"无层可随：显式设为不透明，避免预览发虚。中望保持原样。
+        internal static void ApplyPreviewAppearance(Entity entity,AnnotationSettings settings,short color,string role)
+        {
+            entity.Color=Color.FromColorIndex(ColorMethod.ByAci,color);
+#if !ZWCAD
+            try{entity.Transparency=new Transparency((byte)255);}catch{ /* 个别版本不支持时保持默认 */ }
+#endif
+            if(entity is Polyline poly&&settings.LineWidth>0&&(role=="cloud"||role=="leader")&&!(role=="cloud"&&settings.CloudStyle=="渐变"))SafeSetConstantWidth(poly,settings.LineWidth);
+        }
         internal enum InteractionStatus { Accepted, Cancelled, Failed }
         internal readonly struct InteractionResult
         {
@@ -3003,7 +3040,7 @@ namespace GMAnnotation
             Point3d initial,
             PlacementGeometryKind kind)
         {
-            var jig = new PlacementPreviewJig(
+            using (var jig = new PlacementPreviewJig(
                 doc,
                 settings,
                 source,
@@ -3011,13 +3048,15 @@ namespace GMAnnotation
                 seconds,
                 polygon,
                 initial,
-                kind);
-            PromptResult result;
-            using (SuppressDrawingAids(source ?? settings)) result = doc.Editor.Drag(jig);
-            return InteractionResult.From(
-                result,
-                "批注框定位",
-                jig.Current);
+                kind))
+            {
+                PromptResult result;
+                using (SuppressDrawingAids(source ?? settings)) result = doc.Editor.Drag(jig);
+                return InteractionResult.From(
+                    result,
+                    "批注框定位",
+                    jig.Current);
+            }
         }
         internal static InteractionResult PromptPlinePoint(
             Document doc,
@@ -3449,19 +3488,27 @@ namespace GMAnnotation
             for(var i=0;i<n;i++)cloud.SetBulgeAt(i,sign*0.55);
         }
         /// <summary>镜像 UCS 或背面视图下，逆时针环在屏幕呈顺时针，弧瓣会鼓向内侧。按当前视图翻转全部 bulge，使弧瓣始终在屏幕中外侧鼓出。</summary>
-        internal static void OrientCloudBulgesForView(Document doc,Polyline cloud)
+        internal static void OrientCloudBulgesForView(Document doc,Polyline cloud)=>OrientCloudBulgesForView(cloud,CurrentViewDirection(doc));
+
+        /// <summary>同上，视图方向由调用方预先取好（拖拽预览在 Jig 构造时取一次，WorldDraw 里不再调用 GetCurrentView）。</summary>
+        internal static void OrientCloudBulgesForView(Polyline cloud,Vector3d? viewDirection)
         {
+            if(cloud==null||!viewDirection.HasValue)return;
             try
             {
-                using(var view=doc.Editor.GetCurrentView())
-                {
-                    // 法向指向相机时看到正面（无需翻转）；指向背离相机时看到背面（翻转全部 bulge）。
-                    if(cloud.Normal.DotProduct(view.ViewDirection)<0)
-                        for(var i=0;i<cloud.NumberOfVertices;i++)
-                            cloud.SetBulgeAt(i,-cloud.GetBulgeAt(i));
-                }
+                // 法向指向相机时看到正面（无需翻转）；指向背离相机时看到背面（翻转全部 bulge）。
+                if(cloud.Normal.DotProduct(viewDirection.Value)<0)
+                    for(var i=0;i<cloud.NumberOfVertices;i++)
+                        cloud.SetBulgeAt(i,-cloud.GetBulgeAt(i));
             }
-            catch{ /* 视图不可用时保持原方向 */ }
+            catch{ /* 保持原方向 */ }
+        }
+
+        /// <summary>当前视图方向；取不到时返回 null（不翻转）。</summary>
+        internal static Vector3d? CurrentViewDirection(Document doc)
+        {
+            try{using(var view=doc.Editor.GetCurrentView())return view.ViewDirection;}
+            catch{return null;}
         }
         internal static string EffectiveLayer(AnnotationSettings s,AnnotationData data=null)
         {

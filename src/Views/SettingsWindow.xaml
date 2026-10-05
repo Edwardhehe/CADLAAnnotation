@@ -72,10 +72,10 @@
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="比例选型" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="比例选型（模型空间）" Style="{StaticResource FieldLabel}"/>
                                     <ComboBox x:Name="ScaleRatioCombo" Width="240" HorizontalAlignment="Left" Grid.Row="0" Grid.Column="1" IsEditable="True"
                                               SelectionChanged="ScaleRatio_Changed"
-                                              ToolTip="出图比例 1:N。选中后字高 = 打印字高(mm) × N、云线半径 = 打印云线半径(mm) × N，并自动取消两个自适应勾选"/>
+                                              ToolTip="模型空间出图比例 1:N：字高 = 打印字高(mm) × N、云线半径 = 打印云线半径(mm) × N；从下拉选择会自动取消两个自适应勾选。布局图纸空间自动 1:1，模型空间用此比例（切换空间不会改动保存的比例）"/>
                                     <TextBlock Grid.Row="1" Grid.Column="0" Text="字高占云线 %" Style="{StaticResource FieldLabel}"/>
                                     <TextBox x:Name="AutoTextViewPercentText" Width="130" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="1"/>
                                 </Grid>
@@ -307,7 +307,8 @@
                                     • 设置保存在本机（%AppData%\GMAnnotation\settings.xml）<LineBreak/>
                                     • 批注数据编码后存储在 DWG 图形内，随图纸传递<LineBreak/>
                                     • 启用字体自适应后，字高按云线对角线尺寸 × 百分比自动计算<LineBreak/>
-                                    • 未启用自适应时：字高 = 打印字高(mm) × N，云线半径 = 打印云线半径(mm) × N（布局图纸空间中按 1:1）<LineBreak/>
+                                    • 未启用自适应时：字高 = 打印字高(mm) × N，云线半径 = 打印云线半径(mm) × N<LineBreak/>
+                                    • 布局图纸空间（未进入视口）自动 1:1，模型空间（含在布局里进入视口）用此比例；切换空间不改动保存的比例<LineBreak/>
                                     • 从下拉选比例（1:N）会自动取消两个自适应；手填比例时在保存时询问<LineBreak/>
                                     • 创建批注/云线时，命令行会显示本次实际采用的字高和云线半径<LineBreak/>
                                     • 设置文件损坏时会先备份为 settings.xml.bad-时间戳，按默认值运行，点「保存设置」才重建

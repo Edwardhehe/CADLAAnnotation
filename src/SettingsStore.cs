@@ -25,21 +25,50 @@ namespace GMAnnotation
             var s = new AnnotationSettings();
             try
             {
-                if (!File.Exists(PathName)) { IsCorrupt = false; return s; }
-                XElement x;
-                try { x = XElement.Load(PathName); }
-                catch (Exception ex)
+                if (!File.Exists(PathName))
                 {
-                    // 文件损坏：先备份，再用默认值运行；原文件保持不动，直到用户在设置窗口点「保存设置」。
-                    IsCorrupt = true;
-                    if (BackupCorruptFile()) PluginLog.Error("Settings.Load.Corrupt", ex); // 同一损坏版本只记一次，避免高频读取刷屏
-                    return s;
+                    // 另一处正在原子替换 settings.xml 时可能一瞬间看不到文件：稍等再看一次；仍不见但留有 .tmp 时按"暂时读不到"处理。
+                    System.Threading.Thread.Sleep(60);
+                    if (!File.Exists(PathName))
+                    {
+                        IsCorrupt = false;
+                        if (File.Exists(PathName + ".tmp")) MarkFallback(s, "settings.xml 正在被替换");
+                        return s; // 首次使用（真的没有文件）：默认值可以正常保存
+                    }
+                }
+                XElement x = null;
+                for (var attempt = 0; x == null; attempt++)
+                {
+                    try { x = XElement.Load(PathName); }
+                    catch (System.Xml.XmlException ex)
+                    {
+                        // 文件损坏：先备份，再用默认值运行；原文件保持不动，直到用户在设置窗口点「保存设置」。
+                        IsCorrupt = true;
+                        if (BackupCorruptFile()) PluginLog.Error("Settings.Load.Corrupt", ex); // 同一损坏版本只记一次，避免高频读取刷屏
+                        return s;
+                    }
+                    catch (Exception ex)
+                    {
+                        // 被占用 / 无权限 / 替换中找不到：属于暂时读不到，不是损坏。重试几次，仍失败就用默认值运行，
+                        // 但给对象打上标记禁止自动保存——否则编号同步、面板写回等会把默认值（比例 1:1 等）写进 settings.xml。
+                        if (attempt < 4) { System.Threading.Thread.Sleep(60); continue; }
+                        IsCorrupt = false;
+                        MarkFallback(s, ex.Message);
+                        return s;
+                    }
                 }
                 IsCorrupt = false;
                 Read(x, s);
             }
-            catch (Exception ex) { PluginLog.Error("Settings.Load",ex); }
+            catch (Exception ex) { PluginLog.Error("Settings.Load",ex); MarkFallback(s, ex.Message); }
             return s;
+        }
+
+        /// <summary>读不到设置时使用的默认值对象：打标记，<see cref="Save"/> 会拒绝自动写回。</summary>
+        private static void MarkFallback(AnnotationSettings s, string reason)
+        {
+            s.LoadedFromFallback = true;
+            PluginLog.Warning("Settings.Load", "settings.xml 暂时读不到，本次按默认值运行且不会自动保存：" + reason);
         }
 
         /// <summary>从 XML 根节点读取全部设置项（缺项用默认值），读完做范围校验。</summary>
@@ -156,6 +185,12 @@ namespace GMAnnotation
         /// 只有 <paramref name="userConfirmed"/>=true（用户在设置窗口点「保存设置」）才会在备份后重建文件。</summary>
         public static bool Save(AnnotationSettings s, bool userConfirmed = false)
         {
+            if (s != null && s.LoadedFromFallback && !userConfirmed)
+            {
+                // 这份设置是"读不到文件时的默认值"，自动保存会把用户的比例、字高等冲掉：跳过。
+                PluginLog.Warning("Settings.Save", "当前设置来自读取失败时的默认值，自动保存已跳过，settings.xml 保持不变。");
+                return false;
+            }
             using (DataFiles.Lock(false))
             {
                 if (FileIsCorrupt())
@@ -178,6 +213,7 @@ namespace GMAnnotation
                 }
                 WriteIfChanged(root);
                 IsCorrupt = false;
+                s.LoadedFromFallback = false; // 用户已确认保存：此后就是正式设置
                 return true;
             }
         }
