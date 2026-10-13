@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 #if ZWCAD
 using ZwSoft.ZwCAD.ApplicationServices;
 using ZwSoft.ZwCAD.DatabaseServices;
@@ -20,6 +21,9 @@ namespace GMAnnotation
     {
         /// <summary>模型空间对应的布局名（布局字典中的内部名，与界面语言无关）。</summary>
         internal const string ModelLayoutName = "Model";
+
+        /// <summary>切换后等待 sysvar 生效的最大尝试次数。</summary>
+        private const int SwitchAttempts = 10;
 
         /// <summary>切换前的现场：当前布局、TILEMODE、CVPORT。</summary>
         internal sealed class SpaceState
@@ -50,29 +54,108 @@ namespace GMAnnotation
 
         /// <summary>
         /// 激活目标空间：模型空间 → 切到模型标签；图纸空间 → 切到所属布局并确保图纸空间激活（CVPORT=1）。
-        /// 需要在命令上下文或已锁定文档的情况下调用。返回切换后是否确实处于目标空间。
+        /// 布局切换与退出视口在部分宿主上异步，因此会短重试并刷新屏幕，直到 sysvar 真正生效。
         /// </summary>
+        /// <param name="doc">当前文档。</param>
+        /// <param name="isModel">是否目标为模型空间。</param>
+        /// <param name="layoutName">图纸空间时的布局名；模型空间可忽略。</param>
+        /// <returns>切换后是否确实处于目标空间。</returns>
         internal static bool Activate(Document doc, bool isModel, string layoutName)
         {
             if (doc == null || (!isModel && string.IsNullOrEmpty(layoutName))) return false;
             if (IsActive(isModel, layoutName)) return true;
-            var manager = LayoutManager.Current;
-            if (isModel)
+
+            for (var attempt = 0; attempt < SwitchAttempts; attempt++)
             {
-                if (TileMode != 1) manager.CurrentLayout = ModelLayoutName;
-                return TileMode == 1;
+                try
+                {
+                    ApplyActivate(doc, isModel, layoutName);
+                }
+                catch (System.Exception ex)
+                {
+                    PluginLog.Warning("CadSpaces.Activate", $"第 {attempt + 1} 次切换异常：" + ex.Message);
+                }
+
+                TryUpdateScreen(doc);
+                if (IsActive(isModel, layoutName)) return true;
+                Thread.Sleep(40 + attempt * 25);
             }
-            if (!SameName(manager.CurrentLayout, layoutName)) manager.CurrentLayout = layoutName;
-            if (CvPort != 1) doc.Editor.SwitchToPaperSpace();
-            return IsActive(false, layoutName);
+
+            PluginLog.Warning(
+                "CadSpaces.Activate",
+                $"未能激活「{DisplayName(isModel, layoutName)}」，最终状态：{Capture()}");
+            return false;
         }
 
         /// <summary>恢复切换前的现场：先回到原布局，再恢复图纸空间/视口激活状态（CVPORT）。视图由调用方随后恢复。</summary>
         internal static bool Restore(Document doc, SpaceState state)
         {
             if (doc == null || state == null || string.IsNullOrEmpty(state.Layout)) return false;
+
+            for (var attempt = 0; attempt < SwitchAttempts; attempt++)
+            {
+                try
+                {
+                    ApplyRestore(doc, state);
+                }
+                catch (System.Exception ex)
+                {
+                    PluginLog.Warning("CadSpaces.Restore", $"第 {attempt + 1} 次恢复异常：" + ex.Message);
+                }
+
+                TryUpdateScreen(doc);
+                if (IsState(state)) return true;
+                Thread.Sleep(40 + attempt * 25);
+            }
+
+            PluginLog.Warning("CadSpaces.Restore", $"未能完全恢复现场（期望 {state}，当前 {Capture()}）");
+            return IsState(state);
+        }
+
+        /// <summary>当前现场是否与保存的现场一致（用于判断能否安全恢复原视图）。</summary>
+        internal static bool IsState(SpaceState state)
+        {
+            if (state == null) return false;
+            return SameName(LayoutManager.Current.CurrentLayout, state.Layout) && TileMode == state.TileMode && CvPort == state.CvPort;
+        }
+
+        /// <summary>执行一次激活尝试（不负责等待生效）。</summary>
+        private static void ApplyActivate(Document doc, bool isModel, string layoutName)
+        {
             var manager = LayoutManager.Current;
-            if (!SameName(manager.CurrentLayout, state.Layout)) manager.CurrentLayout = state.Layout;
+            // 先退出浮动视口：在视口内切布局/模型时，部分宿主 CVPORT/TILEMODE 不会立即就绪。
+            EnsurePaperSpaceIfInViewport(doc);
+
+            if (isModel)
+            {
+                if (TileMode != 1 || !SameName(manager.CurrentLayout, ModelLayoutName))
+                {
+                    manager.CurrentLayout = ModelLayoutName;
+                }
+
+                return;
+            }
+
+            if (!SameName(manager.CurrentLayout, layoutName))
+            {
+                manager.CurrentLayout = layoutName;
+            }
+
+            if (CvPort != 1)
+            {
+                doc.Editor.SwitchToPaperSpace();
+            }
+        }
+
+        /// <summary>执行一次现场恢复尝试。</summary>
+        private static void ApplyRestore(Document doc, SpaceState state)
+        {
+            var manager = LayoutManager.Current;
+            if (!SameName(manager.CurrentLayout, state.Layout))
+            {
+                manager.CurrentLayout = state.Layout;
+            }
+
             if (state.TileMode == 0)
             {
                 if (state.CvPort == 1)
@@ -89,14 +172,26 @@ namespace GMAnnotation
             {
                 TrySetCvPort(state.CvPort); // 模型标签下多个平铺视口时回到原激活视口
             }
-            return IsState(state);
         }
 
-        /// <summary>当前现场是否与保存的现场一致（用于判断能否安全恢复原视图）。</summary>
-        internal static bool IsState(SpaceState state)
+        /// <summary>若当前在布局浮动视口内（TILEMODE=0 且 CVPORT&gt;1），先退回图纸空间。</summary>
+        private static void EnsurePaperSpaceIfInViewport(Document doc)
         {
-            if (state == null) return false;
-            return SameName(LayoutManager.Current.CurrentLayout, state.Layout) && TileMode == state.TileMode && CvPort == state.CvPort;
+            if (TileMode != 0 || CvPort <= 1) return;
+            try
+            {
+                doc.Editor.SwitchToPaperSpace();
+            }
+            catch (System.Exception ex)
+            {
+                PluginLog.Warning("CadSpaces.Viewport", "退出布局视口失败：" + ex.Message);
+            }
+        }
+
+        private static void TryUpdateScreen(Document doc)
+        {
+            try { doc?.Editor.UpdateScreen(); }
+            catch { /* 刷新失败不影响后续重试 */ }
         }
 
         private static void TrySetCvPort(int value)

@@ -1791,8 +1791,10 @@ namespace GMAnnotation
                 var elsewhere=spaces.Where(pair=>pair.Value>0).Select(pair=>"「"+pair.Key+"」"+pair.Value+" 条").ToList();
                 if(currentCount==0)
                 {
+                    var inViewport=CadSpaces.TileMode==0&&CadSpaces.CvPort>1;
                     ed.WriteMessage("\n当前空间「"+currentName+"」中没有 GM批注，框选只能选到当前空间内的对象。"+
-                        (elsewhere.Count>0?"批注位于："+string.Join("、",elsewhere)+"。请切换到对应的模型/布局后再框选（布局中查看模型空间批注时，可先双击进入视口），或改用 全部(A)。":""));
+                        (inViewport?"（当前在布局视口内，只能框选模型空间批注；若要框选图纸空间批注请先双击空白处退出视口。）":"")+
+                        (elsewhere.Count>0?"批注位于："+string.Join("、",elsewhere)+"。请切换到对应的模型/布局后再框选，或改用 全部(A)。":""));
                     return;
                 }
                 if(elsewhere.Count>0)

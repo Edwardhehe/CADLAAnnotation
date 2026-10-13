@@ -127,14 +127,30 @@ namespace GMAnnotation
                     bool activated;
                     try { activated = CadSpaces.Activate(doc, cloud.IsModel, cloud.LayoutName); }
                     catch (System.Exception ex) { PluginLog.Error("WordExport.SwitchSpace", ex); activated = false; }
+                    // 布局导出常见坑：仍停在浮动视口（CVPORT>1）时去缩放图纸坐标 → 画面空白。再强制一次图纸空间。
+                    if (activated && !cloud.IsModel && CadSpaces.CvPort != 1)
+                    {
+                        try
+                        {
+                            ed.SwitchToPaperSpace();
+                            ed.UpdateScreen();
+                            activated = CadSpaces.IsActive(false, cloud.LayoutName);
+                        }
+                        catch (System.Exception ex)
+                        {
+                            PluginLog.Warning("WordExport", "强制退出视口失败：" + ex.Message);
+                            activated = false;
+                        }
+                    }
                     if (!activated)
                     {
-                        foreach (var job in group) { captures[job.EntryIndex][job.CloudIndex] = WordCapture.Failed("无法切换到「" + spaceName + "」"); failed++; done++; }
-                        PluginLog.Warning("WordExport", $"无法切换到「{spaceName}」，该空间 {group.Count()} 处云线已写入截图失败占位。");
+                        foreach (var job in group) { captures[job.EntryIndex][job.CloudIndex] = WordCapture.Failed("无法切换到「" + spaceName + "」（当前 " + CadSpaces.Capture() + "）"); failed++; done++; }
+                        PluginLog.Warning("WordExport", $"无法切换到「{spaceName}」，该空间 {group.Count()} 处云线已写入截图失败占位。现场：{CadSpaces.Capture()}");
                         continue;
                     }
 
                     // 记住该空间自己的视图，组内截图完成后还原，不把别的空间留在缩放后的状态。
+                    ed.UpdateScreen();
                     ViewTableRecord spaceView = null;
                     try { using (var view = ed.GetCurrentView()) spaceView = (ViewTableRecord)view.Clone(); }
                     catch (System.Exception ex) { PluginLog.Warning("WordExport", "读取「" + spaceName + "」当前视图失败：" + ex.Message); }
