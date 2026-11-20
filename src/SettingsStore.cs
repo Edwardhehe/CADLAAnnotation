@@ -133,7 +133,7 @@ namespace GMAnnotation
             if (s.SeparateColors == null) s.SeparateColors = "";
         }
 
-        /// <summary>导出设置到指定文件（与 settings.xml 同格式，不含工具栏显隐等运行状态）。</summary>
+        /// <summary>导出设置到指定文件（与 settings.xml 同格式，不含工具栏显隐与位置等运行状态）。</summary>
         public static void ExportTo(AnnotationSettings s, string path)
         {
             var text = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" + BuildRoot(s).ToString();
@@ -252,7 +252,7 @@ namespace GMAnnotation
         }
 
         /// <summary>不经 AnnotationSettings、由各模块单独读写的节点；<see cref="Save"/> 时原样保留。</summary>
-        private static readonly string[] ExtraKeys = { "ToolbarVisible", "PendingSysvarRestore", "PendingDrawAidsRestore" };
+        private static readonly string[] ExtraKeys = { "ToolbarVisible", "ToolbarPlacement", "PendingSysvarRestore", "PendingDrawAidsRestore" };
 
         /// <summary>读取单独存放的节点值；没有时返回 null。</summary>
         public static string LoadExtra(string key) => ReadElement(key);
@@ -284,16 +284,45 @@ namespace GMAnnotation
 
         private const string ToolbarVisibleKey = "ToolbarVisible";
 
-        /// <summary>上次记录的工具栏显隐；没有记录（首次使用 / 老配置文件）时默认显示。</summary>
+        /// <summary>上次记录的工具栏显隐；没有记录（首次使用 / 从未写过该节点）时默认隐藏，避免启动时无条件弹出。</summary>
         public static bool LoadToolbarVisible()
         {
-            return ParseBool(ReadElement(ToolbarVisibleKey) ?? "true", true);
+            return ParseBool(ReadElement(ToolbarVisibleKey) ?? "false", false);
         }
 
         /// <summary>只更新 settings.xml 中的工具栏显隐节点，其余设置原样保留。</summary>
         public static void SaveToolbarVisible(bool visible)
         {
             SaveExtra(ToolbarVisibleKey, visible ? "true" : "false");
+        }
+
+        private const string ToolbarPlacementKey = "ToolbarPlacement";
+
+        /// <summary>读取上次记录的工具栏停靠/浮动位置；没有记录时返回 false（调用方使用现有默认位置）。</summary>
+        public static bool TryLoadToolbarPlacement(out int dockStatus, out int left, out int top, out int floatingRows)
+        {
+            dockStatus = 0; left = 0; top = 0; floatingRows = 1;
+            var text = ReadElement(ToolbarPlacementKey);
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            var parts = text.Split(',');
+            if (parts.Length < 3) return false;
+            if (!int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out dockStatus)) return false;
+            if (!int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out left)) return false;
+            if (!int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out top)) return false;
+            if (parts.Length >= 4)
+            {
+                int parsed;
+                if (int.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed) && parsed >= 1)
+                    floatingRows = parsed;
+            }
+            return true;
+        }
+
+        /// <summary>只更新 settings.xml 中的工具栏位置节点，其余设置原样保留。</summary>
+        public static void SaveToolbarPlacement(int dockStatus, int left, int top, int floatingRows)
+        {
+            if (floatingRows < 1) floatingRows = 1;
+            SaveExtra(ToolbarPlacementKey, string.Format(CultureInfo.InvariantCulture, "{0},{1},{2},{3}", dockStatus, left, top, floatingRows));
         }
 
         private static string ReadElement(string name)

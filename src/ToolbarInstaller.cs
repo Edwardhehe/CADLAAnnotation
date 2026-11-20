@@ -59,21 +59,32 @@ namespace GMAnnotation
 
         private static bool _retryAttached;
 
-        // ---- 启动时不自动显示 ----
-        // 每次加载插件（启动 CAD）时工具栏都只创建、不显示，不再按上次显隐记忆恢复；需要时用菜单「显示/隐藏工具栏」
-        // 或 GM_PZ_TOOLBAR_SHOW / GMPANEL 打开。CAD 自己可能在启动后期按工作空间/CUIx 把工具栏又显示出来，
-        // 所以加载后的一小段时间（StartupGuard）内每 2 秒检查一次：用户本次会话还没主动打开过就再隐藏回去；
-        // 守护期结束即摘掉 Idle 回调，之后不再读写工具栏显隐（也不再写 settings.xml）。
+        // ---- 记住用户显隐与位置 ----
+        // CAD 的 COM 工具栏没有关闭/移动事件。加载后：
+        // 1) 按 settings.xml 里上次的显隐恢复（从未记录过则保持隐藏，避免无条件弹出）；
+        //    有位置记录则恢复，否则沿用现有默认（首次显示时 TryDockToTop）。
+        // 2) 启动后约 12 秒内是守护期：CAD 按工作空间/CUIx 改显隐或位置时，按已保存的用户意图再纠正，
+        //    这段时间不把 CAD 的改动记成用户操作。
+        // 3) 守护期结束（或用户在本次会话里主动显示/隐藏）后，每 2 秒读一次 Visible 与位置，
+        //    变化即写入 settings.xml。用户点工具栏 ×、右键勾选/取消、拖到新位置都会被记住。
+        // CAD 主窗口最小化/不可见时跳过读取，避免把“随主窗口一起隐藏”误记成用户关闭。
+        // 插件卸载/CAD 退出时不再改显隐记录（只尽量补记当前位置），以免把宿主关闭误记为用户点了关闭。
         private static readonly TimeSpan WatchInterval = TimeSpan.FromSeconds(2);
         private static readonly TimeSpan StartupGuard = TimeSpan.FromSeconds(12);
+        /// <summary>AcToolbarDockStatus：0 顶 / 1 底 / 2 左 / 3 右 / 4 浮动。</summary>
+        private const int DockStatusFloating = 4;
         private static bool _watchAttached;
         private static DateTime _nextWatchUtc;
         private static DateTime _guardUntilUtc;
+        private static bool _guardActive;
+        private static bool? _lastKnownVisible;
+        private static int? _lastDockStatus, _lastLeft, _lastTop, _lastRows;
         private static int _watchFailures;
         /// <summary>本次会话用户是否已通过命令/菜单主动显示或隐藏过工具栏（之后启动守护不再干预）。</summary>
         private static bool _userChoseThisSession;
-        /// <summary>本次会话是否已把工具栏停靠过（启动时隐藏、之后首次打开时再停靠到顶部）。</summary>
-        private static bool _dockedThisSession;
+
+        /// <summary>按上次记录应显示还是隐藏（供加载提示使用；从未记录过视为隐藏）。</summary>
+        public static bool SavedVisible => SettingsStore.LoadToolbarVisible();
 
         /// <summary>创建或刷新工具栏，并按上次记录的显隐状态显示或隐藏（工具栏总会被创建，隐藏时也在，GMPANEL 可随时打开）。失败时安排一次 Idle 重试（NETLOAD 时机过早、CAD 界面尚未就绪时很有用）。</summary>
         /// <returns>工具栏已就绪返回 <c>true</c>。</returns>
@@ -90,21 +101,49 @@ namespace GMAnnotation
             return false;
         }
 
-        /// <summary>卸载插件 / CAD 退出时摘掉 Idle 回调（工具栏本身保留在 CAD 界面，不随卸载消失）。</summary>
+        /// <summary>卸载插件 / CAD 退出时摘掉 Idle 回调（工具栏本身保留在 CAD 界面，不随卸载消失）。
+        /// 显隐以用户上次操作为准，这里不再改写，以免把宿主关闭误记为用户点了关闭；
+        /// 若主窗口仍可见且工具栏仍显示，则尽量把当前位置补记下来。</summary>
         public static void Detach()
         {
-            StopWatching();
+            if (_watchAttached)
+            {
+                TrySavePlacementOnExit();
+                _watchAttached = false;
+                _guardActive = false;
+                try { CadApplication.Idle -= OnWatchIdle; }
+                catch (Exception ex) { PluginLog.Error("Toolbar.Detach", ex); }
+            }
             if (!_retryAttached) return;
             _retryAttached = false;
             try { CadApplication.Idle -= OnRetryIdle; }
             catch (Exception ex) { PluginLog.Error("Toolbar.Detach", ex); }
         }
 
-        /// <summary>开始启动守护：之后约 12 秒内，用户没主动打开过工具栏时，若 CAD 又把它显示出来就再隐藏。</summary>
-        private static void StartStartupGuard()
+        private static void TrySavePlacementOnExit()
+        {
+            try
+            {
+                if (MainWindowHidden()) return;
+                var toolbars = GetToolbarsCollection();
+                if (toolbars == null) return;
+                var toolbar = TryGetToolbar(toolbars);
+                if (toolbar == null) return;
+                if (!Convert.ToBoolean(toolbar.GetProperty("Visible"))) return;
+                CapturePlacement(toolbar, persist: true);
+            }
+            catch (Exception ex) { PluginLog.Warning("Toolbar.ExitPlacement", Describe(ex)); }
+        }
+
+        /// <summary>开始轮询工具栏显隐与位置。插件加载时开启约 12 秒启动守护，避免把 CAD 工作空间恢复误记为用户操作。</summary>
+        private static void StartWatching(bool startGuard)
         {
             _watchFailures = 0;
-            _guardUntilUtc = DateTime.UtcNow + StartupGuard;
+            if (startGuard && !_userChoseThisSession)
+            {
+                _guardActive = true;
+                _guardUntilUtc = DateTime.UtcNow + StartupGuard;
+            }
             if (_watchAttached) return;
             try
             {
@@ -115,25 +154,26 @@ namespace GMAnnotation
             catch (Exception ex) { PluginLog.Error("Toolbar.Watch", ex); }
         }
 
-        private static void StopWatching()
-        {
-            if (!_watchAttached) return;
-            _watchAttached = false;
-            try { CadApplication.Idle -= OnWatchIdle; }
-            catch (Exception ex) { PluginLog.Error("Toolbar.Detach", ex); }
-        }
-
         private static void OnWatchIdle(object sender, EventArgs e)
         {
             var now = DateTime.UtcNow;
-            if (_userChoseThisSession || now >= _guardUntilUtc) { StopWatching(); return; }
             if (now < _nextWatchUtc) return;
             _nextWatchUtc = now + WatchInterval;
-            EnforceHiddenAtStartup();
+            if (_guardActive)
+            {
+                if (_userChoseThisSession || now >= _guardUntilUtc)
+                    _guardActive = false;
+                else
+                {
+                    EnforceSavedState();
+                    return;
+                }
+            }
+            CheckUserState("Idle");
         }
 
-        /// <summary>启动守护期内：工具栏被 CAD（工作空间/CUIx 恢复）显示出来、而用户本次还没主动打开过 → 再隐藏。只改 Visible，不写设置。</summary>
-        private static void EnforceHiddenAtStartup()
+        /// <summary>启动守护期内：按已保存的用户意图纠正 CAD（工作空间/CUIx）对显隐或位置的改动，不写设置。</summary>
+        private static void EnforceSavedState()
         {
             try
             {
@@ -143,17 +183,68 @@ namespace GMAnnotation
                 var toolbar = TryGetToolbar(toolbars);
                 if (toolbar == null) return;
                 _watchFailures = 0;
-                if (!Convert.ToBoolean(toolbar.GetProperty("Visible"))) return;
-                SetProperty(toolbar, "Visible", false);
-                PluginLog.Info("Toolbar", "启动后 CAD 恢复显示了 GM批注工具栏，已按「启动时不自动显示」重新隐藏。");
+                var wantVisible = SettingsStore.LoadToolbarVisible();
+                var visible = Convert.ToBoolean(toolbar.GetProperty("Visible"));
+                if (visible != wantVisible)
+                {
+                    SetProperty(toolbar, "Visible", wantVisible);
+                    if (wantVisible) ApplyPlacement(toolbar, persist: false);
+                    PluginLog.Info("Toolbar", "启动后 CAD 改动了 GM批注工具栏显隐，已按上次用户设置" + (wantVisible ? "重新显示" : "重新隐藏") + "。");
+                }
+                else if (wantVisible && PlacementDiffers(toolbar))
+                {
+                    ApplyPlacement(toolbar, persist: false);
+                    PluginLog.Info("Toolbar", "启动后 CAD 改动了 GM批注工具栏位置，已按上次记录恢复。");
+                }
             }
             catch (Exception ex)
             {
-                // 连续失败 5 次就停止守护，只记一次日志，避免刷屏。
+                // 连续失败 5 次就停止轮询，只记一次日志，避免刷屏。
                 if (++_watchFailures == 5)
                 {
-                    PluginLog.Warning("Toolbar.Watch", "读取工具栏显隐连续失败，停止启动守护：" + Describe(ex));
-                    StopWatching();
+                    PluginLog.Warning("Toolbar.Watch", "读取工具栏状态连续失败，停止检测：" + Describe(ex));
+                    if (_watchAttached)
+                    {
+                        _watchAttached = false;
+                        _guardActive = false;
+                        try { CadApplication.Idle -= OnWatchIdle; } catch { }
+                    }
+                }
+            }
+        }
+
+        /// <summary>读取工具栏当前 Visible 与位置，与上次已知值不同则记住（用户点了工具栏的 ×，或在 CAD 工具栏右键菜单里勾选/取消，或拖到新位置）。
+        /// CAD 主窗口最小化/不可见时跳过，避免把“随主窗口一起隐藏”误记成用户关闭。</summary>
+        private static void CheckUserState(string source)
+        {
+            try
+            {
+                if (MainWindowHidden()) return;
+                var toolbars = GetToolbarsCollection();
+                if (toolbars == null) return;
+                var toolbar = TryGetToolbar(toolbars);
+                if (toolbar == null) return; // 被 CUI 删除等情况：不改记录，下次启动按记录重建
+                var visible = Convert.ToBoolean(toolbar.GetProperty("Visible"));
+                _watchFailures = 0;
+                if (_lastKnownVisible != visible)
+                {
+                    _lastKnownVisible = visible;
+                    SettingsStore.SaveToolbarVisible(visible);
+                    PluginLog.Info("Toolbar", "检测到 GM批注工具栏被" + (visible ? "打开" : "关闭") + "（" + source + "），已记住：下次启动" + (visible ? "显示" : "保持隐藏") + "。");
+                }
+                if (visible) CapturePlacement(toolbar, persist: true);
+            }
+            catch (Exception ex)
+            {
+                if (++_watchFailures == 5)
+                {
+                    PluginLog.Warning("Toolbar.Watch", "读取工具栏状态连续失败，停止检测：" + Describe(ex));
+                    if (_watchAttached)
+                    {
+                        _watchAttached = false;
+                        _guardActive = false;
+                        try { CadApplication.Idle -= OnWatchIdle; } catch { }
+                    }
                 }
             }
         }
@@ -179,12 +270,14 @@ namespace GMAnnotation
             if (!ready) PluginLog.Warning("Toolbar.Retry", message);
         }
 
-        /// <summary>插件加载时：创建（或复用）「GM批注」工具栏并按当前代码重建按钮，<b>保持隐藏</b>（启动时不自动显示）。</summary>
-        public static bool Ensure(out string message) => Ensure(false, out message);
+        /// <summary>插件加载时：创建（或复用）「GM批注」工具栏并按当前代码重建按钮，再按上次记录的显隐与位置恢复。
+        /// 从未记录过或记录为隐藏时不强制显示（也不停靠，避免宿主停靠时顺带显示），但工具栏仍会创建好，供菜单/命令打开。</summary>
+        public static bool Ensure(out string message) => EnsureCore(SettingsStore.LoadToolbarVisible(), userChoice: false, out message);
 
-        /// <summary>创建（或复用）「GM批注」工具栏，按当前代码重建按钮，再按 <paramref name="show"/> 显示或隐藏。
-        /// 隐藏时不停靠（避免宿主停靠时顺带显示），但工具栏仍会创建好，供菜单「显示/隐藏工具栏」/ GM_PZ_TOOLBAR_SHOW 打开。</summary>
-        public static bool Ensure(bool show, out string message)
+        /// <summary>创建（或复用）「GM批注」工具栏，按当前代码重建按钮，再按 <paramref name="show"/> 显示或隐藏（用于用户命令创建时）。</summary>
+        public static bool Ensure(bool show, out string message) => EnsureCore(show, userChoice: true, out message);
+
+        private static bool EnsureCore(bool show, bool userChoice, out string message)
         {
             try
             {
@@ -209,19 +302,14 @@ namespace GMAnnotation
 
                 for (var i = 0; i < Buttons.Length; i++) AddButton(toolbar, i, Buttons[i]);
 
-                if (show)
-                {
-                    SetProperty(toolbar, "Visible", true);
-                    if (!_dockedThisSession) { TryDockToTop(toolbar); _dockedThisSession = true; }
-                }
-                else
-                {
-                    SetProperty(toolbar, "Visible", false);
-                    if (!_userChoseThisSession) StartStartupGuard();
-                }
+                SetProperty(toolbar, "Visible", show);
+                if (show) ApplyPlacement(toolbar, persist: true);
+                _lastKnownVisible = show;
+                if (userChoice) _userChoseThisSession = true;
+                StartWatching(startGuard: !userChoice);
 
                 message = "GM批注工具栏已" + (created ? "创建" : "刷新") + "（" + Buttons.Length + " 个按钮）" +
-                    (show ? "。" : "，启动时不自动显示（菜单「显示/隐藏工具栏」或 GM_PZ_TOOLBAR_SHOW 打开）。");
+                    (show ? "。" : "，按上次关闭状态保持隐藏（菜单「显示/隐藏工具栏」或 GM_PZ_TOOLBAR_SHOW / GMPANEL 可打开）。");
                 return true;
             }
             catch (Exception ex)
@@ -232,7 +320,7 @@ namespace GMAnnotation
             }
         }
 
-        /// <summary>切换工具栏显示/隐藏；工具栏还不存在时创建并显示。</summary>
+        /// <summary>切换工具栏显示/隐藏并记住；工具栏还不存在时创建并显示。</summary>
         public static bool ToggleVisible(out string message)
         {
             try
@@ -252,27 +340,33 @@ namespace GMAnnotation
             }
         }
 
-        /// <summary>用户主动显示或隐藏工具栏（只影响本次会话；下次启动 CAD 仍默认不显示）。工具栏不存在时先按目标状态创建。</summary>
+        /// <summary>用户主动显示或隐藏工具栏，并写入 settings.xml（下次启动按此显隐；显示时恢复上次位置）。工具栏不存在时先按目标状态创建。</summary>
         public static bool SetVisible(bool visible, out string message)
         {
             try
             {
                 _userChoseThisSession = true;
-                StopWatching();
+                _guardActive = false;
                 var toolbars = GetToolbarsCollection();
                 if (toolbars == null) { message = "当前 CAD 未公开工具栏接口。"; return false; }
                 var toolbar = TryGetToolbar(toolbars);
-                if (toolbar == null) return Ensure(visible, out message);
-
-                SetProperty(toolbar, "Visible", visible);
-                if (visible && !_dockedThisSession)
+                if (toolbar == null)
                 {
-                    TryDockToTop(toolbar);
-                    _dockedThisSession = true;
+                    SettingsStore.SaveToolbarVisible(visible);
+                    _lastKnownVisible = visible;
+                    return Ensure(visible, out message);
                 }
+
+                // 隐藏前先记下当前位置，避免关掉后再打开回到默认停靠。
+                if (!visible) CapturePlacement(toolbar, persist: true);
+                SettingsStore.SaveToolbarVisible(visible);
+                _lastKnownVisible = visible;
+                SetProperty(toolbar, "Visible", visible);
+                if (visible) ApplyPlacement(toolbar, persist: true);
+                StartWatching(startGuard: false);
                 message = visible
-                    ? "GM批注工具栏已显示（每次启动 CAD 默认不显示，需要时用菜单「显示/隐藏工具栏」或 GM_PZ_TOOLBAR_SHOW 打开）。"
-                    : "GM批注工具栏已隐藏（菜单「显示/隐藏工具栏」或 GM_PZ_TOOLBAR_SHOW / GMPANEL 可重新打开）。";
+                    ? "GM批注工具栏已显示（下次启动将在上次位置自动显示）。"
+                    : "GM批注工具栏已隐藏（下次启动保持隐藏，菜单「显示/隐藏工具栏」或 GM_PZ_TOOLBAR_SHOW / GMPANEL 可重新打开）。";
                 return true;
             }
             catch (Exception ex)
@@ -407,11 +501,102 @@ namespace GMAnnotation
             catch (Exception ex) { PluginLog.Warning("Toolbar.SupportPath", Describe(ex)); return false; }
         }
 
-        /// <summary>尽量把工具栏停靠到顶部工具栏区（失败保持浮动，用户可自己拖）。</summary>
+        /// <summary>尽量把工具栏停靠到顶部工具栏区（失败保持浮动，用户可自己拖）。无位置记录时的默认行为，保持与既有实现一致。</summary>
         private static void TryDockToTop(object toolbar)
         {
             try { toolbar.InvokeMethod("Dock", 1); }
             catch (Exception ex) { PluginLog.Warning("Toolbar.Dock", ex.Message); }
+        }
+
+        private static bool TryReadPlacement(object toolbar, out int dock, out int left, out int top, out int rows)
+        {
+            dock = left = top = 0;
+            rows = 1;
+            try
+            {
+                dock = Convert.ToInt32(toolbar.GetProperty("DockStatus"));
+                left = Convert.ToInt32(toolbar.GetProperty("Left"));
+                top = Convert.ToInt32(toolbar.GetProperty("Top"));
+                try { var n = Convert.ToInt32(toolbar.GetProperty("FloatingRows")); if (n >= 1) rows = n; }
+                catch { /* 个别宿主可能没有 FloatingRows */ }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool PlacementDiffers(object toolbar)
+        {
+            if (!SettingsStore.TryLoadToolbarPlacement(out var dock, out var left, out var top, out var rows)) return false;
+            if (!TryReadPlacement(toolbar, out var currentDock, out var currentLeft, out var currentTop, out var currentRows)) return false;
+            return currentDock != dock || currentLeft != left || currentTop != top || currentRows != rows;
+        }
+
+        private static void CapturePlacement(object toolbar, bool persist)
+        {
+            if (!TryReadPlacement(toolbar, out var dock, out var left, out var top, out var rows)) return;
+            if (_lastDockStatus == dock && _lastLeft == left && _lastTop == top && _lastRows == rows) return;
+            _lastDockStatus = dock;
+            _lastLeft = left;
+            _lastTop = top;
+            _lastRows = rows;
+            if (persist) SettingsStore.SaveToolbarPlacement(dock, left, top, rows);
+        }
+
+        /// <summary>按上次记录恢复位置；没有记录时用现有默认（停靠顶部）。</summary>
+        private static void ApplyPlacement(object toolbar, bool persist)
+        {
+            if (SettingsStore.TryLoadToolbarPlacement(out var dock, out var left, out var top, out var rows))
+            {
+                try
+                {
+                    if (dock == DockStatusFloating)
+                    {
+                        ClampToVirtualScreen(ref left, ref top);
+                        toolbar.InvokeMethod("Float", top, left, rows);
+                    }
+                    else
+                    {
+                        toolbar.InvokeMethod("Dock", dock);
+                        try
+                        {
+                            SetProperty(toolbar, "Left", left);
+                            SetProperty(toolbar, "Top", top);
+                        }
+                        catch { /* 部分宿主停靠后 Left/Top 只读 */ }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    PluginLog.Warning("Toolbar.Placement", "恢复位置失败，改用默认停靠：" + Describe(ex));
+                    TryDockToTop(toolbar);
+                }
+            }
+            else
+            {
+                TryDockToTop(toolbar);
+            }
+            CapturePlacement(toolbar, persist);
+        }
+
+        /// <summary>浮动恢复时尽量不要落到当前虚拟屏幕外，免得多显示器布局变化后工具栏看不见。</summary>
+        private static void ClampToVirtualScreen(ref int left, ref int top)
+        {
+            try
+            {
+                var vx = (int)SystemParameters.VirtualScreenLeft;
+                var vy = (int)SystemParameters.VirtualScreenTop;
+                var vw = (int)SystemParameters.VirtualScreenWidth;
+                var vh = (int)SystemParameters.VirtualScreenHeight;
+                if (vw <= 0 || vh <= 0) return;
+                if (left > vx + vw - 40) left = vx + vw - 40;
+                if (top > vy + vh - 40) top = vy + vh - 40;
+                if (left < vx) left = vx;
+                if (top < vy) top = vy;
+            }
+            catch { /* 取屏幕范围失败则按原坐标恢复 */ }
         }
 
         private static void SetProperty(object target, string name, object value)

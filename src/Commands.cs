@@ -679,7 +679,7 @@ namespace GMAnnotation
             }
         }
 
-        /// <summary>显示/隐藏「GM批注」CAD 原生工具栏（首次调用会创建它）。只影响本次会话：每次启动 CAD 工具栏默认不显示。
+        /// <summary>显示/隐藏「GM批注」CAD 原生工具栏（首次调用会创建它）并记住状态：打开后下次启动会在上次位置自动显示，关闭后下次启动保持隐藏。
         /// 浮动快捷栏已取消，工具栏是单字按钮的唯一入口。</summary>
         [CommandMethod("GM_PZ_TOOLBAR", CommandFlags.Modal)]
         public void ToggleToolbar()
@@ -689,7 +689,7 @@ namespace GMAnnotation
             doc?.Editor.WriteMessage("\n" + message);
         }
 
-        /// <summary>打开「GM批注」工具栏（启动时默认不显示，用它随时打开；只影响本次会话）。</summary>
+        /// <summary>打开「GM批注」工具栏并记住为显示（下次启动将在上次位置自动出现）。</summary>
         [CommandMethod("GM_PZ_TOOLBAR_SHOW", CommandFlags.Modal)]
         public void ShowToolbar()
         {
@@ -702,7 +702,7 @@ namespace GMAnnotation
         [CommandMethod("GMPANEL", CommandFlags.Modal)]
         public void ShowToolbarAlias() => ShowToolbar();
 
-        /// <summary>隐藏「GM批注」工具栏（本次会话）。</summary>
+        /// <summary>隐藏「GM批注」工具栏并记住为隐藏（下次启动不再自动显示）。</summary>
         [CommandMethod("GM_PZ_TOOLBAR_HIDE", CommandFlags.Modal)]
         public void HideToolbar()
         {
