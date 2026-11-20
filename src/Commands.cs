@@ -663,7 +663,7 @@ namespace GMAnnotation
             }
         }
 
-        /// <summary>导出批注到 Word：每条批注输出时间、云线范围截图和批注文字。</summary>
+        /// <summary>导出批注到 Word：每条批注输出时间、已指定时的图号、云线范围截图和批注文字。</summary>
         [CommandMethod("GM_PZ_WORD", CommandFlags.Modal)]
         public void ExportWord()
         {

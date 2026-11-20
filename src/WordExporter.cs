@@ -37,6 +37,8 @@ namespace GMAnnotation
     {
         public string Number { get; set; }
         public string Date { get; set; }
+        /// <summary>用户在批注窗口指定的图号；未指定时为空，导出 Word 时不写图号行。</summary>
+        public string DrawingNo { get; set; }
         public string Content { get; set; }
         public List<AnnotationWordCloud> Clouds { get; set; } = new List<AnnotationWordCloud>();
         /// <summary>该批注当前被隐藏（GM_PZ_HIDE / 过滤）的成员：截图时临时显示，截完立即恢复隐藏。</summary>
@@ -54,7 +56,7 @@ namespace GMAnnotation
 
     /// <summary>
     /// 批注导出 Word：按批注所在空间分组，切到该空间（模型标签 / 布局图纸空间）后逐条缩放到云线范围并抓取绘图窗口位图，
-    /// 再按"时间 / 云线截图 / 批注文字"三行格式手工打包生成 docx（不依赖 Office）。
+    /// 再按"时间 / 图号（若该条已指定） / 云线截图 / 批注文字"格式手工打包生成 docx（不依赖 Office）。
     /// 不进入、不修改任何布局视口的视图；导出结束先恢复原布局与 CVPORT，再恢复原视图。
     /// </summary>
     internal static class WordExporter
@@ -555,8 +557,11 @@ namespace GMAnnotation
                             var docPrId = 0;
                             for (var i = 0; i < entries.Count; i++)
                             {
-                                // 第一行：时间；第二行：云线范围截图（多对一放多张）；第三行：批注文字。
+                                // 时间；已指定图号时另写「图号：xxx」；云线范围截图（多对一放多张）；批注文字。未指定则不写图号行。
                                 WriteTextParagraph(writer, entries[i].Date);
+                                var drawingNo = (entries[i].DrawingNo ?? "").Trim();
+                                if (drawingNo.Length > 0)
+                                    WriteTextParagraph(writer, "图号：" + drawingNo);
                                 if (relationshipIds[i].Count > 0)
                                     WriteImagesParagraph(writer, imagesPerEntry[i], relationshipIds[i], ref docPrId);
                                 var captures = capturesPerEntry[i];

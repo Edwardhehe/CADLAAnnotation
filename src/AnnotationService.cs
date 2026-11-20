@@ -1770,7 +1770,7 @@ namespace GMAnnotation
 
         private static string EscapeContent(string content)=>Escape(content).Replace("\r\n","\\P").Replace("\n","\\P");
 
-        /// <summary>导出批注到 Word：每条批注输出三行（时间 / 云线范围截图 / 批注文字），支持框选或全部导出。</summary>
+        /// <summary>导出批注到 Word：每条批注输出时间、已指定时的图号、云线范围截图和批注文字，支持框选或全部导出。</summary>
         public static void ExportAnnotationsToWord(Document doc)
         {
             var ed=doc.Editor;
@@ -1852,7 +1852,7 @@ namespace GMAnnotation
                         // 坐标是云线所在空间的 WCS：模型空间云线要在模型标签截图，图纸空间云线要在其布局的图纸空间截图。
                         clouds.Add(new AnnotationWordCloud{Extents=extents,SpaceId=entity.OwnerId,IsModel=entity.OwnerId==modelSpaceId,LayoutName=LayoutNameOf(tr,entity,layoutCache)});
                     }
-                    entries.Add(new AnnotationWordEntry{Number=info.Number,Date=info.Date,Content=info.Content,Clouds=clouds,HiddenIds=hidden});
+                    entries.Add(new AnnotationWordEntry{Number=info.Number,Date=info.Date,DrawingNo=info.DrawingNo,Content=info.Content,Clouds=clouds,HiddenIds=hidden});
                 }
             }
             return entries; // GetAllAnnotations 已按编号排序
@@ -1926,6 +1926,7 @@ namespace GMAnnotation
             public string Author { get; set; }
             public string Role { get; set; }
             public string Date { get; set; }
+            public string DrawingNo { get; set; }
             public string Status { get; set; }
             public string Content { get; set; }
             public ObjectId GroupId { get; set; }
@@ -2036,7 +2037,7 @@ namespace GMAnnotation
                         result.Add(new AnnotationInfo
                         {
                             Id = data.Id, Number = data.Number, Discipline = data.Discipline,
-                            Author = data.Author, Role = data.Role, Date = data.Date, Status = data.Status,
+                            Author = data.Author, Role = data.Role, Date = data.Date, DrawingNo = data.DrawingNo, Status = data.Status,
                             Content = data.Content, GroupId = group.ObjectId, FirstEntityId = firstId
                         });
                     }

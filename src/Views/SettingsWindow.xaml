@@ -339,7 +339,7 @@
                                     GM_PZ_HISTORY  — 批注历史记录（留痕）<LineBreak/>
                                     GM_PZ_KB       — 知识库（批注条目 + 常用批注语，独立体系）<LineBreak/>
                                     GM_PZ_EXPORT   — 导出批注<LineBreak/>
-                                    GM_PZ_WORD     — 导出批注到 Word（时间、云线范围截图、批注文字）<LineBreak/>
+                                    GM_PZ_WORD     — 导出批注到 Word（时间、已指定时的图号、云线范围截图、批注文字）<LineBreak/>
                                     GM_PZ_IMPORT   — 导入批注<LineBreak/>
                                     GM_PZ_REPAIR   — 修复复制产生的批注<LineBreak/>
                                     GM_PZ_TOOLBAR  — 显示/隐藏 GM批注工具栏（不存在时创建）<LineBreak/>
